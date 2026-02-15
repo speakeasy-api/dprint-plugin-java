@@ -27,11 +27,11 @@ jobs:
 
       - name: Install wasi-sdk
         run: |
-          curl -fsSL https://github.com/aspect-build/aspect-gcc-toolchain/releases/download/wasi-sdk-21/wasi-sdk-21.0-linux.tar.gz \
+          curl -fsSL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-x86_64-linux.tar.gz \
             -o wasi-sdk.tar.gz
           tar xzf wasi-sdk.tar.gz
-          echo "WASI_SDK_PATH=$PWD/wasi-sdk-21.0" >> "$GITHUB_ENV"
-          echo "CC_wasm32_unknown_unknown=$PWD/wasi-sdk-21.0/bin/clang" >> "$GITHUB_ENV"
+          echo "WASI_SDK_PATH=$PWD/wasi-sdk-25.0-x86_64-linux" >> "$GITHUB_ENV"
+          echo "CC_wasm32_unknown_unknown=$PWD/wasi-sdk-25.0-x86_64-linux/bin/clang" >> "$GITHUB_ENV"
 
       - name: Build WASM
         run: cargo build --release --target wasm32-unknown-unknown --features wasm
