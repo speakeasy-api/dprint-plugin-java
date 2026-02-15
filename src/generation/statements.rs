@@ -428,6 +428,17 @@ fn gen_switch_case<'a>(
             // Traditional case: `case X: stmt1; stmt2;`
             let mut label_done = false;
             let mut in_body = false;
+
+            // Collect body statements (named children after the colon)
+            let body_stmts: Vec<_> = children.iter()
+                .skip_while(|c| c.kind() != ":")
+                .skip(1) // skip the colon itself
+                .filter(|c| c.is_named())
+                .collect();
+
+            // Check if the body is a single block
+            let is_single_block = body_stmts.len() == 1 && body_stmts[0].kind() == "block";
+
             for child in &children {
                 if child.kind() == "switch_label" {
                     if label_done {
@@ -438,12 +449,19 @@ fn gen_switch_case<'a>(
                 } else if child.kind() == ":" {
                     // Colon is a child of switch_block_statement_group, not switch_label
                     items.push_string(":".to_string());
-                } else if child.is_named() {
-                    if !in_body {
-                        items.push_signal(Signal::StartIndent);
-                        in_body = true;
+                    // If the body is a single block, add a space (brace goes on same line)
+                    if is_single_block {
+                        items.extend(helpers::gen_space());
                     }
-                    items.push_signal(Signal::NewLine);
+                } else if child.is_named() {
+                    if !is_single_block {
+                        // Multiple statements or non-block: indent and place on new lines
+                        if !in_body {
+                            items.push_signal(Signal::StartIndent);
+                            in_body = true;
+                        }
+                        items.push_signal(Signal::NewLine);
+                    }
                     items.extend(gen_node(*child, context));
                 }
             }

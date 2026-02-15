@@ -1,0 +1,35 @@
+== input ==
+public class Test {
+    void test(Object value) {
+        switch (value) {
+            case OBJECT:
+            {
+                doSomething();
+                break;
+            }
+            case STRING:
+                handleString();
+                break;
+            default: {
+                handleDefault();
+            }
+        }
+    }
+}
+== output ==
+public class Test {
+    void test(Object value) {
+        switch (value) {
+            case OBJECT: {
+                doSomething();
+                break;
+            }
+            case STRING:
+                handleString();
+                break;
+            default: {
+                handleDefault();
+            }
+        }
+    }
+}

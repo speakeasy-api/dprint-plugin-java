@@ -551,6 +551,16 @@ fn spec_file_local_variable_annotations() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/local_variable_annotations.txt"));
 }
 
+#[test]
+fn spec_file_switch_case_block() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/switch_case_block.txt"));
+}
+
+#[test]
+fn spec_file_switch_mixed_blocks() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/switch_mixed_blocks.txt"));
+}
+
 // ---- Expressions ----
 #[test]
 fn spec_file_binary_ops() {

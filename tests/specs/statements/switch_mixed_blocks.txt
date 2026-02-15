@@ -1,0 +1,42 @@
+== input ==
+public class Test {
+    void test(int x) {
+        switch (x) {
+            case 1: {
+                // Single block with comment
+                doOne();
+            }
+            case 2:
+                doTwo();
+                break;
+            case 3: {
+                doThree();
+                doMore();
+                break;
+            }
+            default:
+                doDefault();
+        }
+    }
+}
+== output ==
+public class Test {
+    void test(int x) {
+        switch (x) {
+            case 1: {
+                // Single block with comment
+                doOne();
+            }
+            case 2:
+                doTwo();
+                break;
+            case 3: {
+                doThree();
+                doMore();
+                break;
+            }
+            default:
+                doDefault();
+        }
+    }
+}
