@@ -1,0 +1,20 @@
+== input ==
+public class Test {
+    void test() {
+        String reason = e instanceof RetryableException ? "status " + ((RetryableException) e).response().statusCode() : e.getClass().getSimpleName();
+        int max = a > b ? a : b;
+        String value = someVeryLongConditionThatExceedsTheLineWidth instanceof SomeVeryLongTypeName ? someVeryLongConsequenceExpression : someVeryLongAlternativeExpression;
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        String reason = e instanceof RetryableException
+                ? "status " + ((RetryableException) e).response().statusCode()
+                : e.getClass().getSimpleName();
+        int max = a > b ? a : b;
+        String value = someVeryLongConditionThatExceedsTheLineWidth instanceof SomeVeryLongTypeName
+                ? someVeryLongConsequenceExpression
+                : someVeryLongAlternativeExpression;
+    }
+}

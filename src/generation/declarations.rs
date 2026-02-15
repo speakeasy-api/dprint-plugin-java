@@ -951,19 +951,19 @@ pub fn gen_variable_declarator<'a>(
     let children: Vec<_> = node.children(&mut cursor).collect();
 
     // Check if the full declaration line would exceed line_width.
-    // Compute the "flat" width (all text as if on one line) from the parent node.
+    // Walk the parent node's children to reconstruct the flat width accurately,
+    // mirroring how gen_field_declaration / gen_local_variable_declaration build the line.
     let has_value = children.iter().any(|c| c.kind() == "=");
-    let wrap_value = has_value && {
-        let parent = node.parent();
-        let decl_flat_width = if let Some(p) = parent {
-            let text = &context.source[p.start_byte()..p.end_byte()];
-            // Sum trimmed line lengths to get "as if single line" width
-            text.lines().map(|l| l.trim().len()).sum::<usize>()
-                + text.lines().count().saturating_sub(1) // spaces between joined lines
+    // If the value is a ternary expression, skip variable declarator wrapping.
+    // The ternary's own wrapping logic will handle line-breaking before ? and :.
+    let value_is_ternary = children.iter().any(|c| c.kind() == "ternary_expression");
+    let wrap_value = has_value && !value_is_ternary && {
+        let indent_width = context.indent_level() * context.config.indent_width as usize;
+        let decl_flat_width = if let Some(parent) = node.parent() {
+            estimate_decl_flat_width(parent, context.source)
         } else {
             0
         };
-        let indent_width = context.indent_level() * context.config.indent_width as usize;
         indent_width + decl_flat_width > context.config.line_width as usize
     };
 
@@ -1002,6 +1002,53 @@ pub fn gen_variable_declarator<'a>(
     }
 
     items
+}
+
+/// Estimate the flat width of a field/local-variable declaration as if it were
+/// on a single line: `modifiers type name = value;`
+///
+/// Walks the declaration's children and computes widths from source text,
+/// stripping leading indent from each line and joining with single spaces.
+fn estimate_decl_flat_width(node: tree_sitter::Node, source: &str) -> usize {
+    let mut cursor = node.walk();
+    let mut width = 0;
+    let mut need_space = false;
+
+    for child in node.children(&mut cursor) {
+        if child.is_extra() {
+            continue;
+        }
+        match child.kind() {
+            ";" => {
+                width += 1;
+            }
+            "," => {
+                width += 1;
+                need_space = true;
+            }
+            _ => {
+                if need_space && width > 0 {
+                    width += 1;
+                }
+                let text = &source[child.start_byte()..child.end_byte()];
+                let mut w = 0;
+                for (i, line) in text.lines().enumerate() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    if i > 0 && w > 0 {
+                        w += 1;
+                    }
+                    w += trimmed.len();
+                }
+                width += w;
+                need_space = true;
+            }
+        }
+    }
+
+    width
 }
 
 /// Format an argument list: `(arg1, arg2, arg3)`

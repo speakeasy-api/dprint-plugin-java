@@ -456,6 +456,11 @@ fn spec_file_abstract_class() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/abstract_class.txt"));
 }
 
+#[test]
+fn spec_file_variable_assignment_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/variable_assignment_wrapping.txt"));
+}
+
 // ---- Statements ----
 #[test]
 fn spec_file_statement_formatting() {
@@ -560,6 +565,11 @@ fn spec_file_lambda_basic() {
 #[test]
 fn spec_file_ternary() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/ternary.txt"));
+}
+
+#[test]
+fn spec_file_ternary_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/ternary_wrapping.txt"));
 }
 
 #[test]

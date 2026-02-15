@@ -270,29 +270,81 @@ pub fn gen_lambda_expression<'a>(
 }
 
 /// Format a ternary expression: `cond ? a : b`
+///
+/// When the full ternary expression would exceed `line_width`, wraps before
+/// `?` and `:` with 8-space continuation indent (PJF style):
+/// ```java
+/// String reason = e instanceof RetryableException
+///         ? "status " + ((RetryableException) e).response().statusCode()
+///         : e.getClass().getSimpleName();
+/// ```
 pub fn gen_ternary_expression<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
+    // Estimate the "flat" width of the entire ternary expression (as if on one line).
+    let ternary_text = &context.source[node.start_byte()..node.end_byte()];
+    let ternary_flat_width: usize = ternary_text
+        .lines()
+        .map(|l| l.trim().len())
+        .sum::<usize>()
+        + ternary_text.lines().count().saturating_sub(1); // spaces between joined lines
+
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let should_wrap = indent_width + ternary_flat_width > context.config.line_width as usize;
+
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
-    for child in node.children(&mut cursor) {
-        match child.kind() {
-            "?" => {
-                items.extend(helpers::gen_space());
-                items.push_string("?".to_string());
-                items.extend(helpers::gen_space());
+    if should_wrap {
+        // Wrapped: break before ? and : with 8-space continuation indent
+        let mut started_indent = false;
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "?" => {
+                    if !started_indent {
+                        items.push_signal(Signal::StartIndent);
+                        items.push_signal(Signal::StartIndent);
+                        started_indent = true;
+                    }
+                    items.push_signal(Signal::NewLine);
+                    items.push_string("?".to_string());
+                    items.extend(helpers::gen_space());
+                }
+                ":" => {
+                    items.push_signal(Signal::NewLine);
+                    items.push_string(":".to_string());
+                    items.extend(helpers::gen_space());
+                }
+                _ if child.is_named() => {
+                    items.extend(gen_node(child, context));
+                }
+                _ => {}
             }
-            ":" => {
-                items.extend(helpers::gen_space());
-                items.push_string(":".to_string());
-                items.extend(helpers::gen_space());
+        }
+        if started_indent {
+            items.push_signal(Signal::FinishIndent);
+            items.push_signal(Signal::FinishIndent);
+        }
+    } else {
+        // Inline: keep everything on one line
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "?" => {
+                    items.extend(helpers::gen_space());
+                    items.push_string("?".to_string());
+                    items.extend(helpers::gen_space());
+                }
+                ":" => {
+                    items.extend(helpers::gen_space());
+                    items.push_string(":".to_string());
+                    items.extend(helpers::gen_space());
+                }
+                _ if child.is_named() => {
+                    items.extend(gen_node(child, context));
+                }
+                _ => {}
             }
-            _ if child.is_named() => {
-                items.extend(gen_node(child, context));
-            }
-            _ => {}
         }
     }
 
