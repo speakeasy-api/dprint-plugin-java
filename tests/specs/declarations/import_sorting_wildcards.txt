@@ -1,0 +1,15 @@
+== input ==
+import java.util.*;
+import java.io.*;
+import static java.lang.Math.*;
+import org.example.util.*;
+
+public class Test {}
+== output ==
+import static java.lang.Math.*;
+
+import java.io.*;
+import java.util.*;
+import org.example.util.*;
+
+public class Test {}

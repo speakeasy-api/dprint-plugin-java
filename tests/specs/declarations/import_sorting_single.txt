@@ -1,12 +1,8 @@
 == input ==
 import java.util.List;
-import java.util.ArrayList;
-import java.io.*;
 
 public class Test {}
 == output ==
-import java.io.*;
-import java.util.ArrayList;
 import java.util.List;
 
 public class Test {}

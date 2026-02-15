@@ -119,13 +119,99 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
     let mut cursor = node.walk();
     let children: Vec<_> = node.children(&mut cursor).collect();
 
+    // First pass: collect and categorize imports
+    let mut static_imports: Vec<tree_sitter::Node> = vec![];
+    let mut regular_imports: Vec<tree_sitter::Node> = vec![];
+    let mut non_import_children: Vec<tree_sitter::Node> = vec![];
+
+    for child in children.iter() {
+        if child.kind() == "import_declaration" {
+            let is_static = {
+                let mut c = child.walk();
+                child.children(&mut c).any(|ch| ch.kind() == "static")
+            };
+
+            // Extract import path to check for java.lang.* simple class imports
+            let import_path = extract_import_path(*child, context.source);
+
+            // Skip java.lang.X imports (simple class names only, not sub-packages)
+            // Keep: java.lang.annotation.Retention, static imports from java.lang
+            if !is_static && is_java_lang_simple_import(&import_path) {
+                continue; // Skip this import
+            }
+
+            if is_static {
+                static_imports.push(*child);
+            } else {
+                regular_imports.push(*child);
+            }
+        } else {
+            non_import_children.push(*child);
+        }
+    }
+
+    // Sort imports alphabetically by their full path
+    static_imports.sort_by(|a, b| {
+        let path_a = extract_import_path(*a, context.source);
+        let path_b = extract_import_path(*b, context.source);
+        path_a.cmp(&path_b)
+    });
+
+    regular_imports.sort_by(|a, b| {
+        let path_a = extract_import_path(*a, context.source);
+        let path_b = extract_import_path(*b, context.source);
+        path_a.cmp(&path_b)
+    });
+
+    // Second pass: emit nodes in order
     let mut prev_kind: Option<&str> = None;
     let mut prev_was_comment = false;
-    let mut prev_import_static: Option<bool> = None;
+    let mut emitted_imports = false;
 
-    for (i, child) in children.iter().enumerate() {
+    // Check if we have a package declaration
+    let has_package = non_import_children
+        .iter()
+        .any(|c| c.kind() == "package_declaration");
+
+    for (i, child) in non_import_children.iter().enumerate() {
+        // Emit imports:
+        // - After package declaration (if present), OR
+        // - Before first non-extra node (if no package declaration)
+        let should_emit_imports = !emitted_imports
+            && (!static_imports.is_empty() || !regular_imports.is_empty())
+            && ((has_package && prev_kind == Some("package_declaration"))
+                || (!has_package && !child.is_extra()));
+
+        if should_emit_imports {
+            // Add blank line after package declaration
+            if prev_kind == Some("package_declaration") {
+                items.push_signal(Signal::NewLine);
+            }
+
+            // Emit static imports
+            for import_node in static_imports.iter() {
+                items.extend(gen_node(*import_node, context));
+                items.push_signal(Signal::NewLine);
+            }
+
+            // Blank line between static and regular imports
+            if !static_imports.is_empty() && !regular_imports.is_empty() {
+                items.push_signal(Signal::NewLine);
+            }
+
+            // Emit regular imports
+            for import_node in regular_imports.iter() {
+                items.extend(gen_node(*import_node, context));
+                items.push_signal(Signal::NewLine);
+            }
+
+            prev_kind = Some("import_declaration");
+            prev_was_comment = false;
+            emitted_imports = true;
+        }
+
         if child.is_extra() {
-            // Handle comment nodes instead of skipping them
+            // Handle comment nodes
             let is_trailing = comments::is_trailing_comment(*child);
 
             if is_trailing {
@@ -153,23 +239,12 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
 
         // Add blank lines between different top-level sections
         if let Some(pk) = prev_kind {
-            let cur_is_import = child.kind() == "import_declaration";
-            let cur_import_static = cur_is_import && {
-                let mut c = child.walk();
-                child.children(&mut c).any(|ch| ch.kind() == "static")
-            };
-
             let needs_double_newline = (pk == "package_declaration")
-                || (pk == "import_declaration" && !cur_is_import)
-                || (pk == "import_declaration" && cur_is_import && prev_import_static.is_some_and(|p| p != cur_import_static))
+                || (pk == "import_declaration" && child.kind() != "import_declaration")
                 || (pk != "import_declaration" && pk != "package_declaration");
 
             if needs_double_newline {
                 items.push_signal(Signal::NewLine);
-            }
-
-            if cur_is_import {
-                prev_import_static = Some(cur_import_static);
             }
         } else if prev_was_comment {
             // A comment preceded this first non-comment node — add newline
@@ -181,8 +256,8 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
         prev_was_comment = false;
 
         // Add newline after each top-level declaration
-        if i < children.len() - 1 {
-            if children[i + 1..].iter().any(|c| !c.is_extra()) {
+        if i < non_import_children.len() - 1 {
+            if non_import_children[i + 1..].iter().any(|c| !c.is_extra()) {
                 items.push_signal(Signal::NewLine);
             }
         }
@@ -192,6 +267,37 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
     items.push_signal(Signal::NewLine);
 
     items
+}
+
+/// Extract the import path from an import_declaration node.
+fn extract_import_path(node: tree_sitter::Node, source: &str) -> String {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "scoped_identifier" || child.kind() == "identifier" {
+            let path = &source[child.start_byte()..child.end_byte()];
+            // Include asterisk if present
+            let mut next_cursor = node.walk();
+            let has_asterisk = node.children(&mut next_cursor).any(|c| c.kind() == "asterisk");
+            if has_asterisk {
+                return format!("{}.*", path);
+            }
+            return path.to_string();
+        }
+    }
+    String::new()
+}
+
+/// Check if an import is a simple java.lang.* import that should be removed.
+/// Returns true for: java.lang.String, java.lang.Override, etc.
+/// Returns false for: java.lang.annotation.*, java.util.*, etc.
+fn is_java_lang_simple_import(import_path: &str) -> bool {
+    if let Some(rest) = import_path.strip_prefix("java.lang.") {
+        // Check if there are more dots (sub-package)
+        // If no more dots and not a wildcard, it's a simple class import
+        !rest.contains('.') && rest != "*"
+    } else {
+        false
+    }
 }
 
 /// Format a generic type: `List<String>`, `Map<K, V>`

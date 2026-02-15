@@ -1,0 +1,23 @@
+== input ==
+import org.springframework.context.annotation.Conditional;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.String;
+import java.lang.Override;
+import static java.util.Collections.sort;
+import static org.junit.Assert.assertEquals;
+import java.util.List;
+import java.util.ArrayList;
+
+public class Test {}
+== output ==
+import static java.util.Collections.sort;
+import static org.junit.Assert.assertEquals;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.context.annotation.Conditional;
+
+public class Test {}

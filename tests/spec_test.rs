@@ -452,6 +452,21 @@ fn spec_file_import_basic() {
 }
 
 #[test]
+fn spec_file_import_sorting() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/import_sorting.txt"));
+}
+
+#[test]
+fn spec_file_import_sorting_wildcards() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/import_sorting_wildcards.txt"));
+}
+
+#[test]
+fn spec_file_import_sorting_single() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/import_sorting_single.txt"));
+}
+
+#[test]
 fn spec_file_package_basic() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/package_basic.txt"));
 }
