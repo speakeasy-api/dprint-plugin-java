@@ -1,0 +1,119 @@
+--- /tmp/fmt-comparison/normalized/dprint/src/test/java/org/openapis/review/openapi/TypesTests.java	2026-02-15 23:44:58.913969732 +0000
++++ /tmp/fmt-comparison/normalized/spotless/src/test/java/org/openapis/review/openapi/TypesTests.java	2026-02-15 23:45:06.573969148 +0000
+@@ -31,27 +31,39 @@
+ 
+     @Test
+     public void testTypes_GetNamespaceTypes() throws Exception {
++
+         var testHttpClient = Utils.createTestHTTPClient("getNamespaceTypes");
+         SDK sdk = SDK.builder()
+                 .serverURL(Utils.environmentVariable("TEST_SERVER_URL", "http://localhost:18080"))
+                 .client(testHttpClient)
+                 .build();
+-        GetNamespaceTypesResponse res = sdk.namespaceTests().types().getNamespaceTypes().call();
++
++        GetNamespaceTypesResponse res =
++                sdk.namespaceTests().types().getNamespaceTypes().call();
+         assertEquals(200, res.statusCode());
+         assertEquals(
+                 NamespaceTypesTest.builder()
+                         .petSpecies(PetSpecies.CAT)
+                         .petStatus(PetStatus.AVAILABLE)
+-                        .animal(Cat.builder().animalType(CatAnimalType.CAT).furLength("short").build())
++                        .animal(Cat.builder()
++                                .animalType(CatAnimalType.CAT)
++                                .furLength("short")
++                                .build())
+                         .vehicle(Vehicle.of(Car.builder().engineType("V8").build()))
+                         .organization(Organization.builder()
+                                 .name("Acme Corp")
+                                 .address(Address.builder()
+                                         .street("123 Main St")
+                                         .city("Springfield")
+-                                        .location(Location.builder().latitude(37.7749).longitude(-122.4194).build())
++                                        .location(Location.builder()
++                                                .latitude(37.7749)
++                                                .longitude(-122.4194)
++                                                .build())
+                                         .build())
+-                                .departments(List.of(Department.builder().deptName("Engineering").headCount(50L).build()))
++                                .departments(List.of(Department.builder()
++                                        .deptName("Engineering")
++                                        .headCount(50L)
++                                        .build()))
+                                 .build())
+                         .build(),
+                 res.namespaceTypesTest().orElse(null));
+@@ -59,36 +71,49 @@
+ 
+     @Test
+     public void testTypes_GetNamespaceAnimal() throws Exception {
++
+         var testHttpClient = Utils.createTestHTTPClient("getNamespaceAnimal");
+         SDK sdk = SDK.builder()
+                 .serverURL(Utils.environmentVariable("TEST_SERVER_URL", "http://localhost:18080"))
+                 .client(testHttpClient)
+                 .build();
+-        GetNamespaceAnimalResponse res = sdk.namespaceTests().types().getNamespaceAnimal().call();
++
++        GetNamespaceAnimalResponse res =
++                sdk.namespaceTests().types().getNamespaceAnimal().call();
+         assertEquals(200, res.statusCode());
+-        assertEquals(Dog.builder().animalType(DogAnimalType.DOG).breed("Labrador").build(), res.animal().orElse(null));
++        assertEquals(
++                Dog.builder().animalType(DogAnimalType.DOG).breed("Labrador").build(),
++                res.animal().orElse(null));
+     }
+ 
+     @Test
+     public void testTypes_GetNamespaceVehicle() throws Exception {
++
+         var testHttpClient = Utils.createTestHTTPClient("getNamespaceVehicle");
+         SDK sdk = SDK.builder()
+                 .serverURL(Utils.environmentVariable("TEST_SERVER_URL", "http://localhost:18080"))
+                 .client(testHttpClient)
+                 .build();
+-        GetNamespaceVehicleResponse res = sdk.namespaceTests().types().getNamespaceVehicle().call();
++
++        GetNamespaceVehicleResponse res =
++                sdk.namespaceTests().types().getNamespaceVehicle().call();
+         assertEquals(200, res.statusCode());
+-        assertEquals(Vehicle.of(Bike.builder().hasPedals(true).build()), res.vehicle().orElse(null));
++        assertEquals(
++                Vehicle.of(Bike.builder().hasPedals(true).build()),
++                res.vehicle().orElse(null));
+     }
+ 
+     @Test
+     public void testTypes_GetNamespaceOrganization() throws Exception {
++
+         var testHttpClient = Utils.createTestHTTPClient("getNamespaceOrganization");
+         SDK sdk = SDK.builder()
+                 .serverURL(Utils.environmentVariable("TEST_SERVER_URL", "http://localhost:18080"))
+                 .client(testHttpClient)
+                 .build();
+-        GetNamespaceOrganizationResponse res = sdk.namespaceTests().types().getNamespaceOrganization().call();
++
++        GetNamespaceOrganizationResponse res =
++                sdk.namespaceTests().types().getNamespaceOrganization().call();
+         assertEquals(200, res.statusCode());
+         assertEquals(
+                 Organization.builder()
+@@ -96,9 +121,15 @@
+                         .address(Address.builder()
+                                 .street("123 Main St")
+                                 .city("Springfield")
+-                                .location(Location.builder().latitude(37.7749).longitude(-122.4194).build())
++                                .location(Location.builder()
++                                        .latitude(37.7749)
++                                        .longitude(-122.4194)
++                                        .build())
+                                 .build())
+-                        .departments(List.of(Department.builder().deptName("Engineering").headCount(50L).build()))
++                        .departments(List.of(Department.builder()
++                                .deptName("Engineering")
++                                .headCount(50L)
++                                .build()))
+                         .build(),
+                 res.organization().orElse(null));
+     }

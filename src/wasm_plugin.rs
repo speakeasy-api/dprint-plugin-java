@@ -12,8 +12,8 @@ use dprint_core::plugins::SyncFormatRequest;
 use dprint_core::plugins::SyncHostFormatRequest;
 use dprint_core::plugins::SyncPluginHandler;
 
-use crate::configuration::resolve_config;
 use crate::configuration::Configuration;
+use crate::configuration::resolve_config;
 
 struct JavaPluginHandler;
 

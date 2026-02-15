@@ -83,14 +83,21 @@ pub fn gen_local_variable_declaration<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                let (modifier_items, ends_with_newline) = declarations::gen_modifiers(child, context);
+                let (modifier_items, ends_with_newline) =
+                    declarations::gen_modifiers(child, context);
                 items.extend(modifier_items);
                 // Only need space if modifiers didn't end with newline
                 need_space = !ends_with_newline;
             }
             // Type nodes
-            "void_type" | "integral_type" | "floating_point_type" | "boolean_type"
-            | "type_identifier" | "scoped_type_identifier" | "generic_type" | "array_type"
+            "void_type"
+            | "integral_type"
+            | "floating_point_type"
+            | "boolean_type"
+            | "type_identifier"
+            | "scoped_type_identifier"
+            | "generic_type"
+            | "array_type"
             | "var" => {
                 if need_space {
                     items.extend(helpers::gen_space());
@@ -242,8 +249,14 @@ pub fn gen_enhanced_for_statement<'a>(
                 need_space = true;
             }
             // Type nodes
-            "void_type" | "integral_type" | "floating_point_type" | "boolean_type"
-            | "type_identifier" | "scoped_type_identifier" | "generic_type" | "array_type" => {
+            "void_type"
+            | "integral_type"
+            | "floating_point_type"
+            | "boolean_type"
+            | "type_identifier"
+            | "scoped_type_identifier"
+            | "generic_type"
+            | "array_type" => {
                 if need_space {
                     items.extend(helpers::gen_space());
                 }
@@ -389,10 +402,7 @@ fn gen_switch_block<'a>(
     let mut cursor = node.walk();
     let children: Vec<_> = node.children(&mut cursor).collect();
 
-    let cases: Vec<_> = children
-        .iter()
-        .filter(|c| c.is_named())
-        .collect();
+    let cases: Vec<_> = children.iter().filter(|c| c.is_named()).collect();
 
     if cases.is_empty() {
         items.push_string("}".to_string());
@@ -429,7 +439,8 @@ fn gen_switch_case<'a>(
             let mut in_body = false;
 
             // Collect body statements (named children after the colon)
-            let body_stmts: Vec<_> = children.iter()
+            let body_stmts: Vec<_> = children
+                .iter()
                 .skip_while(|c| c.kind() != ":")
                 .skip(1) // skip the colon itself
                 .filter(|c| c.is_named())

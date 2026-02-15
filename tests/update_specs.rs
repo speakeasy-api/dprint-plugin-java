@@ -1,11 +1,11 @@
 // Helper test to update all spec files with current formatter output
 // Run with: cargo test --test update_specs -- --ignored
 
-use std::fs;
-use std::path::Path;
 use dprint_core::configuration::NewLineKind;
 use dprint_plugin_java::configuration::Configuration;
 use dprint_plugin_java::format_text::format_text;
+use std::fs;
+use std::path::Path;
 
 fn default_config() -> Configuration {
     Configuration {

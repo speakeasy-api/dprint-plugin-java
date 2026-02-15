@@ -58,7 +58,8 @@ fn parse_spec(content: &str) -> (&str, &str) {
 }
 
 fn run_spec_file(path: &str) {
-    let content = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e));
+    let content =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e));
     let (input, expected) = parse_spec(&content);
     // Add trailing newline to both since the formatter always ends with one
     let input_with_nl = format!("{}\n", input);
@@ -338,172 +339,274 @@ fn spec_file_class_formatting() {
 
 #[test]
 fn spec_file_class_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/class_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_class_extends() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_extends.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/class_extends.txt"
+    ));
 }
 
 #[test]
 fn spec_file_class_implements() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_implements.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/class_implements.txt"
+    ));
 }
 
 #[test]
 fn spec_file_class_modifiers() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_modifiers.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/class_modifiers.txt"
+    ));
 }
 
 #[test]
 fn spec_file_class_generic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_generic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/class_generic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_class_nested() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_nested.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/class_nested.txt"
+    ));
 }
 
 #[test]
 fn spec_file_interface_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/interface_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/interface_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_interface_extends() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/interface_extends.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/interface_extends.txt"
+    ));
 }
 
 #[test]
 fn spec_file_enum_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/enum_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/enum_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_enum_multiple() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/enum_multiple.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/enum_multiple.txt"
+    ));
 }
 
 #[test]
 fn spec_file_enum_with_body() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/enum_with_body.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/enum_with_body.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/method_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_params() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_params.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/method_params.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_params_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_params_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/method_params_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_throws() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_throws.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/method_throws.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_throws_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_throws_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/method_throws_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_generic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_generic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/method_generic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_field_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/field_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/field_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_field_with_init() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/field_with_init.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/field_with_init.txt"
+    ));
 }
 
 #[test]
 fn spec_file_constructor_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/constructor_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/constructor_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_constructor_throws() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/constructor_throws.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/constructor_throws.txt"
+    ));
 }
 
 #[test]
 fn spec_file_record_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/record_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/record_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_import_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/import_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/import_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_import_sorting() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/import_sorting.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/import_sorting.txt"
+    ));
 }
 
 #[test]
 fn spec_file_import_sorting_wildcards() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/import_sorting_wildcards.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/import_sorting_wildcards.txt"
+    ));
 }
 
 #[test]
 fn spec_file_import_sorting_single() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/import_sorting_single.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/import_sorting_single.txt"
+    ));
 }
 
 #[test]
 fn spec_file_package_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/package_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/package_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_annotation_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/annotation_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/annotation_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_annotation_placement() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/annotation_placement.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/annotation_placement.txt"
+    ));
 }
 
 #[test]
 fn spec_file_varargs() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/varargs.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/varargs.txt"
+    ));
 }
 
 #[test]
 fn spec_file_argument_list_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/argument_list_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/argument_list_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_argument_list_pjf_parity() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/argument_list_pjf_parity.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/argument_list_pjf_parity.txt"
+    ));
 }
 
 #[test]
 fn spec_file_abstract_class() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/abstract_class.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/abstract_class.txt"
+    ));
 }
 
 #[test]
 fn spec_file_modifier_order() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/modifier_order.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/modifier_order.txt"
+    ));
 }
 
 // #[test]
@@ -513,32 +616,50 @@ fn spec_file_modifier_order() {
 
 #[test]
 fn spec_file_class_extends_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_extends_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/class_extends_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_class_implements_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_implements_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/class_implements_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_class_extends_implements_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_extends_implements_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/class_extends_implements_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_interface_extends_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/interface_extends_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/interface_extends_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_enum_implements_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/enum_implements_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/enum_implements_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_record_implements_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/record_implements_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/record_implements_wrapping.txt"
+    ));
 }
 
 // ---- Statements ----
@@ -553,214 +674,340 @@ fn spec_file_statement_formatting() {
 
 #[test]
 fn spec_file_if_else() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/if_else.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/if_else.txt"
+    ));
 }
 
 #[test]
 fn spec_file_if_else_chain() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/if_else_chain.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/if_else_chain.txt"
+    ));
 }
 
 #[test]
 fn spec_file_for_loop() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/for_loop.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/for_loop.txt"
+    ));
 }
 
 #[test]
 fn spec_file_enhanced_for() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/enhanced_for.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/enhanced_for.txt"
+    ));
 }
 
 #[test]
 fn spec_file_while_loop() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/while_loop.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/while_loop.txt"
+    ));
 }
 
 #[test]
 fn spec_file_do_while() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/do_while.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/do_while.txt"
+    ));
 }
 
 #[test]
 fn spec_file_switch_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/switch_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/switch_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_try_catch() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/try_catch.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/try_catch.txt"
+    ));
 }
 
 #[test]
 fn spec_file_try_with_resources() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/try_with_resources.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/try_with_resources.txt"
+    ));
 }
 
 #[test]
 fn spec_file_return_throw() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/return_throw.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/return_throw.txt"
+    ));
 }
 
 #[test]
 fn spec_file_block_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/block_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/block_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_break_continue() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/break_continue.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/break_continue.txt"
+    ));
 }
 
 #[test]
 fn spec_file_synchronized_block() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/synchronized_block.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/synchronized_block.txt"
+    ));
 }
 
 #[test]
 fn spec_file_assert_statement() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/assert_statement.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/assert_statement.txt"
+    ));
 }
 
 #[test]
 fn spec_file_labeled_statement() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/labeled_statement.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/labeled_statement.txt"
+    ));
 }
 
 #[test]
 fn spec_file_local_variable_annotations() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/local_variable_annotations.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/local_variable_annotations.txt"
+    ));
 }
 
 #[test]
 fn spec_file_block_comment_blank_line() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/block_comment_blank_line.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/block_comment_blank_line.txt"
+    ));
 }
 
 #[test]
 fn spec_file_switch_case_block() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/switch_case_block.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/switch_case_block.txt"
+    ));
 }
 
 #[test]
 fn spec_file_switch_mixed_blocks() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/switch_mixed_blocks.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/statements/switch_mixed_blocks.txt"
+    ));
 }
 
 // ---- Expressions ----
 #[test]
 fn spec_file_binary_ops() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/binary_ops.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/binary_ops.txt"
+    ));
 }
 
 #[test]
 fn spec_file_binary_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/binary_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/binary_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_invocation() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_invocation.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/method_invocation.txt"
+    ));
 }
 
 #[test]
 fn spec_file_lambda_basic() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/lambda_basic.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/lambda_basic.txt"
+    ));
 }
 
 #[test]
 fn spec_file_ternary() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/ternary.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/ternary.txt"
+    ));
 }
 
 #[test]
 fn spec_file_ternary_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/ternary_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/ternary_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_object_creation() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/object_creation.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/object_creation.txt"
+    ));
 }
 
 #[test]
 fn spec_file_array_ops() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/array_ops.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/array_ops.txt"
+    ));
 }
 
 #[test]
 fn spec_file_cast_instanceof() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/cast_instanceof.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/cast_instanceof.txt"
+    ));
 }
 
 #[test]
 fn spec_file_unary_ops() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/unary_ops.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/unary_ops.txt"
+    ));
 }
 
 #[test]
 fn spec_file_field_access() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/field_access.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/field_access.txt"
+    ));
 }
 
 #[test]
 fn spec_file_parenthesized() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/parenthesized.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/parenthesized.txt"
+    ));
 }
 
 #[test]
 fn spec_file_assignment() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/assignment.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/assignment.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_reference() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_reference.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/method_reference.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_chain_breaking() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_chain_breaking.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/method_chain_breaking.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_chain_line_comment() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_chain_line_comment.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/method_chain_line_comment.txt"
+    ));
 }
 
 #[test]
 fn spec_file_method_chain_wrapping_edge_cases() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_chain_wrapping_edge_cases.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/method_chain_wrapping_edge_cases.txt"
+    ));
 }
 
 #[test]
 fn spec_file_lambda_chain_indent() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/lambda_chain_indent.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/lambda_chain_indent.txt"
+    ));
 }
 
 #[test]
 fn spec_file_array_initializer_comments() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/array_initializer_comments.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/array_initializer_comments.txt"
+    ));
 }
 
 #[test]
 fn spec_builder_pattern_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/builder_pattern_wrapping.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/builder_pattern_wrapping.txt"
+    ));
 }
 
 #[test]
 fn spec_file_chain_comments() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/chain_comments.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/chain_comments.txt"
+    ));
 }
 
 #[test]
 fn spec_file_chain_inline_comments() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/chain_inline_comments.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/chain_inline_comments.txt"
+    ));
 }
 
 // ---- Comments ----
 #[test]
 fn spec_file_trailing_whitespace() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/comments/trailing_whitespace.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/comments/trailing_whitespace.txt"
+    ));
 }
 
 // ---- Instability debugging ----
@@ -780,7 +1027,11 @@ fn assert_stable(name: &str, input: &str) {
         let pass1_lines: Vec<&str> = pass1.lines().collect();
         let pass2_lines: Vec<&str> = pass2.lines().collect();
         eprintln!("\n=== INSTABILITY: {} ===", name);
-        eprintln!("pass1 has {} lines, pass2 has {} lines", pass1_lines.len(), pass2_lines.len());
+        eprintln!(
+            "pass1 has {} lines, pass2 has {} lines",
+            pass1_lines.len(),
+            pass2_lines.len()
+        );
         let max = pass1_lines.len().max(pass2_lines.len());
         for i in 0..max {
             let l1 = pass1_lines.get(i).unwrap_or(&"<missing>");
@@ -798,11 +1049,14 @@ fn assert_stable(name: &str, input: &str) {
 
 #[test]
 fn debug_instability_lambda_block() {
-    assert_stable("lambda_block_field", r#"public interface Foo {
+    assert_stable(
+        "lambda_block_field",
+        r#"public interface Foo {
     static Foo DEFAULT = (a, b) -> {
         doSomething();
     };
-}"#);
+}"#,
+    );
 }
 
 // Skipped: Known instability in Auth.java (chain+arglist wrapping interaction)
@@ -904,11 +1158,14 @@ public class Test {
 
 #[test]
 fn debug_instability_bare_method_chain() {
-    assert_stable("bare_method_chain", r#"public class Test {
+    assert_stable(
+        "bare_method_chain",
+        r#"public class Test {
     void test() {
         callAsStream().flatMap(r -> r.object().stream()).flatMap(r -> r.resultArray().stream());
     }
-}"#);
+}"#,
+    );
 }
 
 #[test]
@@ -924,14 +1181,20 @@ fn debug_lambda_chain_tree() {
     }
 }"#;
     let mut parser = tree_sitter::Parser::new();
-    parser.set_language(&tree_sitter_java::LANGUAGE.into()).unwrap();
+    parser
+        .set_language(&tree_sitter_java::LANGUAGE.into())
+        .unwrap();
     let tree = parser.parse(code, None).unwrap();
 
     fn find_method_invocation(node: tree_sitter::Node, source: &str, depth: usize) {
         if node.kind() == "method_invocation" {
             let text = &source[node.start_byte()..node.end_byte()];
             let short = if text.len() > 80 { &text[..80] } else { text };
-            eprintln!("{} method_invocation: {:?}", "  ".repeat(depth), short.replace('\n', "\\n"));
+            eprintln!(
+                "{} method_invocation: {:?}",
+                "  ".repeat(depth),
+                short.replace('\n', "\\n")
+            );
 
             // Check for object child
             if let Some(obj) = node.child_by_field_name("object") {
@@ -965,12 +1228,18 @@ public interface Foo {
 // ---- Mixed/Integration ----
 #[test]
 fn spec_file_complex_class() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/mixed/complex_class.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/mixed/complex_class.txt"
+    ));
 }
 
 #[test]
 fn spec_file_bad_formatting() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/mixed/bad_formatting.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/mixed/bad_formatting.txt"
+    ));
 }
 
 // #[test]
@@ -980,36 +1249,56 @@ fn spec_file_bad_formatting() {
 
 #[test]
 fn spec_file_blank_lines_import_to_class() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/blank_lines_import_to_class.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/blank_lines_import_to_class.txt"
+    ));
 }
 
 #[test]
 fn spec_file_blank_lines_after_class_brace() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/blank_lines_after_class_brace.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/blank_lines_after_class_brace.txt"
+    ));
 }
 
 #[test]
 fn spec_file_blank_lines_javadoc_fields() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/blank_lines_javadoc_fields.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/blank_lines_javadoc_fields.txt"
+    ));
 }
 
 #[test]
 fn spec_file_blank_lines_javadoc_methods() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/blank_lines_javadoc_methods.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/blank_lines_javadoc_methods.txt"
+    ));
 }
 
 #[test]
 fn spec_file_blank_lines_members() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/blank_lines_members.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/blank_lines_members.txt"
+    ));
 }
 
 #[test]
 fn spec_file_instance_initializer_nested() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/instance_initializer_nested.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/instance_initializer_nested.txt"
+    ));
 }
 
 #[test]
 fn spec_file_instance_initializer_with_members() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/instance_initializer_with_members.txt"));
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/instance_initializer_with_members.txt"
+    ));
 }
-

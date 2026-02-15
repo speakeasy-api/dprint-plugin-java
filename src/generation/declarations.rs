@@ -76,8 +76,12 @@ pub fn gen_class_declaration<'a>(
     // When both extends and implements are present, prefer to wrap only before implements.
     // Only wrap before extends if implements is not present and extends alone is too long.
     let mut cursor2 = node.walk();
-    let has_superclass = node.children(&mut cursor2).any(|c| c.kind() == "superclass");
-    let has_super_interfaces = node.children(&mut cursor2).any(|c| c.kind() == "super_interfaces");
+    let has_superclass = node
+        .children(&mut cursor2)
+        .any(|c| c.kind() == "superclass");
+    let has_super_interfaces = node
+        .children(&mut cursor2)
+        .any(|c| c.kind() == "super_interfaces");
 
     let wrap_extends = needs_wrapping && has_superclass && !has_super_interfaces;
     let wrap_implements = needs_wrapping && has_super_interfaces;
@@ -419,8 +423,14 @@ pub fn gen_method_declaration<'a>(
                 need_space = true;
             }
             // Return type: various type nodes
-            "void_type" | "integral_type" | "floating_point_type" | "boolean_type"
-            | "type_identifier" | "scoped_type_identifier" | "generic_type" | "array_type" => {
+            "void_type"
+            | "integral_type"
+            | "floating_point_type"
+            | "boolean_type"
+            | "type_identifier"
+            | "scoped_type_identifier"
+            | "generic_type"
+            | "array_type" => {
                 if need_space {
                     items.extend(helpers::gen_space());
                 }
@@ -489,7 +499,11 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
                 let text = &source[child.start_byte()..child.end_byte()];
                 // Use first line only (for multiline modifiers like annotations)
                 let first_line = text.lines().last().unwrap_or(text);
-                if width > 0 && child.kind() != "formal_parameters" && child.kind() != "(" && child.kind() != ")" {
+                if width > 0
+                    && child.kind() != "formal_parameters"
+                    && child.kind() != "("
+                    && child.kind() != ")"
+                {
                     width += 1; // space separator
                 }
                 width += first_line.trim().len();
@@ -538,7 +552,11 @@ fn estimate_class_decl_width(node: tree_sitter::Node, source: &str) -> usize {
                 let text = &source[child.start_byte()..child.end_byte()];
                 // Use last line only (for multiline modifiers like annotations)
                 let last_line = text.lines().last().unwrap_or(text);
-                if width > 0 && child.kind() != "formal_parameters" && child.kind() != "(" && child.kind() != ")" {
+                if width > 0
+                    && child.kind() != "formal_parameters"
+                    && child.kind() != "("
+                    && child.kind() != ")"
+                {
                     width += 1; // space separator
                 }
                 width += last_line.trim().len();
@@ -636,8 +654,14 @@ pub fn gen_field_declaration<'a>(
                 need_space = !ends_with_newline;
             }
             // Type nodes
-            "void_type" | "integral_type" | "floating_point_type" | "boolean_type"
-            | "type_identifier" | "scoped_type_identifier" | "generic_type" | "array_type" => {
+            "void_type"
+            | "integral_type"
+            | "floating_point_type"
+            | "boolean_type"
+            | "type_identifier"
+            | "scoped_type_identifier"
+            | "generic_type"
+            | "array_type" => {
                 if need_space {
                     items.extend(helpers::gen_space());
                 }
@@ -925,8 +949,13 @@ fn gen_enum_body<'a>(
     items.push_signal(Signal::StartIndent);
 
     // Separate enum constants, comments, and body declarations
-    let enum_constants: Vec<_> = members.iter().filter(|c| c.kind() == "enum_constant").collect();
-    let has_body_decls = members.iter().any(|c| c.kind() == "enum_body_declarations" || c.kind() == ";");
+    let enum_constants: Vec<_> = members
+        .iter()
+        .filter(|c| c.kind() == "enum_constant")
+        .collect();
+    let has_body_decls = members
+        .iter()
+        .any(|c| c.kind() == "enum_body_declarations" || c.kind() == ";");
 
     let mut constant_idx = 0;
     let mut prev_was_constant = false;
@@ -1054,15 +1083,23 @@ pub fn gen_formal_parameters<'a>(
 
     let params: Vec<_> = children
         .iter()
-        .filter(|c| c.kind() == "formal_parameter" || c.kind() == "spread_parameter" || c.kind() == "receiver_parameter")
+        .filter(|c| {
+            c.kind() == "formal_parameter"
+                || c.kind() == "spread_parameter"
+                || c.kind() == "receiver_parameter"
+        })
         .collect();
 
     // Calculate total inline width of params (stable: uses indent_level, not source column)
-    let param_text_width: usize = params.iter().enumerate().map(|(i, p)| {
-        let text = &context.source[p.start_byte()..p.end_byte()];
-        let flat: usize = text.lines().map(|l| l.trim().len()).sum();
-        flat + if i < params.len() - 1 { 2 } else { 0 }
-    }).sum();
+    let param_text_width: usize = params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let text = &context.source[p.start_byte()..p.end_byte()];
+            let flat: usize = text.lines().map(|l| l.trim().len()).sum();
+            flat + if i < params.len() - 1 { 2 } else { 0 }
+        })
+        .sum();
     let indent_width = context.indent_level() * context.config.indent_width as usize;
 
     // Account for the prefix width (method name, return type, etc.) on the same line
@@ -1102,10 +1139,7 @@ pub fn gen_formal_parameters<'a>(
 }
 
 /// Format `throws Exception1, Exception2`
-fn gen_throws<'a>(
-    node: tree_sitter::Node<'a>,
-    context: &mut FormattingContext<'a>,
-) -> PrintItems {
+fn gen_throws<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
     let mut first_type = true;
@@ -1181,15 +1215,20 @@ pub fn gen_variable_declarator<'a>(
     // If the value is a method_invocation, skip variable declarator wrapping.
     // The method chain's own wrapping logic will handle line-breaking.
     let value_is_method_chain = children.iter().any(|c| c.kind() == "method_invocation");
-    let wrap_value = has_value && !value_is_ternary && !value_is_logical_binary && !value_is_array_with_comments && !value_is_method_chain && {
-        let indent_width = context.indent_level() * context.config.indent_width as usize;
-        let decl_flat_width = if let Some(parent) = node.parent() {
-            estimate_decl_flat_width(parent, context.source)
-        } else {
-            0
+    let wrap_value = has_value
+        && !value_is_ternary
+        && !value_is_logical_binary
+        && !value_is_array_with_comments
+        && !value_is_method_chain
+        && {
+            let indent_width = context.indent_level() * context.config.indent_width as usize;
+            let decl_flat_width = if let Some(parent) = node.parent() {
+                estimate_decl_flat_width(parent, context.source)
+            } else {
+                0
+            };
+            indent_width + decl_flat_width > context.config.line_width as usize
         };
-        indent_width + decl_flat_width > context.config.line_width as usize
-    };
 
     let mut saw_eq = false;
     let mut cursor2 = node.walk();
@@ -1294,11 +1333,15 @@ pub fn gen_argument_list<'a>(
     let args: Vec<_> = children.iter().filter(|c| c.is_named()).collect();
 
     // Estimate the "flat" width of arguments (stripping embedded newlines)
-    let args_flat_width: usize = args.iter().enumerate().map(|(i, a)| {
-        let text = &context.source[a.start_byte()..a.end_byte()];
-        let flat: usize = text.lines().map(|l| l.trim().len()).sum();
-        flat + if i < args.len() - 1 { 2 } else { 0 }
-    }).sum();
+    let args_flat_width: usize = args
+        .iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let text = &context.source[a.start_byte()..a.end_byte()];
+            let flat: usize = text.lines().map(|l| l.trim().len()).sum();
+            flat + if i < args.len() - 1 { 2 } else { 0 }
+        })
+        .sum();
 
     // Use indent level (stable across passes) + arg_list_text_width for wrap decision.
     // Account for the prefix width (receiver, method name, etc.) on the same line.
@@ -1311,7 +1354,8 @@ pub fn gen_argument_list<'a>(
 
     // If not, check if args fit on ONE continuation line (8-space indent = 2 levels of indent_width)
     let continuation_indent = indent_width + (2 * context.config.indent_width as usize);
-    let fits_on_continuation_line = continuation_indent + args_flat_width + 1 < context.config.line_width as usize;
+    let fits_on_continuation_line =
+        continuation_indent + args_flat_width + 1 < context.config.line_width as usize;
 
     items.push_string("(".to_string());
 
@@ -1435,4 +1479,3 @@ fn gen_body_with_members<'a>(
 
     items
 }
-

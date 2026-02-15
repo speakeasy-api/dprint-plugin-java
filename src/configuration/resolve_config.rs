@@ -1,9 +1,9 @@
-use dprint_core::configuration::get_unknown_property_diagnostics;
-use dprint_core::configuration::get_value;
 use dprint_core::configuration::ConfigKeyMap;
 use dprint_core::configuration::GlobalConfiguration;
 use dprint_core::configuration::NewLineKind;
 use dprint_core::configuration::ResolveConfigurationResult;
+use dprint_core::configuration::get_unknown_property_diagnostics;
+use dprint_core::configuration::get_value;
 
 use super::Configuration;
 use super::JavaStyle;
@@ -16,12 +16,7 @@ pub fn resolve_config(
     let mut config = config;
     let mut diagnostics = Vec::new();
 
-    let style: JavaStyle = get_value(
-        &mut config,
-        "style",
-        JavaStyle::Palantir,
-        &mut diagnostics,
-    );
+    let style: JavaStyle = get_value(&mut config, "style", JavaStyle::Palantir, &mut diagnostics);
 
     let line_width = get_value(
         &mut config,
@@ -47,24 +42,10 @@ pub fn resolve_config(
         global_config.new_line_kind.unwrap_or(NewLineKind::LineFeed),
         &mut diagnostics,
     );
-    let format_javadoc = get_value(
-        &mut config,
-        "formatJavadoc",
-        false,
-        &mut diagnostics,
-    );
-    let method_chain_threshold = get_value(
-        &mut config,
-        "methodChainThreshold",
-        80u32,
-        &mut diagnostics,
-    );
-    let inline_lambdas = get_value(
-        &mut config,
-        "inlineLambdas",
-        true,
-        &mut diagnostics,
-    );
+    let format_javadoc = get_value(&mut config, "formatJavadoc", false, &mut diagnostics);
+    let method_chain_threshold =
+        get_value(&mut config, "methodChainThreshold", 80u32, &mut diagnostics);
+    let inline_lambdas = get_value(&mut config, "inlineLambdas", true, &mut diagnostics);
 
     diagnostics.extend(get_unknown_property_diagnostics(config));
 
@@ -102,10 +83,8 @@ mod tests {
 
     #[test]
     fn google_style_overrides() {
-        let config = ConfigKeyMap::from([(
-            "style".to_string(),
-            ConfigKeyValue::from_str("google"),
-        )]);
+        let config =
+            ConfigKeyMap::from([("style".to_string(), ConfigKeyValue::from_str("google"))]);
         let global = GlobalConfiguration::default();
         let result = resolve_config(config, &global);
         assert!(result.diagnostics.is_empty());
@@ -128,10 +107,8 @@ mod tests {
 
     #[test]
     fn unknown_property_diagnostic() {
-        let config = ConfigKeyMap::from([(
-            "unknownProp".to_string(),
-            ConfigKeyValue::from_str("value"),
-        )]);
+        let config =
+            ConfigKeyMap::from([("unknownProp".to_string(), ConfigKeyValue::from_str("value"))]);
         let global = GlobalConfiguration::default();
         let result = resolve_config(config, &global);
         assert_eq!(result.diagnostics.len(), 1);

@@ -56,5 +56,4 @@ mod tests {
         let items = gen_node_text(root, source);
         assert!(!items.is_empty());
     }
-
 }

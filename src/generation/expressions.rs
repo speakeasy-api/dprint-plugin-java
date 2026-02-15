@@ -95,7 +95,9 @@ pub fn gen_binary_expression<'a>(
                         // Go up to local_variable_declaration or field_declaration
                         if let Some(grandparent) = parent.parent() {
                             match grandparent.kind() {
-                                "local_variable_declaration" | "field_declaration" => grandparent.start_byte(),
+                                "local_variable_declaration" | "field_declaration" => {
+                                    grandparent.start_byte()
+                                }
                                 _ => node.start_byte(),
                             }
                         } else {
@@ -109,11 +111,9 @@ pub fn gen_binary_expression<'a>(
                 };
 
                 let line_text = &context.source[line_start_byte..node.end_byte()];
-                let line_flat_width: usize = line_text
-                    .lines()
-                    .map(|l| l.trim().len())
-                    .sum::<usize>()
-                    + line_text.lines().count().saturating_sub(1);
+                let line_flat_width: usize =
+                    line_text.lines().map(|l| l.trim().len()).sum::<usize>()
+                        + line_text.lines().count().saturating_sub(1);
 
                 indent_width + line_flat_width > context.config.line_width as usize
             };
@@ -266,7 +266,13 @@ pub fn gen_method_invocation<'a>(
     }
 
     // Flatten the chain into (root, [(method_invocation_node, method_name_node, type_args, arg_list, trailing_comment), ...])
-    let mut segments: Vec<(tree_sitter::Node<'a>, tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)> = Vec::new();
+    let mut segments: Vec<(
+        tree_sitter::Node<'a>,
+        tree_sitter::Node<'a>,
+        Option<tree_sitter::Node<'a>>,
+        Option<tree_sitter::Node<'a>>,
+        Option<tree_sitter::Node<'a>>,
+    )> = Vec::new();
     let root = flatten_chain(node, &mut segments);
 
     // Force wrapping if any segment has a lambda with a block body
@@ -301,7 +307,8 @@ pub fn gen_method_invocation<'a>(
     }
 
     let chain_flat_width = root_width + segments_width;
-    let should_wrap = force_wrap || chain_flat_width > context.config.method_chain_threshold as usize;
+    let should_wrap =
+        force_wrap || chain_flat_width > context.config.method_chain_threshold as usize;
 
     let mut items = PrintItems::new();
     items.extend(gen_node(root, context));
@@ -426,7 +433,13 @@ fn gen_method_invocation_simple<'a>(
 /// This is used to force chain wrapping when lambdas with block bodies are present,
 /// since the multi-line block content would produce incorrect indentation on a single line.
 fn chain_has_lambda_block(
-    segments: &[(tree_sitter::Node, tree_sitter::Node, Option<tree_sitter::Node>, Option<tree_sitter::Node>, Option<tree_sitter::Node>)],
+    segments: &[(
+        tree_sitter::Node,
+        tree_sitter::Node,
+        Option<tree_sitter::Node>,
+        Option<tree_sitter::Node>,
+        Option<tree_sitter::Node>,
+    )],
 ) -> bool {
     for (_, _, _, arg_list, _) in segments {
         if let Some(al) = arg_list {
@@ -461,9 +474,9 @@ fn chain_depth(node: tree_sitter::Node) -> usize {
     let mut current = node;
     loop {
         let mut cursor = current.walk();
-        let object = current.children(&mut cursor).find(|c| {
-            c.is_named() && c.kind() != "argument_list" && c.kind() != "type_arguments"
-        });
+        let object = current
+            .children(&mut cursor)
+            .find(|c| c.is_named() && c.kind() != "argument_list" && c.kind() != "type_arguments");
         match object {
             Some(obj) if obj.kind() == "method_invocation" => {
                 depth += 1;
@@ -502,7 +515,13 @@ fn extract_trailing_line_comment<'a>(node: tree_sitter::Node<'a>) -> Option<tree
 
 fn flatten_chain<'a>(
     node: tree_sitter::Node<'a>,
-    segments: &mut Vec<(tree_sitter::Node<'a>, tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)>,
+    segments: &mut Vec<(
+        tree_sitter::Node<'a>,
+        tree_sitter::Node<'a>,
+        Option<tree_sitter::Node<'a>>,
+        Option<tree_sitter::Node<'a>>,
+        Option<tree_sitter::Node<'a>>,
+    )>,
 ) -> tree_sitter::Node<'a> {
     // Collect the chain in reverse (innermost first), then reverse at the end.
     let mut chain = Vec::new();
@@ -514,7 +533,9 @@ fn flatten_chain<'a>(
         let name = current.child_by_field_name("name");
         let type_args = {
             let mut cursor = current.walk();
-            current.children(&mut cursor).find(|c| c.kind() == "type_arguments")
+            current
+                .children(&mut cursor)
+                .find(|c| c.kind() == "type_arguments")
         };
         let arg_list = current.child_by_field_name("arguments");
 
@@ -626,10 +647,7 @@ pub fn gen_ternary_expression<'a>(
 ) -> PrintItems {
     // Estimate the "flat" width of the entire ternary expression (as if on one line).
     let ternary_text = &context.source[node.start_byte()..node.end_byte()];
-    let ternary_flat_width: usize = ternary_text
-        .lines()
-        .map(|l| l.trim().len())
-        .sum::<usize>()
+    let ternary_flat_width: usize = ternary_text.lines().map(|l| l.trim().len()).sum::<usize>()
         + ternary_text.lines().count().saturating_sub(1); // spaces between joined lines
 
     let indent_width = context.indent_level() * context.config.indent_width as usize;

@@ -22,7 +22,10 @@ pub fn generate(source: &str, tree: &tree_sitter::Tree, config: &Configuration) 
 /// This is the main dispatcher that routes nodes to specific handlers
 /// based on their kind. Unhandled nodes fall back to emitting their
 /// source text unchanged.
-pub fn gen_node<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+pub fn gen_node<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     context.push_parent(node.kind());
     let items = match node.kind() {
         "program" => gen_program(node, context),
@@ -34,11 +37,17 @@ pub fn gen_node<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext
         "interface_declaration" => declarations::gen_interface_declaration(node, context),
         "enum_declaration" => declarations::gen_enum_declaration(node, context),
         "record_declaration" => declarations::gen_record_declaration(node, context),
-        "annotation_type_declaration" => declarations::gen_annotation_type_declaration(node, context),
+        "annotation_type_declaration" => {
+            declarations::gen_annotation_type_declaration(node, context)
+        }
         "method_declaration" => declarations::gen_method_declaration(node, context),
         "constructor_declaration" => declarations::gen_constructor_declaration(node, context),
-        "field_declaration" | "constant_declaration" => declarations::gen_field_declaration(node, context),
-        "class_body" | "interface_body" | "annotation_type_body" => declarations::gen_class_body(node, context),
+        "field_declaration" | "constant_declaration" => {
+            declarations::gen_field_declaration(node, context)
+        }
+        "class_body" | "interface_body" | "annotation_type_body" => {
+            declarations::gen_class_body(node, context)
+        }
 
         // --- Statements ---
         "block" | "constructor_body" => statements::gen_block(node, context),
@@ -51,7 +60,9 @@ pub fn gen_node<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext
         "do_statement" => statements::gen_do_statement(node, context),
         "switch_expression" => statements::gen_switch_expression(node, context),
         "try_statement" => statements::gen_try_statement(node, context),
-        "try_with_resources_statement" => statements::gen_try_with_resources_statement(node, context),
+        "try_with_resources_statement" => {
+            statements::gen_try_with_resources_statement(node, context)
+        }
         "return_statement" => statements::gen_return_statement(node, context),
         "throw_statement" => statements::gen_throw_statement(node, context),
         "break_statement" => statements::gen_break_statement(node, context),
@@ -62,10 +73,12 @@ pub fn gen_node<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext
         "labeled_statement" => statements::gen_labeled_statement(node, context),
 
         // --- Types (pass-through for now, formatted as text) ---
-        "type_identifier" | "void_type" | "integral_type" | "floating_point_type"
-        | "boolean_type" | "scoped_type_identifier" => {
-            helpers::gen_node_text(node, context.source)
-        }
+        "type_identifier"
+        | "void_type"
+        | "integral_type"
+        | "floating_point_type"
+        | "boolean_type"
+        | "scoped_type_identifier" => helpers::gen_node_text(node, context.source),
         "generic_type" => gen_generic_type(node, context),
         "array_type" => gen_array_type(node, context),
         "type_parameter" => gen_type_parameter(node, context),
@@ -103,7 +116,9 @@ pub fn gen_node<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext
         "method_reference" => expressions::gen_method_reference(node, context),
         "assignment_expression" => expressions::gen_assignment_expression(node, context),
         "inferred_parameters" => expressions::gen_inferred_parameters(node, context),
-        "explicit_constructor_invocation" => expressions::gen_explicit_constructor_invocation(node, context),
+        "explicit_constructor_invocation" => {
+            expressions::gen_explicit_constructor_invocation(node, context)
+        }
 
         // --- Fallback: emit source text unchanged ---
         _ => helpers::gen_node_text(node, context.source),
@@ -222,10 +237,8 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                 // Leading/standalone comment: emit on its own line
                 if prev_kind.is_some() || prev_was_comment {
                     // Determine if we need a blank line before this comment
-                    let prev_is_different_section = prev_kind
-                        .is_some_and(|pk| {
-                            pk != "line_comment" && pk != "block_comment"
-                        });
+                    let prev_is_different_section =
+                        prev_kind.is_some_and(|pk| pk != "line_comment" && pk != "block_comment");
                     let is_block_comment = child.kind() == "block_comment";
 
                     if prev_is_different_section && !prev_was_comment {
@@ -292,7 +305,9 @@ fn extract_import_path(node: tree_sitter::Node, source: &str) -> String {
             let path = &source[child.start_byte()..child.end_byte()];
             // Include asterisk if present
             let mut next_cursor = node.walk();
-            let has_asterisk = node.children(&mut next_cursor).any(|c| c.kind() == "asterisk");
+            let has_asterisk = node
+                .children(&mut next_cursor)
+                .any(|c| c.kind() == "asterisk");
             if has_asterisk {
                 return format!("{}.*", path);
             }
@@ -316,7 +331,10 @@ fn is_java_lang_simple_import(import_path: &str) -> bool {
 }
 
 /// Format a generic type: `List<String>`, `Map<K, V>`
-fn gen_generic_type<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_generic_type<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
@@ -336,7 +354,10 @@ fn gen_generic_type<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingCon
 }
 
 /// Format type arguments: `<String, Integer>`
-fn gen_type_arguments<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_type_arguments<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
@@ -359,7 +380,10 @@ fn gen_type_arguments<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingC
 }
 
 /// Format an array type: `int[]`, `String[][]`
-fn gen_array_type<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_array_type<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
@@ -375,7 +399,10 @@ fn gen_array_type<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingConte
 }
 
 /// Format a type parameter: `T`, `T extends Comparable<T>`
-fn gen_type_parameter<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_type_parameter<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
@@ -400,7 +427,10 @@ fn gen_type_parameter<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingC
 }
 
 /// Format a type bound: `extends Comparable<T> & Serializable`
-fn gen_type_bound<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_type_bound<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
     let mut first = true;
@@ -432,7 +462,10 @@ fn gen_type_bound<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingConte
 }
 
 /// Format a wildcard: `?`, `? extends T`, `? super T`
-fn gen_wildcard<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_wildcard<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
@@ -459,7 +492,10 @@ fn gen_wildcard<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext
 }
 
 /// Format a formal parameter: `String name`, `final int x`, `String... args`
-fn gen_formal_parameter<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_formal_parameter<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
     let mut need_space = false;
@@ -471,8 +507,14 @@ fn gen_formal_parameter<'a>(node: tree_sitter::Node<'a>, context: &mut Formattin
                 need_space = true;
             }
             // Type nodes
-            "void_type" | "integral_type" | "floating_point_type" | "boolean_type"
-            | "type_identifier" | "scoped_type_identifier" | "generic_type" | "array_type" => {
+            "void_type"
+            | "integral_type"
+            | "floating_point_type"
+            | "boolean_type"
+            | "type_identifier"
+            | "scoped_type_identifier"
+            | "generic_type"
+            | "array_type" => {
                 if need_space {
                     items.extend(helpers::gen_space());
                 }
@@ -501,7 +543,10 @@ fn gen_formal_parameter<'a>(node: tree_sitter::Node<'a>, context: &mut Formattin
 }
 
 /// Format a marker annotation: `@Override`
-fn gen_marker_annotation<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_marker_annotation<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     items.push_string("@".to_string());
 
@@ -513,7 +558,10 @@ fn gen_marker_annotation<'a>(node: tree_sitter::Node<'a>, context: &mut Formatti
 }
 
 /// Format an annotation: `@SuppressWarnings("unchecked")`
-fn gen_annotation<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_annotation<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     items.push_string("@".to_string());
 
@@ -535,7 +583,10 @@ fn gen_annotation<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingConte
 }
 
 /// Format annotation argument list: `("value")` or `(key = value)`
-fn gen_annotation_argument_list<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_annotation_argument_list<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
@@ -565,7 +616,10 @@ fn gen_annotation_argument_list<'a>(node: tree_sitter::Node<'a>, context: &mut F
 }
 
 /// Format element value pair: `key = value`
-fn gen_element_value_pair<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_element_value_pair<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
@@ -590,7 +644,10 @@ fn gen_element_value_pair<'a>(node: tree_sitter::Node<'a>, context: &mut Formatt
 }
 
 /// Format dimensions expression: `[expr]`
-fn gen_dimensions_expr<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
+fn gen_dimensions_expr<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 

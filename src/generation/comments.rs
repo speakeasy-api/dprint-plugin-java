@@ -295,7 +295,9 @@ fn parse_javadoc_segments(content: &str) -> Vec<JavadocSegment> {
         }
 
         // <pre> block
-        if trimmed.starts_with("<pre>") || trimmed.starts_with("{@code") && trimmed.contains("<pre>") {
+        if trimmed.starts_with("<pre>")
+            || trimmed.starts_with("{@code") && trimmed.contains("<pre>")
+        {
             let mut pre_content = Vec::new();
             // Find the content after <pre>
             let after_pre = if let Some(pos) = trimmed.find("<pre>") {
@@ -375,11 +377,7 @@ fn parse_javadoc_segments(content: &str) -> Vec<JavadocSegment> {
 fn parse_tag_line(line: &str) -> (String, Option<String>, String) {
     let parts: Vec<&str> = line.splitn(2, char::is_whitespace).collect();
     let tag_name = parts[0].to_string();
-    let rest = if parts.len() > 1 {
-        parts[1].trim()
-    } else {
-        ""
-    };
+    let rest = if parts.len() > 1 { parts[1].trim() } else { "" };
 
     // Tags that take an argument (parameter name, exception type)
     match tag_name.as_str() {
