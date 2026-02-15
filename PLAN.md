@@ -119,12 +119,16 @@ Key behaviors to replicate from palantir-java-format:
 - [x] SyncPluginHandler wired up
 - [x] Native compilation + 6 passing tests
 
-### Phase 1: WASM Build Toolchain
-- [ ] Resolve tree-sitter C runtime compilation for `wasm32-unknown-unknown`
-  - **Option A**: Install wasi-sdk / clang with wasm32 target support
-  - **Option B**: Use `tree-sitter-c2rust` (pure Rust port of the runtime)
-  - **Option C**: Use `tree-sitter-wasm-build-tool` crate for custom build.rs
-- [ ] Verify `cargo build --release --target=wasm32-unknown-unknown --features wasm` produces a working `.wasm`
+### Phase 1: WASM Build Toolchain (DONE)
+- [x] Resolve tree-sitter C runtime compilation for `wasm32-unknown-unknown`
+  - **Chosen: Option A** — wasi-sdk clang with wrapper scripts
+  - `.cargo/config.toml` sets `CC_wasm32_unknown_unknown` and `AR_wasm32_unknown_unknown`
+    to wrapper scripts in `scripts/` that locate the wasi-sdk installation
+  - `scripts/wasm32-clang.sh` invokes wasi-sdk's clang with
+    `--target=wasm32-unknown-unknown`, `--sysroot`, and `-D__wasi__`
+  - `-D__wasi__` tells tree-sitter to stub out POSIX `dup()` which is
+    unavailable in wasm32-unknown-unknown
+- [x] Verify `cargo build --release --target=wasm32-unknown-unknown --features wasm` produces a working `.wasm`
 - [ ] Test plugin loading with dprint CLI
 
 ### Phase 2: Core Formatting Infrastructure
@@ -209,9 +213,8 @@ Key behaviors to replicate from palantir-java-format:
 
 ## Open Questions / Decisions
 
-1. **tree-sitter WASM compilation strategy**: Need to validate which approach
-   (wasi-sdk, c2rust, wasm-build-tool) works best. This is the main blocker
-   for WASM distribution.
+1. **tree-sitter WASM compilation strategy**: RESOLVED — using wasi-sdk's clang
+   via wrapper scripts.  See `scripts/wasm32-clang.sh` and `.cargo/config.toml`.
 
 2. **Continuation indent**: palantir uses 2× base indent for continuation
    lines. Should this be configurable or fixed to style preset?
