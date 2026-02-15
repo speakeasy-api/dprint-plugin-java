@@ -35,12 +35,11 @@ run = "cargo build --release"
 [tasks."build:wasm"]
 description = "Build WASM plugin"
 depends = ["install-wasm-target"]
-env = { WASI_SDK_PATH = "${WASI_SDK_PATH:-}" }
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Check if wasi-sdk is available
+# Use existing WASI_SDK_PATH if set (e.g., from CI), otherwise try to find it
 if [ -z "${WASI_SDK_PATH:-}" ]; then
   if [ -d "$HOME/.local/share/wasi-sdk" ]; then
     export WASI_SDK_PATH="$HOME/.local/share/wasi-sdk"
@@ -49,6 +48,8 @@ if [ -z "${WASI_SDK_PATH:-}" ]; then
   else
     echo "Warning: WASI_SDK_PATH not set, build may fail"
   fi
+else
+  echo "Using WASI_SDK_PATH=$WASI_SDK_PATH"
 fi
 
 cargo build --release --target wasm32-unknown-unknown --features wasm
