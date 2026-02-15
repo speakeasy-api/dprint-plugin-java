@@ -10,6 +10,7 @@ public abstract class AbstractExample {
 }
 == output ==
 public abstract class AbstractExample {
+
     private int value;
 
     public abstract void abstractMethod();

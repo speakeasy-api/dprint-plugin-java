@@ -12,6 +12,7 @@ process(i);
 }
 == output ==
 public class BadFormat {
+
     private int x;
 
     public void method(int a, int b) {

@@ -8,6 +8,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         String reason = e instanceof RetryableException
                 ? "status " + ((RetryableException) e).response().statusCode()

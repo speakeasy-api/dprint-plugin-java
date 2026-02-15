@@ -10,6 +10,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     public <T> T getFirst(List<T> list) {
         return list.get(0);
     }

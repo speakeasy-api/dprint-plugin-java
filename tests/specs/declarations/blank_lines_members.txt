@@ -1,0 +1,24 @@
+== input ==
+public class Bike {
+    @JsonProperty("wheels")
+    private long wheels;
+    @JsonProperty("hasPedals")
+    private boolean hasPedals;
+
+    public void ride() {
+        System.out.println("Riding!");
+    }
+}
+== output ==
+public class Bike {
+
+    @JsonProperty("wheels")
+    private long wheels;
+
+    @JsonProperty("hasPedals")
+    private boolean hasPedals;
+
+    public void ride() {
+        System.out.println("Riding!");
+    }
+}

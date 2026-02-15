@@ -10,6 +10,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void method() {
         @SuppressWarnings("unchecked")
         List<String> items = new ArrayList<>();

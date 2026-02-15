@@ -6,5 +6,6 @@ public class VeryLongClassNameThatExtendsAVeryLongBaseClassName extends VeryLong
 == output ==
 public class VeryLongClassNameThatExtendsAVeryLongBaseClassName
         extends VeryLongBaseClassNameWithManyTypeParameters<String, Integer> {
+
     void method() {}
 }

@@ -8,6 +8,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         for (String item : collection) {
             process(item);

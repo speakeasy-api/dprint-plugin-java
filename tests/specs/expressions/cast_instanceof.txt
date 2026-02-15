@@ -10,6 +10,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test(Object obj) {
         String s = (String) obj;
         int[] arr = (int[]) array;

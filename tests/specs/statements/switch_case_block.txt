@@ -18,6 +18,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test(Object value) {
         switch (value) {
             case OBJECT: {

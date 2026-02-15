@@ -32,7 +32,9 @@ import java.util.List;
 import java.util.ArrayList;
 
 public class ComplexExample<T extends Comparable<T>> implements Iterable<T> {
+
     private final List<T> items;
+
     private int size;
 
     public ComplexExample() {

@@ -6,12 +6,14 @@ String s="nested";
 }};
 }};
 }
-
 == output ==
 class Test {
+
     Runnable r = new Runnable() {
+
         {
             Object obj = new Object() {
+
                 {
                     String s = "nested";
                 }

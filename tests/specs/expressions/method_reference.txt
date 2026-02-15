@@ -8,6 +8,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         Function<String, Integer> f1 = String::length;
         Supplier<List> f2 = ArrayList::new;

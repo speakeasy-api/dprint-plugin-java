@@ -1,0 +1,38 @@
+== input ==
+public final static class Builder {}
+
+private final static int MAX = 100;
+
+synchronized public void test() {}
+
+final protected static abstract class Foo {}
+
+public static final String NAME = "test";
+
+@Override
+final public void test2() {}
+
+@Test
+@Deprecated
+private final static void helper() {}
+
+volatile private transient int counter;
+== output ==
+public static final class Builder {}
+
+private static final int MAX = 100;
+
+public synchronized void test() {}
+
+protected abstract static final class Foo {}
+
+public static final String NAME = "test";
+
+@Override
+public final void test2() {}
+
+@Test
+@Deprecated
+private static final void helper() {}
+
+private transient volatile int counter;

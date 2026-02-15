@@ -9,6 +9,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         int[] arr = new int[]{1, 2, 3};
         int x = arr[0];

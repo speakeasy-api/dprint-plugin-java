@@ -10,6 +10,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         try (FileInputStream fis = new FileInputStream("file.txt")) {
             readData(fis);

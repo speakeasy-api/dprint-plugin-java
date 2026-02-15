@@ -9,6 +9,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         int x = -5;
         boolean b = !flag;

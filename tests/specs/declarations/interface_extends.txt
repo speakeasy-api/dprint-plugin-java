@@ -4,5 +4,6 @@ public interface ExtendedInterface extends BaseInterface, OtherInterface {
 }
 == output ==
 public interface ExtendedInterface extends BaseInterface, OtherInterface {
+
     void extendedMethod();
 }

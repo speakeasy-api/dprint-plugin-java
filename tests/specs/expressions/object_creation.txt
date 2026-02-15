@@ -8,6 +8,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         Object o = new Object();
         List<String> list = new ArrayList<>();

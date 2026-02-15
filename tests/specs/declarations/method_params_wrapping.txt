@@ -18,6 +18,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     public void shortMethod(int a, int b) {
         return;
     }

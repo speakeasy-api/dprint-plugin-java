@@ -187,6 +187,7 @@ mod tests {
     fn exact_output_class_with_method() {
         let expected = "\
 public class Hello {
+
     public static void main(String[] args) {
         System.out.println(\"Hello, world!\");
     }
@@ -220,6 +221,7 @@ System.out.println(\"hi\");
 ";
         let expected = "\
 public class Hello {
+
     public void greet() {
         System.out.println(\"hi\");
     }
@@ -338,6 +340,7 @@ public class Hello{
 ";
         let expected = "\
 public class Hello {
+
     void greet() {
         return;
     }

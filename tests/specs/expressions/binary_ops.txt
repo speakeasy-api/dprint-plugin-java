@@ -8,6 +8,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         int a = 1 + 2 * 3;
         boolean b = x > 0 && y < 10;

@@ -25,6 +25,7 @@ cleanup();
 }
 == output ==
 public class Test {
+
     void test() {
         if (x > 0) {
             doA();

@@ -8,6 +8,7 @@ public class Container<T> {
 }
 == output ==
 public class Container<T> {
+
     private T value;
 
     public T getValue() {

@@ -9,6 +9,7 @@ public class Foo {
 }
 == output ==
 public class Foo {
+
     private int x;
 
     /** Gets x */

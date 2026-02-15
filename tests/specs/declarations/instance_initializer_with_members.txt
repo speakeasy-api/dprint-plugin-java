@@ -9,11 +9,12 @@ return a.length()-b.length();
 }
 };
 }
-
 == output ==
 class Test {
+
     Comparator<String> comp =
             new Comparator<String>() {
+
                 {
                     System.out.println("init");
                 }

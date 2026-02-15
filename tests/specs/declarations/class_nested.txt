@@ -12,9 +12,11 @@ public class Outer {
 }
 == output ==
 public class Outer {
+
     private int x;
 
     public class Inner {
+
         private int y;
 
         public void method() {

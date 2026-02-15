@@ -15,6 +15,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test(int value) {
         switch (value) {
             case 1:

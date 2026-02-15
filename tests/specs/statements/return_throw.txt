@@ -10,6 +10,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     int getValue() {
         return 42;
     }

@@ -6,6 +6,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     public void basicMethod() {
         System.out.println("hello");
     }

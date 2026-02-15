@@ -7,6 +7,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         int max = a > b ? a : b;
         String msg = error ? "failed" : "success";

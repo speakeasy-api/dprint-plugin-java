@@ -6,5 +6,6 @@ public class VeryLongClassNameWithManyInterfaces implements FirstInterface, Seco
 == output ==
 public class VeryLongClassNameWithManyInterfaces
         implements FirstInterface, SecondInterface, ThirdInterface, FourthInterface {
+
     void method() {}
 }

@@ -4,5 +4,6 @@ public final class Constants {
 }
 == output ==
 public final class Constants {
+
     private static final int MAX = 100;
 }

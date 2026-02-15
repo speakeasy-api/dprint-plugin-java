@@ -11,6 +11,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         client.sendAsync(request, BodyHandlers.ofString()).handle((resp, err) -> {
             if (err != null) {
