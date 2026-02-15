@@ -1,0 +1,12 @@
+== input ==
+public class Test {
+    void test() {
+        list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());
+    }
+}

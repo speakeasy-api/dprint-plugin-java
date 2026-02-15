@@ -710,6 +710,26 @@ fn gen_enum_body<'a>(
                 items.push_string(";".to_string());
                 prev_was_constant = false;
             }
+            "enum_body_declarations" => {
+                // Tree-sitter wraps post-semicolon enum members in this node.
+                // Its first child is ";", then member declarations (fields, constructors, methods).
+                let mut decl_cursor = child.walk();
+                for decl_child in child.children(&mut decl_cursor) {
+                    match decl_child.kind() {
+                        ";" => {
+                            items.push_string(";".to_string());
+                        }
+                        _ if decl_child.is_named() => {
+                            items.push_signal(Signal::NewLine);
+                            items.push_signal(Signal::NewLine);
+                            items.extend(gen_node(decl_child, context));
+                        }
+                        _ => {}
+                    }
+                }
+                prev_was_constant = false;
+                first = false;
+            }
             _ if child.is_named() => {
                 if prev_was_constant {
                     items.push_string(";".to_string());

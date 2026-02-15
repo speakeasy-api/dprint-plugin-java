@@ -387,6 +387,11 @@ fn spec_file_enum_multiple() {
 }
 
 #[test]
+fn spec_file_enum_with_body() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/enum_with_body.txt"));
+}
+
+#[test]
 fn spec_file_method_basic() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_basic.txt"));
 }
@@ -595,6 +600,11 @@ fn spec_file_assignment() {
 #[test]
 fn spec_file_method_reference() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_reference.txt"));
+}
+
+#[test]
+fn spec_file_method_chain_breaking() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_chain_breaking.txt"));
 }
 
 // ---- Mixed/Integration ----

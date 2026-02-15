@@ -1,0 +1,32 @@
+== input ==
+public enum Color {
+    RED,
+    GREEN,
+    BLUE;
+
+    private final String hex;
+
+    Color() {
+        this.hex = "";
+    }
+
+    public String getHex() {
+        return hex;
+    }
+}
+== output ==
+public enum Color {
+    RED,
+    GREEN,
+    BLUE;
+
+    private final String hex;
+
+    Color() {
+        this.hex = "";
+    }
+
+    public String getHex() {
+        return hex;
+    }
+}

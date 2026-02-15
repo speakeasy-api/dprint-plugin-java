@@ -1,4 +1,5 @@
 use dprint_core::formatting::PrintItems;
+use dprint_core::formatting::Signal;
 
 use super::context::FormattingContext;
 use super::declarations;
@@ -67,7 +68,45 @@ pub fn gen_update_expression<'a>(
 }
 
 /// Format a method invocation: `obj.method(args)` or `method(args)`
+///
+/// For chains of 2+ method calls (e.g., `a.b().c().d()`), this flattens the
+/// chain and inserts `Signal::PossibleNewLine` before each `.` so dprint-core
+/// can break the line when it exceeds `max_width`.
 pub fn gen_method_invocation<'a>(
+    node: tree_sitter::Node<'a>,
+    context: &mut FormattingContext<'a>,
+) -> PrintItems {
+    let depth = chain_depth(node);
+    if depth < 2 {
+        return gen_method_invocation_simple(node, context);
+    }
+
+    // Flatten the chain into (root, [(method_name_node, type_args, arg_list), ...])
+    let mut segments: Vec<(tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)> = Vec::new();
+    let root = flatten_chain(node, &mut segments);
+
+    let mut items = PrintItems::new();
+    items.extend(gen_node(root, context));
+
+    items.push_signal(Signal::StartIndent);
+    for (name_node, type_args, arg_list) in segments {
+        items.push_signal(Signal::PossibleNewLine);
+        items.push_string(".".to_string());
+        items.extend(helpers::gen_node_text(name_node, context.source));
+        if let Some(ta) = type_args {
+            items.extend(gen_node(ta, context));
+        }
+        if let Some(al) = arg_list {
+            items.extend(declarations::gen_argument_list(al, context));
+        }
+    }
+    items.push_signal(Signal::FinishIndent);
+
+    items
+}
+
+/// Simple (non-chained) method invocation: `method(args)` or `obj.method(args)`
+fn gen_method_invocation_simple<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
@@ -96,6 +135,79 @@ pub fn gen_method_invocation<'a>(
     }
 
     items
+}
+
+/// Count how deep a method invocation chain is.
+/// `a.b()` = 1, `a.b().c()` = 2, `a.b().c().d()` = 3, etc.
+fn chain_depth(node: tree_sitter::Node) -> usize {
+    let mut depth = 0;
+    let mut current = node;
+    loop {
+        let mut cursor = current.walk();
+        let object = current.children(&mut cursor).find(|c| {
+            c.is_named() && c.kind() != "argument_list" && c.kind() != "type_arguments"
+        });
+        match object {
+            Some(obj) if obj.kind() == "method_invocation" => {
+                depth += 1;
+                current = obj;
+            }
+            _ => break,
+        }
+    }
+    depth
+}
+
+/// Flatten a nested method_invocation chain into segments.
+/// Returns the root object node (the non-method-invocation at the bottom).
+/// Segments are collected in call order (first call first).
+fn flatten_chain<'a>(
+    node: tree_sitter::Node<'a>,
+    segments: &mut Vec<(tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)>,
+) -> tree_sitter::Node<'a> {
+    // Collect the chain in reverse (innermost first), then reverse at the end.
+    let mut chain = Vec::new();
+    let mut current = node;
+
+    loop {
+        // tree-sitter method_invocation has named fields: "object", "name", "arguments"
+        let object = current.child_by_field_name("object");
+        let name = current.child_by_field_name("name");
+        let type_args = {
+            let mut cursor = current.walk();
+            current.children(&mut cursor).find(|c| c.kind() == "type_arguments")
+        };
+        let arg_list = current.child_by_field_name("arguments");
+
+        if let Some(name_node) = name {
+            chain.push((name_node, type_args, arg_list));
+        }
+
+        match object {
+            Some(obj) if obj.kind() == "method_invocation" => {
+                current = obj;
+            }
+            Some(obj) => {
+                // Root object (e.g., field_access, identifier, etc.)
+                chain.reverse();
+                segments.extend(chain);
+                return obj;
+            }
+            None => {
+                // No object — bare method call; the name IS the root
+                // Pop the last entry since it's the root method name, not a chain segment
+                if let Some((root_name, ta, al)) = chain.pop() {
+                    chain.reverse();
+                    segments.extend(chain);
+                    // Return current node — but we need to handle bare method calls
+                    // For bare calls, just return current and use the name as root
+                    // Actually reconstruct: emit name + args as a simple call
+                    segments.push((root_name, ta, al));
+                }
+                return current;
+            }
+        }
+    }
 }
 
 /// Format a field access: `obj.field`
