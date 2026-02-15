@@ -269,6 +269,9 @@ pub fn gen_method_invocation<'a>(
     let mut segments: Vec<(tree_sitter::Node<'a>, tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)> = Vec::new();
     let root = flatten_chain(node, &mut segments);
 
+    // Force wrapping if any segment has a lambda with a block body
+    let force_wrap = chain_has_lambda_block(&segments);
+
     // Calculate the flat width by estimating the formatted width of each component.
     // We compute this as the text length with newlines/multi-space runs collapsed to single spaces.
     let root_text = &context.source[root.start_byte()..root.end_byte()];
@@ -293,7 +296,7 @@ pub fn gen_method_invocation<'a>(
     }
 
     let chain_flat_width = root_width + segments_width;
-    let should_wrap = chain_flat_width > context.config.method_chain_threshold as usize;
+    let should_wrap = force_wrap || chain_flat_width > context.config.method_chain_threshold as usize;
 
     let mut items = PrintItems::new();
     items.extend(gen_node(root, context));
@@ -373,6 +376,38 @@ fn gen_method_invocation_simple<'a>(
     }
 
     items
+}
+
+/// Check if any argument list in a chain segment contains a lambda with a block body.
+/// This is used to force chain wrapping when lambdas with block bodies are present,
+/// since the multi-line block content would produce incorrect indentation on a single line.
+fn chain_has_lambda_block(
+    segments: &[(tree_sitter::Node, Option<tree_sitter::Node>, Option<tree_sitter::Node>)],
+) -> bool {
+    for (_, _, arg_list) in segments {
+        if let Some(al) = arg_list {
+            if arg_list_has_lambda_block(*al) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Check if an argument list contains a lambda expression with a block body.
+fn arg_list_has_lambda_block(node: tree_sitter::Node) -> bool {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "lambda_expression" {
+            let mut lc = child.walk();
+            for lchild in child.children(&mut lc) {
+                if lchild.kind() == "block" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// Count how deep a method invocation chain is.

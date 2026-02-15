@@ -692,6 +692,11 @@ fn spec_file_method_chain_wrapping_edge_cases() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_chain_wrapping_edge_cases.txt"));
 }
 
+#[test]
+fn spec_file_lambda_chain_indent() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/lambda_chain_indent.txt"));
+}
+
 // ---- Instability debugging ----
 
 /// Debug helper: format and check stability
@@ -837,6 +842,47 @@ fn debug_instability_bare_method_chain() {
         callAsStream().flatMap(r -> r.object().stream()).flatMap(r -> r.resultArray().stream());
     }
 }"#);
+}
+
+#[test]
+fn debug_lambda_chain_tree() {
+    let code = r#"public class Test {
+    void test() {
+        client.sendAsync(request, BodyHandlers.ofString()).thenApply(resp -> resp.body()).handle((resp, err) -> {
+            if (err != null) {
+                return null;
+            }
+            return resp.body();
+        });
+    }
+}"#;
+    let mut parser = tree_sitter::Parser::new();
+    parser.set_language(&tree_sitter_java::LANGUAGE.into()).unwrap();
+    let tree = parser.parse(code, None).unwrap();
+
+    fn find_method_invocation(node: tree_sitter::Node, source: &str, depth: usize) {
+        if node.kind() == "method_invocation" {
+            let text = &source[node.start_byte()..node.end_byte()];
+            let short = if text.len() > 80 { &text[..80] } else { text };
+            eprintln!("{} method_invocation: {:?}", "  ".repeat(depth), short.replace('\n', "\\n"));
+
+            // Check for object child
+            if let Some(obj) = node.child_by_field_name("object") {
+                eprintln!("{}   object: {}", "  ".repeat(depth), obj.kind());
+            }
+            if let Some(name) = node.child_by_field_name("name") {
+                let name_text = &source[name.start_byte()..name.end_byte()];
+                eprintln!("{}   name: {:?}", "  ".repeat(depth), name_text);
+            }
+        }
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            find_method_invocation(child, source, depth + 1);
+        }
+    }
+
+    find_method_invocation(tree.root_node(), code, 0);
 }
 
 #[test]

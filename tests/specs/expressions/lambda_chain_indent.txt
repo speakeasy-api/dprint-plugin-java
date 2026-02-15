@@ -1,0 +1,20 @@
+== input ==
+public class Test {
+    void test() {
+        list.stream()
+                .map(x -> {
+                    return x * 2;
+                })
+                .collect(Collectors.toList());
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        list.stream()
+                .map(x -> {
+                    return x * 2;
+                })
+                .collect(Collectors.toList());
+    }
+}

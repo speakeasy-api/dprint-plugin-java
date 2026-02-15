@@ -1,0 +1,24 @@
+== input ==
+public class Test {
+    void test() {
+        client.sendAsync(request, BodyHandlers.ofString()).thenApply(resp -> resp.body()).handle((resp, err) -> {
+            if (err != null) {
+                return null;
+            }
+            return resp.body();
+        });
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        client.sendAsync(request, BodyHandlers.ofString())
+                .thenApply(resp -> resp.body())
+                .handle((resp, err) -> {
+                    if (err != null) {
+                        return null;
+                    }
+                    return resp.body();
+                });
+    }
+}
