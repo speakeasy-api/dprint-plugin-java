@@ -302,6 +302,9 @@ pub fn gen_annotation_type_declaration<'a>(
 }
 
 /// Format a method declaration.
+///
+/// Handles wrapping of the throws clause onto a continuation line when the
+/// method signature would exceed `line_width`.
 pub fn gen_method_declaration<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -309,6 +312,12 @@ pub fn gen_method_declaration<'a>(
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
     let mut need_space = false;
+
+    // Pre-calculate: estimate method signature line width to decide throws wrapping.
+    // Compute width of everything up to and including `)` + throws clause.
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let sig_width = estimate_method_sig_width(node, context.source);
+    let wrap_throws = indent_width + sig_width > context.config.line_width as usize;
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -344,8 +353,17 @@ pub fn gen_method_declaration<'a>(
                 need_space = true;
             }
             "throws" => {
-                items.extend(helpers::gen_space());
-                items.extend(gen_throws(child, context));
+                if wrap_throws {
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::NewLine);
+                    items.extend(gen_throws(child, context));
+                    items.push_signal(Signal::FinishIndent);
+                    items.push_signal(Signal::FinishIndent);
+                } else {
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_throws(child, context));
+                }
                 need_space = true;
             }
             "block" => {
@@ -366,6 +384,34 @@ pub fn gen_method_declaration<'a>(
     }
 
     items
+}
+
+/// Estimate the width of a method signature line (modifiers + return type + name + params + throws)
+/// from the source text. Only considers the "flat" width, ignoring existing line breaks.
+fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
+    let mut cursor = node.walk();
+    let mut width = 0;
+
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "block" | "constructor_body" => break, // Stop at body
+            ";" => {
+                width += 1;
+                break;
+            }
+            _ => {
+                let text = &source[child.start_byte()..child.end_byte()];
+                // Use first line only (for multiline modifiers like annotations)
+                let first_line = text.lines().last().unwrap_or(text);
+                if width > 0 && child.kind() != "formal_parameters" && child.kind() != "(" && child.kind() != ")" {
+                    width += 1; // space separator
+                }
+                width += first_line.trim().len();
+            }
+        }
+    }
+
+    width
 }
 
 /// Format a constructor declaration.
@@ -692,19 +738,36 @@ fn gen_enum_body<'a>(
     // Use dprint-core indent signals for body
     items.push_signal(Signal::StartIndent);
 
+    // Separate enum constants, comments, and body declarations
+    let enum_constants: Vec<_> = members.iter().filter(|c| c.kind() == "enum_constant").collect();
+    let has_body_decls = members.iter().any(|c| c.kind() == "enum_body_declarations" || c.kind() == ";");
+
+    let mut constant_idx = 0;
     let mut prev_was_constant = false;
-    let mut first = true;
 
     for child in &members {
+        // Handle comments (extra nodes) without disrupting enum constant state
+        if child.is_extra() {
+            items.push_signal(Signal::NewLine);
+            items.extend(gen_node(**child, context));
+            continue;
+        }
+
         match child.kind() {
             "enum_constant" => {
-                if !first && prev_was_constant {
-                    items.push_string(",".to_string());
-                }
                 items.push_signal(Signal::NewLine);
                 items.extend(gen_enum_constant(**child, context));
+                constant_idx += 1;
+                // Trailing comma after each constant except the last before ";"
+                let is_last = constant_idx == enum_constants.len();
+                if !is_last {
+                    items.push_string(",".to_string());
+                }
                 prev_was_constant = true;
-                first = false;
+            }
+            "," => {
+                // Tree-sitter may emit commas as anonymous tokens; skip
+                // since we handle commas ourselves above.
             }
             ";" => {
                 items.push_string(";".to_string());
@@ -712,7 +775,6 @@ fn gen_enum_body<'a>(
             }
             "enum_body_declarations" => {
                 // Tree-sitter wraps post-semicolon enum members in this node.
-                // Its first child is ";", then member declarations (fields, constructors, methods).
                 let mut decl_cursor = child.walk();
                 for decl_child in child.children(&mut decl_cursor) {
                     match decl_child.kind() {
@@ -728,7 +790,6 @@ fn gen_enum_body<'a>(
                     }
                 }
                 prev_was_constant = false;
-                first = false;
             }
             _ if child.is_named() => {
                 if prev_was_constant {
@@ -738,11 +799,14 @@ fn gen_enum_body<'a>(
                 items.push_signal(Signal::NewLine);
                 items.push_signal(Signal::NewLine);
                 items.extend(gen_node(**child, context));
-                first = false;
             }
             _ => {}
         }
     }
+
+    // If there were only constants and no explicit semicolon/body declarations,
+    // add a trailing comma on the last constant (Java convention)
+    let _ = has_body_decls;
 
     items.push_signal(Signal::FinishIndent);
     items.push_signal(Signal::NewLine);
@@ -783,6 +847,14 @@ fn gen_enum_constant<'a>(
 }
 
 /// Format formal parameters: `(Type name, Type name)`
+///
+/// If the parameter list would exceed `line_width`, wraps with 8-space
+/// continuation indent (PJF style):
+/// ```java
+/// public void method(
+///         String param1,
+///         String param2) {
+/// ```
 pub fn gen_formal_parameters<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -796,17 +868,42 @@ pub fn gen_formal_parameters<'a>(
         .filter(|c| c.kind() == "formal_parameter" || c.kind() == "spread_parameter" || c.kind() == "receiver_parameter")
         .collect();
 
+    // Calculate total inline width: (param1, param2, param3)
+    let param_text_width: usize = params.iter().enumerate().map(|(i, p)| {
+        let text_len = p.end_byte() - p.start_byte();
+        text_len + if i < params.len() - 1 { 2 } else { 0 }
+    }).sum();
+    let prefix_col = node.start_position().column;
+    let total_inline = prefix_col + 1 + param_text_width + 1; // ( + params + )
+    let should_wrap = params.len() > 1 && total_inline > context.config.line_width as usize;
+
     items.push_string("(".to_string());
 
-    for (i, param) in params.iter().enumerate() {
-        items.extend(gen_node(**param, context));
-        if i < params.len() - 1 {
-            items.push_string(",".to_string());
-            items.extend(helpers::gen_space());
+    if should_wrap {
+        // 2x StartIndent for 8-space continuation indent
+        items.push_signal(Signal::StartIndent);
+        items.push_signal(Signal::StartIndent);
+        for (i, param) in params.iter().enumerate() {
+            items.push_signal(Signal::NewLine);
+            items.extend(gen_node(**param, context));
+            if i < params.len() - 1 {
+                items.push_string(",".to_string());
+            }
         }
+        items.push_string(")".to_string());
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
+    } else {
+        for (i, param) in params.iter().enumerate() {
+            items.extend(gen_node(**param, context));
+            if i < params.len() - 1 {
+                items.push_string(",".to_string());
+                items.extend(helpers::gen_space());
+            }
+        }
+        items.push_string(")".to_string());
     }
 
-    items.push_string(")".to_string());
     items
 }
 
@@ -868,6 +965,10 @@ pub fn gen_variable_declarator<'a>(
 }
 
 /// Format an argument list: `(arg1, arg2, arg3)`
+///
+/// Wraps with 8-space continuation indent when the argument list would
+/// exceed `line_width`. Uses stable width estimation based on `context.indent_level()`
+/// to avoid instability between formatting passes.
 pub fn gen_argument_list<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -878,17 +979,45 @@ pub fn gen_argument_list<'a>(
 
     let args: Vec<_> = children.iter().filter(|c| c.is_named()).collect();
 
+    // Estimate the "flat" width of arguments (stripping embedded newlines)
+    let args_flat_width: usize = args.iter().enumerate().map(|(i, a)| {
+        let text = &context.source[a.start_byte()..a.end_byte()];
+        let flat: usize = text.lines().map(|l| l.trim().len()).sum();
+        flat + if i < args.len() - 1 { 2 } else { 0 }
+    }).sum();
+
+    // Use indent level (stable across passes) + arg_list_text_width for wrap decision.
+    // We don't know the exact column, so conservatively estimate with indent + some margin.
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let should_wrap = args.len() > 1
+        && indent_width + args_flat_width + 2 > context.config.line_width as usize;
+
     items.push_string("(".to_string());
 
-    for (i, arg) in args.iter().enumerate() {
-        items.extend(gen_node(**arg, context));
-        if i < args.len() - 1 {
-            items.push_string(",".to_string());
-            items.extend(helpers::gen_space());
+    if should_wrap {
+        items.push_signal(Signal::StartIndent);
+        items.push_signal(Signal::StartIndent);
+        for (i, arg) in args.iter().enumerate() {
+            items.push_signal(Signal::NewLine);
+            items.extend(gen_node(**arg, context));
+            if i < args.len() - 1 {
+                items.push_string(",".to_string());
+            }
         }
+        items.push_string(")".to_string());
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
+    } else {
+        for (i, arg) in args.iter().enumerate() {
+            items.extend(gen_node(**arg, context));
+            if i < args.len() - 1 {
+                items.push_string(",".to_string());
+                items.extend(helpers::gen_space());
+            }
+        }
+        items.push_string(")".to_string());
     }
 
-    items.push_string(")".to_string());
     items
 }
 
@@ -949,14 +1078,13 @@ fn gen_body_with_members<'a>(
             continue;
         }
 
-        // Add blank line between different member types or before/after methods
+        // Add blank line between different member types or before/after methods.
+        // But NOT when a Javadoc/comment immediately precedes this member —
+        // the blank line was already added before the comment.
         if let Some(pk) = prev_kind {
-            if is_multiline_member(pk) || is_multiline_member(member.kind()) {
+            if !prev_was_comment && (is_multiline_member(pk) || is_multiline_member(member.kind())) {
                 items.push_signal(Signal::NewLine);
             }
-        } else if prev_was_comment {
-            // Comment preceded this member but no prev_kind set yet
-            // (blank line is already handled by comment newline)
         }
 
         items.push_signal(Signal::NewLine);

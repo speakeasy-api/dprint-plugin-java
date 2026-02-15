@@ -120,6 +120,7 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
 
     let mut prev_kind: Option<&str> = None;
     let mut prev_was_comment = false;
+    let mut prev_import_static: Option<bool> = None;
 
     for (i, child) in children.iter().enumerate() {
         if child.is_extra() {
@@ -151,12 +152,23 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
 
         // Add blank lines between different top-level sections
         if let Some(pk) = prev_kind {
+            let cur_is_import = child.kind() == "import_declaration";
+            let cur_import_static = cur_is_import && {
+                let mut c = child.walk();
+                child.children(&mut c).any(|ch| ch.kind() == "static")
+            };
+
             let needs_double_newline = (pk == "package_declaration")
-                || (pk == "import_declaration" && child.kind() != "import_declaration")
+                || (pk == "import_declaration" && !cur_is_import)
+                || (pk == "import_declaration" && cur_is_import && prev_import_static.is_some_and(|p| p != cur_import_static))
                 || (pk != "import_declaration" && pk != "package_declaration");
 
             if needs_double_newline {
                 items.push_signal(Signal::NewLine);
+            }
+
+            if cur_is_import {
+                prev_import_static = Some(cur_import_static);
             }
         } else if prev_was_comment {
             // A comment preceded this first non-comment node — add newline
