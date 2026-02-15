@@ -707,7 +707,7 @@ fn gen_type_list<'a>(
 }
 
 /// Format a class body: `{ members }`
-fn gen_class_body<'a>(
+pub fn gen_class_body<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
@@ -715,7 +715,7 @@ fn gen_class_body<'a>(
 }
 
 /// Format an interface body.
-fn gen_interface_body<'a>(
+pub fn gen_interface_body<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
@@ -723,7 +723,7 @@ fn gen_interface_body<'a>(
 }
 
 /// Format an annotation type body.
-fn gen_annotation_type_body<'a>(
+pub fn gen_annotation_type_body<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {

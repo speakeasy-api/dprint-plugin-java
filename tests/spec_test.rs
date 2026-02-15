@@ -840,3 +840,13 @@ fn spec_file_blank_lines_javadoc_methods() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/blank_lines_javadoc_methods.txt"));
 }
 
+#[test]
+fn spec_file_instance_initializer_nested() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/instance_initializer_nested.txt"));
+}
+
+#[test]
+fn spec_file_instance_initializer_with_members() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/instance_initializer_with_members.txt"));
+}
+
