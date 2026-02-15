@@ -546,6 +546,11 @@ fn spec_file_labeled_statement() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/labeled_statement.txt"));
 }
 
+#[test]
+fn spec_file_local_variable_annotations() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/local_variable_annotations.txt"));
+}
+
 // ---- Expressions ----
 #[test]
 fn spec_file_binary_ops() {
@@ -784,3 +789,9 @@ fn spec_file_complex_class() {
 fn spec_file_bad_formatting() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/mixed/bad_formatting.txt"));
 }
+
+#[test]
+fn spec_file_instance_initializer() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/instance_initializer.txt"));
+}
+

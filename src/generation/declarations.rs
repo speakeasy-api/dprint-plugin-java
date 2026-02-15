@@ -516,7 +516,7 @@ pub fn gen_field_declaration<'a>(
 ///
 /// Annotations are placed on their own line before keyword modifiers,
 /// matching standard Java formatting conventions (Google/Palantir style).
-fn gen_modifiers<'a>(
+pub fn gen_modifiers<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {

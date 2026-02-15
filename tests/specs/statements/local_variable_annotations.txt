@@ -1,0 +1,23 @@
+== input ==
+public class Test {
+    void method() {
+        @SuppressWarnings("unchecked") List<String> items = new ArrayList<>();
+        @Nullable String name = null;
+        @Deprecated final int x = 5;
+        final int y = 10;
+        int z = 0;
+    }
+}
+== output ==
+public class Test {
+    void method() {
+        @SuppressWarnings("unchecked")
+        List<String> items = new ArrayList<>();
+        @Nullable
+        String name = null;
+        @Deprecated
+        final int x = 5;
+        final int y = 10;
+        int z = 0;
+    }
+}
