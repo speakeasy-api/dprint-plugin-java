@@ -868,14 +868,15 @@ pub fn gen_formal_parameters<'a>(
         .filter(|c| c.kind() == "formal_parameter" || c.kind() == "spread_parameter" || c.kind() == "receiver_parameter")
         .collect();
 
-    // Calculate total inline width: (param1, param2, param3)
+    // Calculate total inline width of params (stable: uses indent_level, not source column)
     let param_text_width: usize = params.iter().enumerate().map(|(i, p)| {
-        let text_len = p.end_byte() - p.start_byte();
-        text_len + if i < params.len() - 1 { 2 } else { 0 }
+        let text = &context.source[p.start_byte()..p.end_byte()];
+        let flat: usize = text.lines().map(|l| l.trim().len()).sum();
+        flat + if i < params.len() - 1 { 2 } else { 0 }
     }).sum();
-    let prefix_col = node.start_position().column;
-    let total_inline = prefix_col + 1 + param_text_width + 1; // ( + params + )
-    let should_wrap = params.len() > 1 && total_inline > context.config.line_width as usize;
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let should_wrap = params.len() > 1
+        && indent_width + param_text_width + 2 > context.config.line_width as usize;
 
     items.push_string("(".to_string());
 
@@ -934,14 +935,41 @@ fn gen_throws<'a>(
 }
 
 /// Format a variable declarator: `name = value`
+///
+/// When the full declaration (type + name + = + value) exceeds line_width,
+/// wraps after `=` with 8-space continuation indent (PJF style):
+/// ```java
+/// VeryLongType<Generic> variable =
+///         new VeryLongType<>(args);
+/// ```
 pub fn gen_variable_declarator<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
+    let children: Vec<_> = node.children(&mut cursor).collect();
 
-    for child in node.children(&mut cursor) {
+    // Check if the full declaration line would exceed line_width.
+    // Compute the "flat" width (all text as if on one line) from the parent node.
+    let has_value = children.iter().any(|c| c.kind() == "=");
+    let wrap_value = has_value && {
+        let parent = node.parent();
+        let decl_flat_width = if let Some(p) = parent {
+            let text = &context.source[p.start_byte()..p.end_byte()];
+            // Sum trimmed line lengths to get "as if single line" width
+            text.lines().map(|l| l.trim().len()).sum::<usize>()
+                + text.lines().count().saturating_sub(1) // spaces between joined lines
+        } else {
+            0
+        };
+        let indent_width = context.indent_level() * context.config.indent_width as usize;
+        indent_width + decl_flat_width > context.config.line_width as usize
+    };
+
+    let mut saw_eq = false;
+    let mut cursor2 = node.walk();
+    for child in node.children(&mut cursor2) {
         match child.kind() {
             "identifier" => {
                 items.extend(helpers::gen_node_text(child, context.source));
@@ -952,13 +980,25 @@ pub fn gen_variable_declarator<'a>(
             "=" => {
                 items.extend(helpers::gen_space());
                 items.push_string("=".to_string());
-                items.extend(helpers::gen_space());
+                saw_eq = true;
+                if wrap_value {
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::NewLine);
+                } else {
+                    items.extend(helpers::gen_space());
+                }
             }
             _ if child.is_named() => {
                 items.extend(gen_node(child, context));
             }
             _ => {}
         }
+    }
+
+    if wrap_value && saw_eq {
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
     }
 
     items
