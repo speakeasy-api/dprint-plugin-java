@@ -445,9 +445,10 @@ fn chain_has_lambda_block(
 ) -> bool {
     for (_, _, _, arg_list, _) in segments {
         if let Some(al) = arg_list
-            && arg_list_has_lambda_block(*al) {
-                return true;
-            }
+            && arg_list_has_lambda_block(*al)
+        {
+            return true;
+        }
     }
     false
 }
