@@ -1,0 +1,25 @@
+== input ==
+public class Test {
+    void test() {
+        return Utils.enhancedDeepEquals(this.contentType, other.contentType) && Utils.enhancedDeepEquals(this.statusCode, other.statusCode) && Utils.enhancedDeepEquals(this.rawResponse, other.rawResponse);
+        boolean result = someVeryLongConditionThatChecksThings() || anotherVeryLongConditionThatAlsoChecksThings() || yetAnotherCondition();
+        boolean simple = a && b;
+        boolean mixed = veryLongConditionNameOne() && veryLongConditionNameTwo() || veryLongConditionNameThree() && veryLongConditionNameFour();
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        return Utils.enhancedDeepEquals(this.contentType, other.contentType)
+                && Utils.enhancedDeepEquals(this.statusCode, other.statusCode)
+                && Utils.enhancedDeepEquals(this.rawResponse, other.rawResponse);
+        boolean result = someVeryLongConditionThatChecksThings()
+                || anotherVeryLongConditionThatAlsoChecksThings()
+                || yetAnotherCondition();
+        boolean simple = a && b;
+        boolean mixed = veryLongConditionNameOne()
+                && veryLongConditionNameTwo()
+                || veryLongConditionNameThree()
+                && veryLongConditionNameFour();
+    }
+}

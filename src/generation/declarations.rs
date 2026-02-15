@@ -1106,7 +1106,20 @@ pub fn gen_variable_declarator<'a>(
     // If the value is a ternary expression, skip variable declarator wrapping.
     // The ternary's own wrapping logic will handle line-breaking before ? and :.
     let value_is_ternary = children.iter().any(|c| c.kind() == "ternary_expression");
-    let wrap_value = has_value && !value_is_ternary && {
+    // If the value is a logical binary expression (&& or ||), skip variable declarator wrapping.
+    // The binary expression's own wrapping logic will handle line-breaking.
+    let value_is_logical_binary = children.iter().any(|c| {
+        if c.kind() == "binary_expression" {
+            let op = c
+                .children(&mut c.walk())
+                .find(|ch| !ch.is_named())
+                .map(|ch| &context.source[ch.start_byte()..ch.end_byte()]);
+            matches!(op, Some("&&") | Some("||"))
+        } else {
+            false
+        }
+    });
+    let wrap_value = has_value && !value_is_ternary && !value_is_logical_binary && {
         let indent_width = context.indent_level() * context.config.indent_width as usize;
         let decl_flat_width = if let Some(parent) = node.parent() {
             estimate_decl_flat_width(parent, context.source)

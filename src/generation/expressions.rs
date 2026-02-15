@@ -26,10 +26,122 @@ fn collapse_whitespace(s: &str) -> String {
 }
 
 /// Format a binary expression: `a + b`, `x && y`, etc.
+///
+/// For long chains of `&&` or `||` operators, wraps before each operator
+/// with 8-space continuation indent (PJF style):
+/// ```java
+/// return Utils.enhancedDeepEquals(this.contentType, other.contentType)
+///         && Utils.enhancedDeepEquals(this.statusCode, other.statusCode)
+///         && Utils.enhancedDeepEquals(this.rawResponse, other.rawResponse);
+/// ```
 pub fn gen_binary_expression<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
+    // Get the operator of this binary expression
+    let mut cursor = node.walk();
+    let operator = node
+        .children(&mut cursor)
+        .find(|c| !c.is_named())
+        .map(|c| context.source[c.start_byte()..c.end_byte()].to_string());
+
+    // Check if this is a logical operator (&& or ||)
+    let is_logical_op = matches!(operator.as_deref(), Some("&&") | Some("||"));
+
+    if is_logical_op {
+        // Check if this node is the RIGHT child of a parent binary_expression with && or ||
+        // If so, we're nested and should let the parent handle the whole chain
+        let is_nested_in_chain = if let Some(parent) = node.parent() {
+            if parent.kind() == "binary_expression" {
+                // Check if we're the right child
+                let parent_children: Vec<_> = parent.children(&mut parent.walk()).collect();
+                let right_child = parent_children.iter().rev().find(|c| c.is_named());
+                if let Some(right) = right_child {
+                    if right.id() == node.id() {
+                        // We're the right child, check if parent has && or ||
+                        let parent_op = parent_children
+                            .iter()
+                            .find(|c| !c.is_named())
+                            .map(|c| context.source[c.start_byte()..c.end_byte()].to_string());
+                        matches!(parent_op.as_deref(), Some("&&") | Some("||"))
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if !is_nested_in_chain {
+            // We're at the root of the chain
+            // Flatten the chain and collect all operands and operators
+            let (operands, operators) = flatten_logical_chain(node, context.source);
+
+            // Estimate the flat width of the entire expression.
+            // For a variable declaration, we need to check the full line including the prefix.
+            // Walk up to find if we're inside a statement that spans from the start of the line.
+            let should_wrap = {
+                let indent_width = context.indent_level() * context.config.indent_width as usize;
+
+                // Find the start of the line by looking for the containing statement
+                let line_start_byte = if let Some(parent) = node.parent() {
+                    // Check if parent is a variable_declarator
+                    if parent.kind() == "variable_declarator" {
+                        // Go up to local_variable_declaration or field_declaration
+                        if let Some(grandparent) = parent.parent() {
+                            match grandparent.kind() {
+                                "local_variable_declaration" | "field_declaration" => grandparent.start_byte(),
+                                _ => node.start_byte(),
+                            }
+                        } else {
+                            node.start_byte()
+                        }
+                    } else {
+                        node.start_byte()
+                    }
+                } else {
+                    node.start_byte()
+                };
+
+                let line_text = &context.source[line_start_byte..node.end_byte()];
+                let line_flat_width: usize = line_text
+                    .lines()
+                    .map(|l| l.trim().len())
+                    .sum::<usize>()
+                    + line_text.lines().count().saturating_sub(1);
+
+                indent_width + line_flat_width > context.config.line_width as usize
+            };
+
+            if should_wrap {
+                // Wrapped: break before each && or || with 8-space continuation indent
+                let mut items = PrintItems::new();
+
+                items.extend(gen_node(operands[0], context));
+                items.push_signal(Signal::StartIndent);
+                items.push_signal(Signal::StartIndent);
+
+                for (i, op) in operators.iter().enumerate() {
+                    items.push_signal(Signal::NewLine);
+                    items.push_string(op.to_string());
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_node(operands[i + 1], context));
+                }
+
+                items.push_signal(Signal::FinishIndent);
+                items.push_signal(Signal::FinishIndent);
+
+                return items;
+            }
+        }
+    }
+
+    // Default: inline formatting
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
@@ -46,6 +158,59 @@ pub fn gen_binary_expression<'a>(
     }
 
     items
+}
+
+/// Flatten a chain of binary expressions with && or || operators.
+/// Returns (operands, operators) where operands[i] op operators[i] = operands[i+1].
+fn flatten_logical_chain<'a>(
+    node: tree_sitter::Node<'a>,
+    source: &str,
+) -> (Vec<tree_sitter::Node<'a>>, Vec<String>) {
+    let mut operands = Vec::new();
+    let mut operators = Vec::new();
+
+    fn collect<'a>(
+        node: tree_sitter::Node<'a>,
+        source: &str,
+        operands: &mut Vec<tree_sitter::Node<'a>>,
+        operators: &mut Vec<String>,
+    ) {
+        if node.kind() != "binary_expression" {
+            operands.push(node);
+            return;
+        }
+
+        // Get operator
+        let mut cursor = node.walk();
+        let children: Vec<_> = node.children(&mut cursor).collect();
+
+        let op = children
+            .iter()
+            .find(|c| !c.is_named())
+            .map(|c| source[c.start_byte()..c.end_byte()].to_string());
+
+        // Only flatten if it's && or ||
+        if !matches!(op.as_deref(), Some("&&") | Some("||")) {
+            operands.push(node);
+            return;
+        }
+
+        // Get left and right operands
+        let left = children.iter().find(|c| c.is_named()).unwrap();
+        let right = children.iter().rev().find(|c| c.is_named()).unwrap();
+
+        // Recursively collect left side
+        collect(*left, source, operands, operators);
+
+        // Add this operator
+        operators.push(op.unwrap());
+
+        // Recursively collect right side
+        collect(*right, source, operands, operators);
+    }
+
+    collect(node, source, &mut operands, &mut operators);
+    (operands, operators)
 }
 
 /// Format a unary expression: `!x`, `-y`, `~z`

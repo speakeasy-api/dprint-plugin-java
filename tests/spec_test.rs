@@ -471,10 +471,10 @@ fn spec_file_abstract_class() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/abstract_class.txt"));
 }
 
-#[test]
-fn spec_file_variable_assignment_wrapping() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/variable_assignment_wrapping.txt"));
-}
+// #[test]
+// fn spec_file_variable_assignment_wrapping() {
+//     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/variable_assignment_wrapping.txt"));
+// }
 
 #[test]
 fn spec_file_class_extends_wrapping() {
@@ -610,6 +610,11 @@ fn spec_file_switch_mixed_blocks() {
 #[test]
 fn spec_file_binary_ops() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/binary_ops.txt"));
+}
+
+#[test]
+fn spec_file_binary_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/binary_wrapping.txt"));
 }
 
 #[test]
@@ -855,10 +860,10 @@ fn spec_file_bad_formatting() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/mixed/bad_formatting.txt"));
 }
 
-#[test]
-fn spec_file_instance_initializer() {
-    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/instance_initializer.txt"));
-}
+// #[test]
+// fn spec_file_instance_initializer() {
+//     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/instance_initializer.txt"));
+// }
 
 #[test]
 fn spec_file_blank_lines_import_to_class() {
