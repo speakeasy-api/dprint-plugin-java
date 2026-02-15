@@ -63,8 +63,8 @@ fn update_all_specs() {
     let mut errors = 0;
 
     for entry in walkdir::WalkDir::new("tests/specs") {
-        if let Ok(entry) = entry {
-            if entry.path().extension().and_then(|s| s.to_str()) == Some("txt") {
+        if let Ok(entry) = entry
+            && entry.path().extension().and_then(|s| s.to_str()) == Some("txt") {
                 match update_spec_file(entry.path()) {
                     Ok(true) => {
                         println!("Updated: {}", entry.path().display());
@@ -77,7 +77,6 @@ fn update_all_specs() {
                     }
                 }
             }
-        }
     }
 
     println!("\nUpdated {} spec files with {} errors", updated, errors);
