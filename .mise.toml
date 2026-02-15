@@ -1,0 +1,157 @@
+# dprint-plugin-java mise configuration
+# https://mise.jdx.dev/
+
+[tools]
+rust = "stable"
+
+[tasks.test]
+description = "Run all tests"
+run = "cargo test"
+
+[tasks.test-quiet]
+description = "Run tests with minimal output"
+run = "cargo test --quiet"
+
+[tasks.check]
+description = "Check code without building"
+run = "cargo check --all-targets"
+
+[tasks.fmt]
+description = "Format Rust code"
+run = "cargo fmt"
+
+[tasks."fmt:check"]
+description = "Check Rust code formatting"
+run = "cargo fmt -- --check"
+
+[tasks.clippy]
+description = "Run clippy lints"
+run = "cargo clippy --all-targets -- -D warnings"
+
+[tasks.build]
+description = "Build the library"
+run = "cargo build --release"
+
+[tasks."build:wasm"]
+description = "Build WASM plugin"
+depends = ["install-wasm-target"]
+env = { WASI_SDK_PATH = "${WASI_SDK_PATH:-}" }
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Check if wasi-sdk is available
+if [ -z "${WASI_SDK_PATH:-}" ]; then
+  if [ -d "$HOME/.local/share/wasi-sdk" ]; then
+    export WASI_SDK_PATH="$HOME/.local/share/wasi-sdk"
+  elif [ -d "./wasi-sdk-25.0-x86_64-linux" ]; then
+    export WASI_SDK_PATH="$PWD/wasi-sdk-25.0-x86_64-linux"
+  else
+    echo "Warning: WASI_SDK_PATH not set, build may fail"
+  fi
+fi
+
+cargo build --release --target wasm32-unknown-unknown --features wasm
+"""
+
+[tasks."install-wasm-target"]
+description = "Install wasm32-unknown-unknown target"
+run = "rustup target add wasm32-unknown-unknown"
+
+[tasks."install-wasi-sdk"]
+description = "Download and install wasi-sdk"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+WASI_SDK_VERSION=25
+INSTALL_DIR="${HOME}/.local/share/wasi-sdk"
+
+if [ -d "$INSTALL_DIR" ]; then
+  echo "wasi-sdk already installed at $INSTALL_DIR"
+  exit 0
+fi
+
+mkdir -p "$(dirname "$INSTALL_DIR")"
+cd /tmp
+curl -fsSL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz" \
+  -o wasi-sdk.tar.gz
+tar xzf wasi-sdk.tar.gz
+mv "wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" "$INSTALL_DIR"
+rm wasi-sdk.tar.gz
+
+echo "wasi-sdk installed to $INSTALL_DIR"
+echo "Add to your shell profile:"
+echo "  export WASI_SDK_PATH=\"$INSTALL_DIR\""
+"""
+
+[tasks.ci]
+description = "Run all CI checks"
+depends = ["fmt:check", "clippy", "test", "build:wasm"]
+
+[tasks."release:tag"]
+description = "Create and push a release tag (usage: VERSION=0.2.0 mise run release:tag)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+VERSION="${VERSION:-}"
+if [ -z "$VERSION" ]; then
+  echo "Error: VERSION environment variable required"
+  echo "Usage: VERSION=0.2.0 mise run release:tag"
+  exit 1
+fi
+
+# Remove 'v' prefix if present
+VERSION="${VERSION#v}"
+
+echo "Creating release v${VERSION}..."
+
+# Update Cargo.toml version
+sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+
+# Commit version bump
+git add Cargo.toml
+git commit -m "Bump version to ${VERSION}" || true
+
+# Create and push tag
+git tag "v${VERSION}"
+git push origin master
+git push origin "v${VERSION}"
+
+echo "Release v${VERSION} tagged and pushed!"
+echo "GitHub Actions will build and publish the release automatically."
+"""
+
+[tasks."release:build"]
+description = "Build release artifacts locally"
+depends = ["test", "build:wasm"]
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p release
+cp target/wasm32-unknown-unknown/release/dprint_plugin_java.wasm release/
+ls -lh release/
+echo "Release artifacts in ./release/"
+"""
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "cargo clean"
+
+[tasks."compare-pjf"]
+description = "Compare formatting against spotless:PJF"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+  echo "Usage: mise run compare-pjf /path/to/java/project"
+  exit 1
+fi
+
+PROJECT_DIR="$1"
+echo "Comparing dprint-plugin-java vs PJF on: $PROJECT_DIR"
+# Add actual comparison logic here
+"""

@@ -8,21 +8,16 @@ on:
     branches: [master]
 
 jobs:
-  test:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test
 
-  build-wasm:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install mise
+        uses: jdx/mise-action@v2
         with:
-          targets: wasm32-unknown-unknown
+          experimental: true
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Install wasi-sdk
@@ -32,8 +27,8 @@ jobs:
           tar xzf wasi-sdk.tar.gz
           echo "WASI_SDK_PATH=$PWD/wasi-sdk-25.0-x86_64-linux" >> "$GITHUB_ENV"
 
-      - name: Build WASM
-        run: cargo build --release --target wasm32-unknown-unknown --features wasm
+      - name: Run CI tasks
+        run: mise run ci
 
       - name: Upload WASM artifact
         uses: actions/upload-artifact@v4
