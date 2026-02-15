@@ -1,0 +1,4 @@
+== input ==
+public record Point(int x, int y) {}
+== output ==
+public record Point(int x, int y) {}

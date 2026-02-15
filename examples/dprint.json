@@ -1,0 +1,8 @@
+{
+  "java": {
+    "style": "palantir"
+  },
+  "plugins": [
+    "file:///home/vgd/c/speakeasy-api/dprint-plugin-java/target/wasm32-unknown-unknown/release/dprint_plugin_java.wasm"
+  ]
+}

@@ -1,0 +1,12 @@
+== input ==
+public class MyClass implements Serializable, Cloneable {
+    void method() {
+        return;
+    }
+}
+== output ==
+public class MyClass implements Serializable, Cloneable {
+    void method() {
+        return;
+    }
+}

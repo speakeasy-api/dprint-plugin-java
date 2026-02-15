@@ -1,0 +1,18 @@
+== input ==
+public class Test {
+    void test() {
+        int x = -5;
+        boolean b = !flag;
+        int y = ++x;
+        int z = x--;
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        int x = -5;
+        boolean b = !flag;
+        int y = ++x;
+        int z = x--;
+    }
+}

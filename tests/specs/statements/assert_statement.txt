@@ -1,0 +1,14 @@
+== input ==
+public class Test {
+    void test() {
+        assert condition;
+        assert value > 0 : "value must be positive";
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        assert condition;
+        assert value > 0 : "value must be positive";
+    }
+}

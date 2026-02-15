@@ -1,0 +1,20 @@
+== input ==
+public class Test {
+    public void varargMethod(String... args) {
+        process(args);
+    }
+
+    public void mixedParams(int x, String... args) {
+        handle(x, args);
+    }
+}
+== output ==
+public class Test {
+    public void varargMethod(String... args) {
+        process(args);
+    }
+
+    public void mixedParams(int x, String... args) {
+        handle(x, args);
+    }
+}

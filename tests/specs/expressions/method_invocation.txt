@@ -1,0 +1,16 @@
+== input ==
+public class Test {
+    void test() {
+        System.out.println("hello");
+        list.add(item);
+        obj.method(arg1, arg2, arg3);
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        System.out.println("hello");
+        list.add(item);
+        obj.method(arg1, arg2, arg3);
+    }
+}

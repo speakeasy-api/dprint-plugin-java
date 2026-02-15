@@ -1,0 +1,20 @@
+== input ==
+public class Test {
+    int getValue() {
+        return 42;
+    }
+
+    void throwError() {
+        throw new IllegalStateException("error");
+    }
+}
+== output ==
+public class Test {
+    int getValue() {
+        return 42;
+    }
+
+    void throwError() {
+        throw new IllegalStateException("error");
+    }
+}

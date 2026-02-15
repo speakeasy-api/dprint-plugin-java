@@ -1,0 +1,8 @@
+== input ==
+public final class Constants {
+    private static final int MAX = 100;
+}
+== output ==
+public final class Constants {
+    private static final int MAX = 100;
+}

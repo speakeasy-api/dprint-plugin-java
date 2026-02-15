@@ -1,0 +1,16 @@
+== input ==
+public class Test {
+    void test() {
+        Function<String, Integer> f1 = String::length;
+        Supplier<List> f2 = ArrayList::new;
+        Consumer<String> f3 = System.out::println;
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        Function<String, Integer> f1 = String::length;
+        Supplier<List> f2 = ArrayList::new;
+        Consumer<String> f3 = System.out::println;
+    }
+}

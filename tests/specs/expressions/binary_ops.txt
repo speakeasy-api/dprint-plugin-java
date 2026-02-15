@@ -1,0 +1,16 @@
+== input ==
+public class Test {
+    void test() {
+        int a = 1 + 2 * 3;
+        boolean b = x > 0 && y < 10;
+        String s = "hello" + " " + "world";
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        int a = 1 + 2 * 3;
+        boolean b = x > 0 && y < 10;
+        String s = "hello" + " " + "world";
+    }
+}

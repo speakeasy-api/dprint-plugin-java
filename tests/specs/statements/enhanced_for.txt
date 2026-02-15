@@ -1,0 +1,16 @@
+== input ==
+public class Test {
+    void test() {
+        for (String item : collection) {
+            process(item);
+        }
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        for (String item : collection) {
+            process(item);
+        }
+    }
+}

@@ -1,0 +1,20 @@
+== input ==
+public class Test {
+    void test() {
+        Runnable r1 = () -> System.out.println("hello");
+        Runnable r2 = () -> {
+            doSomething();
+        };
+        Function<String, Integer> f = s -> s.length();
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        Runnable r1 = () -> System.out.println("hello");
+        Runnable r2 = () -> {
+            doSomething();
+        };
+        Function<String, Integer> f = s -> s.length();
+    }
+}

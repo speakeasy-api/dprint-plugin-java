@@ -1,0 +1,20 @@
+== input ==
+public abstract class AbstractExample {
+    private int value;
+
+    public abstract void abstractMethod();
+
+    public void concreteMethod() {
+        doSomething();
+    }
+}
+== output ==
+public abstract class AbstractExample {
+    private int value;
+
+    public abstract void abstractMethod();
+
+    public void concreteMethod() {
+        doSomething();
+    }
+}

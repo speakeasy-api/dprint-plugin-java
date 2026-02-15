@@ -1,0 +1,8 @@
+== input ==
+public class Child extends Parent {
+    private int value;
+}
+== output ==
+public class Child extends Parent {
+    private int value;
+}

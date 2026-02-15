@@ -1,0 +1,8 @@
+== input ==
+public interface Runnable {
+    void run();
+}
+== output ==
+public interface Runnable {
+    void run();
+}

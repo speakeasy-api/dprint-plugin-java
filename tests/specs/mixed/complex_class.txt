@@ -1,0 +1,54 @@
+== input ==
+package com.example;
+
+import java.util.List;
+import java.util.ArrayList;
+
+public class ComplexExample<T extends Comparable<T>> implements Iterable<T> {
+    private final List<T> items;
+    private int size;
+
+    public ComplexExample() {
+        this.items = new ArrayList<>();
+        this.size = 0;
+    }
+
+    public void add(T item) {
+        items.add(item);
+        size++;
+    }
+
+    public T get(int index) {
+        if (index < 0 || index >= size) {
+            throw new IndexOutOfBoundsException("Index: " + index);
+        }
+        return items.get(index);
+    }
+}
+== output ==
+package com.example;
+
+import java.util.List;
+import java.util.ArrayList;
+
+public class ComplexExample<T extends Comparable<T>> implements Iterable<T> {
+    private final List<T> items;
+    private int size;
+
+    public ComplexExample() {
+        this.items = new ArrayList<>();
+        this.size = 0;
+    }
+
+    public void add(T item) {
+        items.add(item);
+        size++;
+    }
+
+    public T get(int index) {
+        if (index < 0 || index >= size) {
+            throw new IndexOutOfBoundsException("Index: " + index);
+        }
+        return items.get(index);
+    }
+}

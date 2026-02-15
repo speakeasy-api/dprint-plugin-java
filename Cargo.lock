@@ -63,6 +63,7 @@ name = "dprint-plugin-java"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cc",
  "dprint-core",
  "serde",
  "serde_json",

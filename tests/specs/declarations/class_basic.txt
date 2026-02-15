@@ -1,0 +1,4 @@
+== input ==
+public class Simple {}
+== output ==
+public class Simple {}

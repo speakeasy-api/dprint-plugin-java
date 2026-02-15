@@ -1,0 +1,12 @@
+== input ==
+public class Test {
+    private int count;
+    protected String name;
+    public boolean active;
+}
+== output ==
+public class Test {
+    private int count;
+    protected String name;
+    public boolean active;
+}

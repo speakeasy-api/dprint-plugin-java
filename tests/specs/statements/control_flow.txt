@@ -1,0 +1,50 @@
+== input ==
+public class Test {
+void test() {
+if(x>0){
+doA();
+}else if(x<0){
+doB();
+}else{
+doC();
+}
+for(int i=0;i<10;i++){
+process(i);
+}
+while(running){
+tick();
+}
+try{
+risky();
+}catch(Exception e){
+handle(e);
+}finally{
+cleanup();
+}
+}
+}
+== output ==
+public class Test {
+    void test() {
+        if (x > 0) {
+            doA();
+        } else if (x < 0) {
+            doB();
+        } else {
+            doC();
+        }
+        for (int i = 0; i < 10; i++) {
+            process(i);
+        }
+        while (running) {
+            tick();
+        }
+        try {
+            risky();
+        } catch (Exception e) {
+            handle(e);
+        } finally {
+            cleanup();
+        }
+    }
+}

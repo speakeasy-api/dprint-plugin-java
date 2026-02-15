@@ -1,0 +1,8 @@
+== input ==
+package com.example.myapp;
+
+public class Application {}
+== output ==
+package com.example.myapp;
+
+public class Application {}

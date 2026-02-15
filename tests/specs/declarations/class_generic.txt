@@ -1,0 +1,16 @@
+== input ==
+public class Container<T> {
+    private T value;
+
+    public T getValue() {
+        return value;
+    }
+}
+== output ==
+public class Container<T> {
+    private T value;
+
+    public T getValue() {
+        return value;
+    }
+}

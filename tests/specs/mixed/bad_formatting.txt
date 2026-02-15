@@ -1,0 +1,25 @@
+== input ==
+public class BadFormat{
+private int x;
+public void method(int a,int b){
+if(a>b){
+return;
+}
+for(int i=0;i<10;i++){
+process(i);
+}
+}
+}
+== output ==
+public class BadFormat {
+    private int x;
+
+    public void method(int a, int b) {
+        if (a > b) {
+            return;
+        }
+        for (int i = 0; i < 10; i++) {
+            process(i);
+        }
+    }
+}

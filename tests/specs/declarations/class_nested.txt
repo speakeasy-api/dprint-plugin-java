@@ -1,0 +1,24 @@
+== input ==
+public class Outer {
+    private int x;
+
+    public class Inner {
+        private int y;
+
+        public void method() {
+            access(x);
+        }
+    }
+}
+== output ==
+public class Outer {
+    private int x;
+
+    public class Inner {
+        private int y;
+
+        public void method() {
+            access(x);
+        }
+    }
+}

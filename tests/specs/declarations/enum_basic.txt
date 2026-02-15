@@ -1,0 +1,14 @@
+== input ==
+public enum Direction {
+    NORTH,
+    SOUTH,
+    EAST,
+    WEST
+}
+== output ==
+public enum Direction {
+    NORTH,
+    SOUTH,
+    EAST,
+    WEST
+}

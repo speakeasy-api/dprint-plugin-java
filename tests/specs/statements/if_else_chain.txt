@@ -1,0 +1,24 @@
+== input ==
+public class Test {
+    void test() {
+        if (a > 0) {
+            handlePositive();
+        } else if (a < 0) {
+            handleNegative();
+        } else {
+            handleZero();
+        }
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        if (a > 0) {
+            handlePositive();
+        } else if (a < 0) {
+            handleNegative();
+        } else {
+            handleZero();
+        }
+    }
+}

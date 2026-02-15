@@ -1,0 +1,12 @@
+== input ==
+public class Test {
+    public void riskyOperation() throws IOException, SQLException {
+        performAction();
+    }
+}
+== output ==
+public class Test {
+    public void riskyOperation() throws IOException,  SQLException {
+        performAction();
+    }
+}

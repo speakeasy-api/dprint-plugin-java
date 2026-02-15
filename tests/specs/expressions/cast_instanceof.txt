@@ -1,0 +1,20 @@
+== input ==
+public class Test {
+    void test(Object obj) {
+        String s = (String) obj;
+        int[] arr = (int[]) array;
+        if (obj instanceof String) {
+            handle((String) obj);
+        }
+    }
+}
+== output ==
+public class Test {
+    void test(Object obj) {
+        String s = (String) obj;
+        int[] arr = (int[]) array;
+        if (obj instanceof String) {
+            handle((String) obj);
+        }
+    }
+}

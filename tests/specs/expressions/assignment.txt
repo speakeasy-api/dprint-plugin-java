@@ -1,0 +1,18 @@
+== input ==
+public class Test {
+    void test() {
+        x = 10;
+        y += 5;
+        z *= 2;
+        arr[i] = value;
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        x = 10;
+        y += 5;
+        z *= 2;
+        arr[i] = value;
+    }
+}

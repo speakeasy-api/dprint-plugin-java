@@ -1,0 +1,8 @@
+== input ==
+public interface ExtendedInterface extends BaseInterface, OtherInterface {
+    void extendedMethod();
+}
+== output ==
+public interface ExtendedInterface extends BaseInterface, OtherInterface {
+    void extendedMethod();
+}

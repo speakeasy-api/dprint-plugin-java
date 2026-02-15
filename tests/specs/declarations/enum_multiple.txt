@@ -1,0 +1,14 @@
+== input ==
+public enum Status {
+    PENDING,
+    ACTIVE,
+    COMPLETED,
+    FAILED
+}
+== output ==
+public enum Status {
+    PENDING,
+    ACTIVE,
+    COMPLETED,
+    FAILED
+}

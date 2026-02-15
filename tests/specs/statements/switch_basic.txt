@@ -1,0 +1,30 @@
+== input ==
+public class Test {
+    void test(int value) {
+        switch (value) {
+            case 1:
+                handleOne();
+                break;
+            case 2:
+                handleTwo();
+                break;
+            default:
+                handleDefault();
+        }
+    }
+}
+== output ==
+public class Test {
+    void test(int value) {
+        switch (value) {
+            case 1:
+                handleOne();
+                break;
+            case 2:
+                handleTwo();
+                break;
+            default:
+                handleDefault();
+        }
+    }
+}

@@ -1,0 +1,24 @@
+== input ==
+public class Test {
+    void test() {
+        try {
+            riskyOperation();
+        } catch (IOException e) {
+            handleError(e);
+        } finally {
+            cleanup();
+        }
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        try {
+            riskyOperation();
+        } catch (IOException e) {
+            handleError(e);
+        } finally {
+            cleanup();
+        }
+    }
+}

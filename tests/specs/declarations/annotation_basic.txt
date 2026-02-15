@@ -1,0 +1,24 @@
+== input ==
+public class Test {
+    @Override
+    public String toString() {
+        return "Test";
+    }
+
+    @SuppressWarnings("unchecked")
+    public void method() {
+        doSomething();
+    }
+}
+== output ==
+public class Test {
+    @Override
+    public String toString() {
+        return "Test";
+    }
+
+    @SuppressWarnings("unchecked")
+    public void method() {
+        doSomething();
+    }
+}

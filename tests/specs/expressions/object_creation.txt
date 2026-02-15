@@ -1,0 +1,16 @@
+== input ==
+public class Test {
+    void test() {
+        Object o = new Object();
+        List<String> list = new ArrayList<>();
+        Map<String, Integer> map = new HashMap<>(10);
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        Object o = new Object();
+        List<String> list = new ArrayList<>();
+        Map<String, Integer> map = new HashMap<>(10);
+    }
+}

@@ -1,0 +1,16 @@
+== input ==
+public class Test {
+    void test() {
+        while (hasNext()) {
+            process();
+        }
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        while (hasNext()) {
+            process();
+        }
+    }
+}

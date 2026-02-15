@@ -1,0 +1,14 @@
+== input ==
+public class Test {
+    void test() {
+        int x = (a + b) * c;
+        boolean y = (flag1 || flag2) && flag3;
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        int x = (a + b) * c;
+        boolean y = (flag1 || flag2) && flag3;
+    }
+}
