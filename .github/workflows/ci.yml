@@ -31,7 +31,6 @@ jobs:
             -o wasi-sdk.tar.gz
           tar xzf wasi-sdk.tar.gz
           echo "WASI_SDK_PATH=$PWD/wasi-sdk-25.0-x86_64-linux" >> "$GITHUB_ENV"
-          echo "CC_wasm32_unknown_unknown=$PWD/wasi-sdk-25.0-x86_64-linux/bin/clang" >> "$GITHUB_ENV"
 
       - name: Build WASM
         run: cargo build --release --target wasm32-unknown-unknown --features wasm
