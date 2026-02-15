@@ -1,0 +1,9 @@
+== input ==
+public interface VeryLongInterfaceNameThatExtendsManyInterfaces extends FirstBaseInterface, SecondBaseInterface, ThirdBaseInterface {
+    void method();
+}
+== output ==
+public interface VeryLongInterfaceNameThatExtendsManyInterfaces
+        extends FirstBaseInterface, SecondBaseInterface, ThirdBaseInterface {
+    void method();
+}

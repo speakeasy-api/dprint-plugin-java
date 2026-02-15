@@ -1,0 +1,10 @@
+== input ==
+public class VeryLongClassNameWithManyInterfaces implements FirstInterface, SecondInterface, ThirdInterface, FourthInterface {
+    void method() {
+    }
+}
+== output ==
+public class VeryLongClassNameWithManyInterfaces
+        implements FirstInterface, SecondInterface, ThirdInterface, FourthInterface {
+    void method() {}
+}

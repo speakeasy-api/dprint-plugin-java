@@ -1,0 +1,10 @@
+== input ==
+public static class VeryLongNameAsync extends VeryLongBaseName implements AsyncRequestOperation<BinaryAndStringUploadRequest, BinaryAndStringUploadResponse> {
+    void method() {
+    }
+}
+== output ==
+public static class VeryLongNameAsync extends VeryLongBaseName
+        implements AsyncRequestOperation<BinaryAndStringUploadRequest, BinaryAndStringUploadResponse> {
+    void method() {}
+}

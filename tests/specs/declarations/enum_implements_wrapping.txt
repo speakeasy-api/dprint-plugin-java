@@ -1,0 +1,11 @@
+== input ==
+public enum VeryLongEnumNameWithManyInterfacesThatExceedsLineWidth implements FirstInterface, SecondInterface, ThirdInterface {
+    VALUE1,
+    VALUE2
+}
+== output ==
+public enum VeryLongEnumNameWithManyInterfacesThatExceedsLineWidth
+        implements FirstInterface, SecondInterface, ThirdInterface {
+    VALUE1,
+    VALUE2
+}

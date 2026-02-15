@@ -1,0 +1,6 @@
+== input ==
+public record VeryLongRecordNameWithManyInterfaces(String field1, String field2) implements FirstInterface, SecondInterface {
+}
+== output ==
+public record VeryLongRecordNameWithManyInterfaces(String field1, String field2)
+        implements FirstInterface, SecondInterface {}

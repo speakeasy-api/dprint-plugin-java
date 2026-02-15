@@ -68,6 +68,20 @@ pub fn gen_class_declaration<'a>(
     let mut cursor = node.walk();
     let mut need_space = false;
 
+    // Pre-calculate: estimate class declaration line width to decide extends/implements wrapping.
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let decl_width = estimate_class_decl_width(node, context.source);
+    let needs_wrapping = indent_width + decl_width > context.config.line_width as usize;
+
+    // When both extends and implements are present, prefer to wrap only before implements.
+    // Only wrap before extends if implements is not present and extends alone is too long.
+    let mut cursor2 = node.walk();
+    let has_superclass = node.children(&mut cursor2).any(|c| c.kind() == "superclass");
+    let has_super_interfaces = node.children(&mut cursor2).any(|c| c.kind() == "super_interfaces");
+
+    let wrap_extends = needs_wrapping && has_superclass && !has_super_interfaces;
+    let wrap_implements = needs_wrapping && has_super_interfaces;
+
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
@@ -93,13 +107,31 @@ pub fn gen_class_declaration<'a>(
                 need_space = true;
             }
             "superclass" => {
-                items.extend(helpers::gen_space());
-                items.extend(gen_superclass(child, context));
+                if wrap_extends {
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::NewLine);
+                    items.extend(gen_superclass(child, context));
+                    items.push_signal(Signal::FinishIndent);
+                    items.push_signal(Signal::FinishIndent);
+                } else {
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_superclass(child, context));
+                }
                 need_space = true;
             }
             "super_interfaces" => {
-                items.extend(helpers::gen_space());
-                items.extend(gen_super_interfaces(child, context));
+                if wrap_implements {
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::NewLine);
+                    items.extend(gen_super_interfaces(child, context));
+                    items.push_signal(Signal::FinishIndent);
+                    items.push_signal(Signal::FinishIndent);
+                } else {
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_super_interfaces(child, context));
+                }
                 need_space = true;
             }
             "class_body" => {
@@ -122,6 +154,11 @@ pub fn gen_interface_declaration<'a>(
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
     let mut need_space = false;
+
+    // Pre-calculate: estimate interface declaration line width to decide extends wrapping.
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let decl_width = estimate_class_decl_width(node, context.source);
+    let wrap_clauses = indent_width + decl_width > context.config.line_width as usize;
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -148,8 +185,17 @@ pub fn gen_interface_declaration<'a>(
                 need_space = true;
             }
             "extends_interfaces" => {
-                items.extend(helpers::gen_space());
-                items.extend(gen_extends_interfaces(child, context));
+                if wrap_clauses {
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::NewLine);
+                    items.extend(gen_extends_interfaces(child, context));
+                    items.push_signal(Signal::FinishIndent);
+                    items.push_signal(Signal::FinishIndent);
+                } else {
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_extends_interfaces(child, context));
+                }
                 need_space = true;
             }
             "interface_body" => {
@@ -173,6 +219,11 @@ pub fn gen_enum_declaration<'a>(
     let mut cursor = node.walk();
     let mut need_space = false;
 
+    // Pre-calculate: estimate enum declaration line width to decide implements wrapping.
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let decl_width = estimate_class_decl_width(node, context.source);
+    let wrap_clauses = indent_width + decl_width > context.config.line_width as usize;
+
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
@@ -194,8 +245,17 @@ pub fn gen_enum_declaration<'a>(
                 need_space = true;
             }
             "super_interfaces" => {
-                items.extend(helpers::gen_space());
-                items.extend(gen_super_interfaces(child, context));
+                if wrap_clauses {
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::NewLine);
+                    items.extend(gen_super_interfaces(child, context));
+                    items.push_signal(Signal::FinishIndent);
+                    items.push_signal(Signal::FinishIndent);
+                } else {
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_super_interfaces(child, context));
+                }
                 need_space = true;
             }
             "enum_body" => {
@@ -218,6 +278,11 @@ pub fn gen_record_declaration<'a>(
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
     let mut need_space = false;
+
+    // Pre-calculate: estimate record declaration line width to decide implements wrapping.
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let decl_width = estimate_class_decl_width(node, context.source);
+    let wrap_clauses = indent_width + decl_width > context.config.line_width as usize;
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -244,8 +309,17 @@ pub fn gen_record_declaration<'a>(
                 need_space = true;
             }
             "super_interfaces" => {
-                items.extend(helpers::gen_space());
-                items.extend(gen_super_interfaces(child, context));
+                if wrap_clauses {
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::NewLine);
+                    items.extend(gen_super_interfaces(child, context));
+                    items.push_signal(Signal::FinishIndent);
+                    items.push_signal(Signal::FinishIndent);
+                } else {
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_super_interfaces(child, context));
+                }
                 need_space = true;
             }
             "class_body" => {
@@ -436,6 +510,31 @@ fn estimate_prefix_width(node: tree_sitter::Node, source: &str) -> usize {
 
     // Trim and return the length
     last_line.trim_start().len()
+}
+
+/// Estimate the width of a class/interface/enum/record declaration line
+/// (modifiers + keyword + name + type_parameters + extends/implements + body start)
+/// from the source text. Only considers the "flat" width, ignoring existing line breaks.
+fn estimate_class_decl_width(node: tree_sitter::Node, source: &str) -> usize {
+    let mut cursor = node.walk();
+    let mut width = 0;
+
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "class_body" | "interface_body" | "enum_body" => break, // Stop at body
+            _ => {
+                let text = &source[child.start_byte()..child.end_byte()];
+                // Use last line only (for multiline modifiers like annotations)
+                let last_line = text.lines().last().unwrap_or(text);
+                if width > 0 && child.kind() != "formal_parameters" && child.kind() != "(" && child.kind() != ")" {
+                    width += 1; // space separator
+                }
+                width += last_line.trim().len();
+            }
+        }
+    }
+
+    width
 }
 
 /// Format a constructor declaration.

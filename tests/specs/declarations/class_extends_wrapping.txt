@@ -1,0 +1,10 @@
+== input ==
+public class VeryLongClassNameThatExtendsAVeryLongBaseClassName extends VeryLongBaseClassNameWithManyTypeParameters<String, Integer> {
+    void method() {
+    }
+}
+== output ==
+public class VeryLongClassNameThatExtendsAVeryLongBaseClassName
+        extends VeryLongBaseClassNameWithManyTypeParameters<String, Integer> {
+    void method() {}
+}

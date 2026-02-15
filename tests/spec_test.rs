@@ -476,6 +476,36 @@ fn spec_file_variable_assignment_wrapping() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/variable_assignment_wrapping.txt"));
 }
 
+#[test]
+fn spec_file_class_extends_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_extends_wrapping.txt"));
+}
+
+#[test]
+fn spec_file_class_implements_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_implements_wrapping.txt"));
+}
+
+#[test]
+fn spec_file_class_extends_implements_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/class_extends_implements_wrapping.txt"));
+}
+
+#[test]
+fn spec_file_interface_extends_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/interface_extends_wrapping.txt"));
+}
+
+#[test]
+fn spec_file_enum_implements_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/enum_implements_wrapping.txt"));
+}
+
+#[test]
+fn spec_file_record_implements_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/record_implements_wrapping.txt"));
+}
+
 // ---- Statements ----
 #[test]
 fn spec_file_statement_formatting() {
