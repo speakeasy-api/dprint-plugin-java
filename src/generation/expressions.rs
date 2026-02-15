@@ -6,6 +6,25 @@ use super::declarations;
 use super::generate::gen_node;
 use super::helpers;
 
+/// Collapse whitespace in a string: replace newlines and multiple spaces with single spaces.
+/// This helps estimate the "flat" width of a code fragment as if formatted on one line.
+fn collapse_whitespace(s: &str) -> String {
+    let mut result = String::new();
+    let mut prev_was_space = false;
+    for c in s.chars() {
+        if c.is_whitespace() {
+            if !prev_was_space {
+                result.push(' ');
+                prev_was_space = true;
+            }
+        } else {
+            result.push(c);
+            prev_was_space = false;
+        }
+    }
+    result.trim().to_string()
+}
+
 /// Format a binary expression: `a + b`, `x && y`, etc.
 pub fn gen_binary_expression<'a>(
     node: tree_sitter::Node<'a>,
@@ -69,9 +88,9 @@ pub fn gen_update_expression<'a>(
 
 /// Format a method invocation: `obj.method(args)` or `method(args)`
 ///
-/// For chains of 3+ method calls (e.g., `a.b().c().d()`), this flattens the
-/// chain and inserts `Signal::PossibleNewLine` before each `.` so dprint-core
-/// can break the line when it exceeds `max_width`.
+/// For chains of 2+ method calls (e.g., `a.b().c().d()`), this flattens the
+/// chain and checks if the flat width exceeds `method_chain_threshold`. If so,
+/// it breaks the line before each `.method()` with 8-space continuation indent.
 pub fn gen_method_invocation<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -85,24 +104,65 @@ pub fn gen_method_invocation<'a>(
     let mut segments: Vec<(tree_sitter::Node<'a>, tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)> = Vec::new();
     let root = flatten_chain(node, &mut segments);
 
-    let mut items = PrintItems::new();
-    items.extend(gen_node(root, context));
+    // Calculate the flat width by estimating the formatted width of each component.
+    // We compute this as the text length with newlines/multi-space runs collapsed to single spaces.
+    let root_text = &context.source[root.start_byte()..root.end_byte()];
+    let root_width = collapse_whitespace(root_text).len();
 
-    items.push_signal(Signal::StartIndent);
+    // Sum up each segment: . + name + type_args + arg_list
+    let mut segments_width = 0;
+    for (name_node, type_args, arg_list) in &segments {
+        segments_width += 1; // for the '.'
+        let name_text = &context.source[name_node.start_byte()..name_node.end_byte()];
+        segments_width += name_text.len();
 
-    for (_invocation_node, name_node, type_args, arg_list) in segments {
-        items.push_signal(Signal::PossibleNewLine);
-        items.push_string(".".to_string());
-        items.extend(helpers::gen_node_text(name_node, context.source));
         if let Some(ta) = type_args {
-            items.extend(gen_node(ta, context));
+            let ta_text = &context.source[ta.start_byte()..ta.end_byte()];
+            segments_width += collapse_whitespace(ta_text).len();
         }
+
         if let Some(al) = arg_list {
-            items.extend(declarations::gen_argument_list(al, context));
+            let al_text = &context.source[al.start_byte()..al.end_byte()];
+            segments_width += collapse_whitespace(al_text).len();
         }
     }
 
-    items.push_signal(Signal::FinishIndent);
+    let chain_flat_width = root_width + segments_width;
+    let should_wrap = chain_flat_width > context.config.method_chain_threshold as usize;
+
+    let mut items = PrintItems::new();
+    items.extend(gen_node(root, context));
+
+    if should_wrap {
+        // Force line breaks with 8-space continuation indent (2x indent_width)
+        items.push_signal(Signal::StartIndent);
+        items.push_signal(Signal::StartIndent);
+        for (name_node, type_args, arg_list) in segments {
+            items.push_signal(Signal::NewLine);
+            items.push_string(".".to_string());
+            if let Some(ta) = type_args {
+                items.extend(gen_node(ta, context));
+            }
+            items.extend(helpers::gen_node_text(name_node, context.source));
+            if let Some(al) = arg_list {
+                items.extend(declarations::gen_argument_list(al, context));
+            }
+        }
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
+    } else {
+        // Keep on one line
+        for (name_node, type_args, arg_list) in segments {
+            items.push_string(".".to_string());
+            if let Some(ta) = type_args {
+                items.extend(gen_node(ta, context));
+            }
+            items.extend(helpers::gen_node_text(name_node, context.source));
+            if let Some(al) = arg_list {
+                items.extend(declarations::gen_argument_list(al, context));
+            }
+        }
+    }
 
     items
 }

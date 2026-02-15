@@ -647,6 +647,11 @@ fn spec_file_method_chain_line_comment() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_chain_line_comment.txt"));
 }
 
+#[test]
+fn spec_file_method_chain_wrapping_edge_cases() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_chain_wrapping_edge_cases.txt"));
+}
+
 // ---- Instability debugging ----
 
 /// Debug helper: format and check stability

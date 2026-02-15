@@ -1,0 +1,49 @@
+== input ==
+public class Test {
+    void test() {
+        // Chain at threshold (80 chars, stays on one line with > not >=)
+        list.<String>stream().<Integer>map(x -> x.length()).collect(Collectors.toList());
+        // Nested method chains (outer chain will wrap: 86 chars)
+        outerObject.firstMethod().secondMethod(innerObject.inner1().inner2()).thirdMethod();
+        // Short chain stays on one line
+        obj.method1().method2();
+        // Longer chain with extra call to push over threshold
+        list.<String>stream().<Integer>map(x -> x.length()).filter(Objects::nonNull).collect(Collectors.toList());
+        // Chain at deeper indentation (4 levels = 16 spaces indent)
+        if (condition) {
+            if (nested) {
+                result.stream().filter(x -> x != null).map(x -> x.toString()).collect(Collectors.toList());
+            }
+        }
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        // Chain at threshold (80 chars, stays on one line with > not >=)
+        list.<String>stream().<Integer>map(x -> x.length()).collect(Collectors.toList());
+        // Nested method chains (outer chain will wrap: 86 chars)
+        outerObject
+                .firstMethod()
+                .secondMethod(innerObject.inner1().inner2())
+                .thirdMethod();
+        // Short chain stays on one line
+        obj.method1().method2();
+        // Longer chain with extra call to push over threshold
+        list
+                .<String>stream()
+                .<Integer>map(x -> x.length())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        // Chain at deeper indentation (4 levels = 16 spaces indent)
+        if (condition) {
+            if (nested) {
+                result
+                        .stream()
+                        .filter(x -> x != null)
+                        .map(x -> x.toString())
+                        .collect(Collectors.toList());
+            }
+        }
+    }
+}

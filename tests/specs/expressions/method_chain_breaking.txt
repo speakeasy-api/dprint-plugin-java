@@ -1,12 +1,35 @@
 == input ==
 public class Test {
     void test() {
+        // Short chain: should stay on one line (under threshold)
         list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());
+        // Long chain: should break (exceeds method_chain_threshold of 80)
+        someObject.callMethodOne().callMethodTwo().callMethodThree().callMethodFour().callMethodFive();
+        // Medium chain: under threshold so stays on one line
+        result.stream().filter(x -> x > 0).collect(Collectors.toList());
+        // Very long chain with longer method names: exceeds threshold so wraps
+        repository.findByUserIdAndActiveStatus().filterByPermissions().mapToDTO().collectToList();
     }
 }
 == output ==
 public class Test {
     void test() {
+        // Short chain: should stay on one line (under threshold)
         list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());
+        // Long chain: should break (exceeds method_chain_threshold of 80)
+        someObject
+                .callMethodOne()
+                .callMethodTwo()
+                .callMethodThree()
+                .callMethodFour()
+                .callMethodFive();
+        // Medium chain: under threshold so stays on one line
+        result.stream().filter(x -> x > 0).collect(Collectors.toList());
+        // Very long chain with longer method names: exceeds threshold so wraps
+        repository
+                .findByUserIdAndActiveStatus()
+                .filterByPermissions()
+                .mapToDTO()
+                .collectToList();
     }
 }
