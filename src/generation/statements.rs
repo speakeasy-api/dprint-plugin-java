@@ -34,6 +34,7 @@ pub fn gen_block<'a>(
     }
 
     items.push_signal(Signal::StartIndent);
+    context.indent();
 
     for stmt in &stmts {
         if stmt.is_extra() {
@@ -55,6 +56,7 @@ pub fn gen_block<'a>(
     }
 
     items.push_signal(Signal::FinishIndent);
+    context.dedent();
     items.push_signal(Signal::NewLine);
     items.push_string("}".to_string());
 
