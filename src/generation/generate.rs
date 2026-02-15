@@ -37,7 +37,7 @@ pub fn gen_node<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext
         "annotation_type_declaration" => declarations::gen_annotation_type_declaration(node, context),
         "method_declaration" => declarations::gen_method_declaration(node, context),
         "constructor_declaration" => declarations::gen_constructor_declaration(node, context),
-        "field_declaration" => declarations::gen_field_declaration(node, context),
+        "field_declaration" | "constant_declaration" => declarations::gen_field_declaration(node, context),
 
         // --- Statements ---
         "block" | "constructor_body" => statements::gen_block(node, context),

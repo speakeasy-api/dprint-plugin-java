@@ -4,22 +4,28 @@ use dprint_core::formatting::*;
 ///
 /// This properly handles newlines by emitting them as Signal::NewLine
 /// rather than embedding them in strings, which is required by dprint-core.
+///
+/// For multiline text, leading whitespace on non-first lines is stripped
+/// since Signal::NewLine already provides the correct indentation from
+/// dprint-core's indent stack. Keeping original whitespace would cause
+/// double-indentation that compounds on each formatting pass.
 pub fn gen_node_text(node: tree_sitter::Node, source: &str) -> PrintItems {
     let text = &source[node.start_byte()..node.end_byte()];
     let mut items = PrintItems::new();
 
-    // Split on newlines and emit each line separately
-    let mut first = true;
-    for line in text.split('\n') {
-        if !first {
+    for (i, line) in text.split('\n').enumerate() {
+        if i > 0 {
             items.push_signal(Signal::NewLine);
         }
-        first = false;
 
         // Strip trailing \r for CRLF files
         let line = line.strip_suffix('\r').unwrap_or(line);
-        if !line.is_empty() {
-            items.push_string(line.to_string());
+
+        // For non-first lines, strip leading whitespace since Signal::NewLine
+        // already handles indentation via dprint-core's indent stack.
+        let content = if i > 0 { line.trim_start() } else { line };
+        if !content.is_empty() {
+            items.push_string(content.to_string());
         }
     }
 

@@ -194,16 +194,12 @@ fn flatten_chain<'a>(
                 return obj;
             }
             None => {
-                // No object — bare method call; the name IS the root
-                // Pop the last entry since it's the root method name, not a chain segment
-                if let Some((root_name, ta, al)) = chain.pop() {
-                    chain.reverse();
-                    segments.extend(chain);
-                    // Return current node — but we need to handle bare method calls
-                    // For bare calls, just return current and use the name as root
-                    // Actually reconstruct: emit name + args as a simple call
-                    segments.push((root_name, ta, al));
-                }
+                // No object — bare method call at the root of the chain.
+                // Pop the root entry from chain; the caller's gen_node(root)
+                // will format the bare call via gen_method_invocation_simple.
+                chain.pop();
+                chain.reverse();
+                segments.extend(chain);
                 return current;
             }
         }

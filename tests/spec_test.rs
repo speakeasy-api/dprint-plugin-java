@@ -607,6 +607,163 @@ fn spec_file_method_chain_breaking() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_chain_breaking.txt"));
 }
 
+// ---- Instability debugging ----
+
+/// Debug helper: format and check stability
+fn assert_stable(name: &str, input: &str) {
+    let config = default_config();
+    let pass1 = format_text(std::path::Path::new("Test.java"), input, &config)
+        .unwrap()
+        .unwrap_or_else(|| input.to_string());
+
+    let pass2 = format_text(std::path::Path::new("Test.java"), &pass1, &config)
+        .unwrap()
+        .unwrap_or_else(|| pass1.clone());
+
+    if pass1 != pass2 {
+        let pass1_lines: Vec<&str> = pass1.lines().collect();
+        let pass2_lines: Vec<&str> = pass2.lines().collect();
+        eprintln!("\n=== INSTABILITY: {} ===", name);
+        eprintln!("pass1 has {} lines, pass2 has {} lines", pass1_lines.len(), pass2_lines.len());
+        let max = pass1_lines.len().max(pass2_lines.len());
+        for i in 0..max {
+            let l1 = pass1_lines.get(i).unwrap_or(&"<missing>");
+            let l2 = pass2_lines.get(i).unwrap_or(&"<missing>");
+            if l1 != l2 {
+                eprintln!("LINE {}: ", i + 1);
+                eprintln!("  pass1: {:?}", l1);
+                eprintln!("  pass2: {:?}", l2);
+            }
+        }
+        eprintln!("\n--- full pass1 ---\n{}\n--- end ---", pass1);
+        panic!("Formatting '{}' is not stable", name);
+    }
+}
+
+#[test]
+fn debug_instability_lambda_block() {
+    assert_stable("lambda_block_field", r#"public interface Foo {
+    static Foo DEFAULT = (a, b) -> {
+        doSomething();
+    };
+}"#);
+}
+
+#[test]
+fn debug_instability_sdk_file() {
+    let paths = &[
+        "/tmp/spotless-ref/zSDKs/sdk-javav2/src/main/java/org/openapis/review/openapi/operations/Auth.java",
+        "/tmp/spotless-ref/zSDKs/sdk-javav2/src/main/java/org/openapis/review/openapi/models/operations/ListTest1RequestBuilder.java",
+        "/tmp/spotless-ref/zSDKs/sdk-javav2/src/main/java/org/openapis/review/openapi/SDKConfiguration.java",
+    ];
+    for path in paths {
+        let input = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(_) => { eprintln!("Skipping {}: not found", path); continue; }
+        };
+        let config = default_config();
+        let pass1 = format_text(std::path::Path::new("Test.java"), &input, &config)
+            .unwrap().unwrap_or_else(|| input.clone());
+        let pass2 = format_text(std::path::Path::new("Test.java"), &pass1, &config)
+            .unwrap().unwrap_or_else(|| pass1.clone());
+        if pass1 != pass2 {
+            let p1: Vec<&str> = pass1.lines().collect();
+            let p2: Vec<&str> = pass2.lines().collect();
+            eprintln!("\n=== INSTABILITY: {} ===", path);
+            let max = p1.len().max(p2.len());
+            let mut shown = 0;
+            for i in 0..max {
+                let l1 = p1.get(i).unwrap_or(&"<missing>");
+                let l2 = p2.get(i).unwrap_or(&"<missing>");
+                if l1 != l2 && shown < 20 {
+                    eprintln!("LINE {}: ", i + 1);
+                    eprintln!("  pass1: {:?}", l1);
+                    eprintln!("  pass2: {:?}", l2);
+                    shown += 1;
+                }
+            }
+            // Also dump tree of the unstable region
+            let mut parser = tree_sitter::Parser::new();
+            parser.set_language(&tree_sitter_java::LANGUAGE.into()).unwrap();
+            let tree = parser.parse(&pass1, None).unwrap();
+            // Find the node at the first differing line
+            for i in 0..max {
+                let l1 = p1.get(i).unwrap_or(&"<missing>");
+                let l2 = p2.get(i).unwrap_or(&"<missing>");
+                if l1 != l2 {
+                    let byte_offset = pass1.lines().take(i).map(|l| l.len() + 1).sum::<usize>();
+                    let node = tree.root_node().descendant_for_byte_range(byte_offset, byte_offset + 1);
+                    if let Some(n) = node {
+                        // Walk up to find the interesting parent
+                        let mut current = n;
+                        for _ in 0..8 {
+                            if let Some(p) = current.parent() { current = p; } else { break; }
+                        }
+                        eprintln!("\nTree around first diff (line {}):", i + 1);
+                        fn dump2(node: tree_sitter::Node, source: &str, depth: usize, max_depth: usize) {
+                            if depth > max_depth { return; }
+                            let indent = "  ".repeat(depth);
+                            let text = &source[node.start_byte()..node.end_byte()];
+                            let short = if text.len() > 80 { &text[..80] } else { text };
+                            let short = short.replace('\n', "\\n");
+                            eprintln!("{}{}  [{}-{}] {:?}", indent, node.kind(), node.start_byte(), node.end_byte(), short);
+                            let mut cursor = node.walk();
+                            for child in node.children(&mut cursor) {
+                                dump2(child, source, depth + 1, max_depth);
+                            }
+                        }
+                        dump2(current, &pass1, 0, 5);
+                    }
+                    break;
+                }
+            }
+            panic!("File {} is not stable", path);
+        }
+    }
+}
+
+#[test]
+fn debug_instability_multiline_args() {
+    assert_stable("multiline_args", r#"
+public class Test {
+    void test() {
+        Utils.checkArgument(
+                response.isPresent() ^ error.isPresent(), "one and only one of response or error must be present");
+    }
+}
+"#.trim());
+}
+
+#[test]
+fn debug_instability_long_assignment() {
+    assert_stable("long_assignment", r#"
+public class Test {
+    void test() {
+        RequestlessOperation<Deprecated1Response> operation = new Deprecated1.Sync(sdkConfiguration, serverURL, _headers);
+    }
+}
+"#.trim());
+}
+
+#[test]
+fn debug_instability_bare_method_chain() {
+    assert_stable("bare_method_chain", r#"public class Test {
+    void test() {
+        callAsStream().flatMap(r -> r.object().stream()).flatMap(r -> r.resultArray().stream());
+    }
+}"#);
+}
+
+#[test]
+fn debug_instability_method_throws_multiline() {
+    assert_stable("method_throws_multiline", r#"
+public interface Foo {
+    HttpResponse<InputStream> afterSuccess(AfterSuccessContext context, HttpResponse<InputStream> response)
+            throws Exception;
+}
+"#.trim());
+}
+
 // ---- Mixed/Integration ----
 #[test]
 fn spec_file_complex_class() {
