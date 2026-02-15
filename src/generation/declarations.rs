@@ -1119,7 +1119,17 @@ pub fn gen_variable_declarator<'a>(
             false
         }
     });
-    let wrap_value = has_value && !value_is_ternary && !value_is_logical_binary && {
+    // If the value is an array_initializer with comments, skip variable declarator wrapping.
+    // The array_initializer will expand to multiple lines on its own.
+    let value_is_array_with_comments = children.iter().any(|c| {
+        if c.kind() == "array_initializer" {
+            let mut cursor = c.walk();
+            c.children(&mut cursor).any(|ch| ch.is_extra())
+        } else {
+            false
+        }
+    });
+    let wrap_value = has_value && !value_is_ternary && !value_is_logical_binary && !value_is_array_with_comments && {
         let indent_width = context.indent_level() * context.config.indent_width as usize;
         let decl_flat_width = if let Some(parent) = node.parent() {
             estimate_decl_flat_width(parent, context.source)

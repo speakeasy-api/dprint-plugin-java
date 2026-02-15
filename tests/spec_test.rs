@@ -697,6 +697,11 @@ fn spec_file_lambda_chain_indent() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/lambda_chain_indent.txt"));
 }
 
+#[test]
+fn spec_file_array_initializer_comments() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/array_initializer_comments.txt"));
+}
+
 // ---- Instability debugging ----
 
 /// Debug helper: format and check stability

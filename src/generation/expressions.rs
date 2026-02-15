@@ -696,6 +696,9 @@ pub fn gen_array_creation_expression<'a>(
 }
 
 /// Format an array initializer: `{1, 2, 3}`
+///
+/// When the initializer contains comments (is_extra() children), expands to
+/// one element per line to match PJF behavior.
 pub fn gen_array_initializer<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -703,24 +706,67 @@ pub fn gen_array_initializer<'a>(
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
-    items.push_string("{".to_string());
-    let mut first = true;
+    // Check if this array initializer has any comments
+    let has_comments = node.children(&mut cursor).any(|c| c.is_extra());
 
-    for child in node.children(&mut cursor) {
-        match child.kind() {
-            "{" | "}" => {}
-            "," => {
-                items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
-            }
-            _ if child.is_named() => {
-                if first {
-                    // No leading space for compact initializers
+    // Reset cursor for iteration
+    cursor = node.walk();
+
+    items.push_string("{".to_string());
+
+    if has_comments {
+        // Expanded format: one element per line
+        items.push_signal(Signal::StartIndent);
+        let mut first = true;
+
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "{" | "}" => {}
+                "," => {
+                    items.push_string(",".to_string());
                 }
-                items.extend(gen_node(child, context));
-                first = false;
+                _ if child.is_extra() => {
+                    // Comment node
+                    items.push_signal(Signal::NewLine);
+                    items.extend(gen_node(child, context));
+                }
+                _ if child.is_named() => {
+                    // Element node
+                    if !first {
+                        items.push_signal(Signal::NewLine);
+                    }
+                    if first {
+                        items.push_signal(Signal::NewLine);
+                        first = false;
+                    }
+                    items.extend(gen_node(child, context));
+                }
+                _ => {}
             }
-            _ => {}
+        }
+
+        items.push_signal(Signal::NewLine);
+        items.push_signal(Signal::FinishIndent);
+    } else {
+        // Compact format: inline
+        let mut first = true;
+
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "{" | "}" => {}
+                "," => {
+                    items.push_string(",".to_string());
+                    items.extend(helpers::gen_space());
+                }
+                _ if child.is_named() => {
+                    if first {
+                        // No leading space for compact initializers
+                    }
+                    items.extend(gen_node(child, context));
+                    first = false;
+                }
+                _ => {}
+            }
         }
     }
 
