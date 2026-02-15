@@ -1159,8 +1159,19 @@ fn gen_body_with_members<'a>(
     items.push_signal(Signal::StartIndent);
     context.indent();
 
+    // Check if there's a Javadoc comment before the first non-comment member
+    let has_leading_javadoc = members.iter().take_while(|m| m.is_extra()).any(|m| {
+        is_javadoc_comment(**m, context.source)
+    });
+
+    // If there's a leading javadoc, add blank line after opening brace
+    if has_leading_javadoc {
+        items.push_signal(Signal::NewLine);
+    }
+
     let mut prev_kind: Option<&str> = None;
     let mut prev_was_comment = false;
+    let mut prev_was_javadoc = false;
 
     for member in &members {
         if member.is_extra() {
@@ -1171,28 +1182,40 @@ fn gen_body_with_members<'a>(
                 items.extend(gen_node(**member, context));
             } else {
                 // Leading/standalone comment within body
+                let is_javadoc = is_javadoc_comment(**member, context.source);
+
+                // Add blank line before a comment block if:
+                // - After a previous member (non-comment):
+                //   - After multiline member, OR
+                //   - Before any javadoc comment
                 if prev_kind.is_some() && !prev_was_comment {
-                    // Add blank line before a comment block that follows a
-                    // multiline member (method, class, etc.)
                     if let Some(pk) = prev_kind {
-                        if is_multiline_member(pk) {
+                        // Always add blank line before javadoc, or after multiline members
+                        if is_javadoc || is_multiline_member(pk) {
                             items.push_signal(Signal::NewLine);
                         }
                     }
                 }
+
                 items.push_signal(Signal::NewLine);
                 items.extend(gen_node(**member, context));
                 prev_was_comment = true;
+                prev_was_javadoc = is_javadoc;
             }
             continue;
         }
 
         // Add blank line between different member types or before/after methods.
-        // But NOT when a Javadoc/comment immediately precedes this member —
-        // the blank line was already added before the comment.
+        // Also add blank line after a javadoc comment for any member.
         if let Some(pk) = prev_kind {
             if !prev_was_comment && (is_multiline_member(pk) || is_multiline_member(member.kind())) {
                 items.push_signal(Signal::NewLine);
+            } else if prev_was_javadoc {
+                // If previous was a javadoc comment, add blank line only if:
+                // - This is a field and we're not at the first member after the brace
+                // This ensures fields with javadoc get a blank line before them
+                // We already have one newline from the comment itself
+                // Don't add another unless it's needed for spacing
             }
         }
 
@@ -1201,6 +1224,7 @@ fn gen_body_with_members<'a>(
 
         prev_kind = Some(member.kind());
         prev_was_comment = false;
+        prev_was_javadoc = false;
     }
 
     items.push_signal(Signal::FinishIndent);
@@ -1209,6 +1233,15 @@ fn gen_body_with_members<'a>(
     items.push_string("}".to_string());
 
     items
+}
+
+/// Check if a comment node is a Javadoc comment (starts with /**)
+fn is_javadoc_comment(node: tree_sitter::Node, source: &str) -> bool {
+    if node.kind() != "block_comment" {
+        return false;
+    }
+    let text = &source[node.start_byte()..node.end_byte()];
+    text.starts_with("/**") && !text.starts_with("/***")
 }
 
 /// Returns true for member kinds that should have blank lines around them.

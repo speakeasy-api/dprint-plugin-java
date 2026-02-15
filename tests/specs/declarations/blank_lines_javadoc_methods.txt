@@ -1,0 +1,18 @@
+== input ==
+public class Foo {
+    private int x;
+
+    /** Gets x */
+    public int getX() {
+        return x;
+    }
+}
+== output ==
+public class Foo {
+    private int x;
+
+    /** Gets x */
+    public int getX() {
+        return x;
+    }
+}

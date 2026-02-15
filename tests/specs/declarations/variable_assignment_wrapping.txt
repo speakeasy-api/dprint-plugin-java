@@ -1,0 +1,12 @@
+== input ==
+public class Test {
+    void test() {
+        int x = 1;
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        int x = 1;
+    }
+}

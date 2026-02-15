@@ -1,0 +1,11 @@
+== input ==
+public class Foo {
+    /** First field */
+    private int x;
+}
+== output ==
+public class Foo {
+
+    /** First field */
+    private int x;
+}

@@ -820,3 +820,23 @@ fn spec_file_instance_initializer() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/instance_initializer.txt"));
 }
 
+#[test]
+fn spec_file_blank_lines_import_to_class() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/blank_lines_import_to_class.txt"));
+}
+
+#[test]
+fn spec_file_blank_lines_after_class_brace() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/blank_lines_after_class_brace.txt"));
+}
+
+#[test]
+fn spec_file_blank_lines_javadoc_fields() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/blank_lines_javadoc_fields.txt"));
+}
+
+#[test]
+fn spec_file_blank_lines_javadoc_methods() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/blank_lines_javadoc_methods.txt"));
+}
+

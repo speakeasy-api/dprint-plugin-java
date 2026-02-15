@@ -1,0 +1,12 @@
+== input ==
+public class Foo {
+    {
+        init();
+    }
+}
+== output ==
+public class Foo {
+    {
+        init();
+    }
+}
