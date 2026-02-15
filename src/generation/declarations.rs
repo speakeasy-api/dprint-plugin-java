@@ -414,6 +414,30 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
     width
 }
 
+/// Estimate the prefix width before a formal_parameters or argument_list node.
+/// This is the text that appears on the same line before the opening `(`:
+/// - For methods: modifiers + return type + method name
+/// - For constructors: modifiers + constructor name
+/// - For method invocations: receiver + method name
+/// - For object creation: `new` + type name
+///
+/// Only considers the last line of the prefix to handle multiline modifiers/annotations.
+fn estimate_prefix_width(node: tree_sitter::Node, source: &str) -> usize {
+    let parent = match node.parent() {
+        Some(p) => p,
+        None => return 0,
+    };
+
+    // Extract the text from the start of the parent to the start of this node
+    let prefix_text = &source[parent.start_byte()..node.start_byte()];
+
+    // Only consider the last line to handle multiline modifiers/annotations
+    let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
+
+    // Trim and return the length
+    last_line.trim_start().len()
+}
+
 /// Format a constructor declaration.
 ///
 /// Handles wrapping of the throws clause onto a continuation line when the
@@ -892,8 +916,12 @@ pub fn gen_formal_parameters<'a>(
         flat + if i < params.len() - 1 { 2 } else { 0 }
     }).sum();
     let indent_width = context.indent_level() * context.config.indent_width as usize;
+
+    // Account for the prefix width (method name, return type, etc.) on the same line
+    let prefix_width = estimate_prefix_width(node, context.source);
+
     let should_wrap = params.len() > 1
-        && indent_width + param_text_width + 2 > context.config.line_width as usize;
+        && indent_width + prefix_width + param_text_width + 2 >= context.config.line_width as usize;
 
     items.push_string("(".to_string());
 
@@ -1096,10 +1124,12 @@ pub fn gen_argument_list<'a>(
     }).sum();
 
     // Use indent level (stable across passes) + arg_list_text_width for wrap decision.
-    // We don't know the exact column, so conservatively estimate with indent + some margin.
+    // Account for the prefix width (receiver, method name, etc.) on the same line.
     let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let prefix_width = estimate_prefix_width(node, context.source);
+
     let should_wrap = args.len() > 1
-        && indent_width + args_flat_width + 2 > context.config.line_width as usize;
+        && indent_width + prefix_width + args_flat_width + 2 >= context.config.line_width as usize;
 
     items.push_string("(".to_string());
 

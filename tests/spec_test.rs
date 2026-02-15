@@ -402,6 +402,11 @@ fn spec_file_method_params() {
 }
 
 #[test]
+fn spec_file_method_params_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_params_wrapping.txt"));
+}
+
+#[test]
 fn spec_file_method_throws() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_throws.txt"));
 }

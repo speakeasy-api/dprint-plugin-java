@@ -1,0 +1,48 @@
+== input ==
+public class Test {
+    public void shortMethod(int a, int b) {
+        return;
+    }
+
+    public VeryLongReturnTypeName veryLongMethodNameThatMakesTheLineTooLong(String parameter1, String parameter2, String parameter3) {
+        return null;
+    }
+
+    public SomeReturnType anotherLongMethodWithManyParameters(int parameter1, int parameter2, int parameter3, int parameter4, int parameter5) {
+        return null;
+    }
+
+    public Constructor(String veryLongParameterName1, String veryLongParameterName2, String veryLongParameterName3, String veryLongParameterName4) {
+        super();
+    }
+}
+== output ==
+public class Test {
+    public void shortMethod(int a, int b) {
+        return;
+    }
+
+    public VeryLongReturnTypeName veryLongMethodNameThatMakesTheLineTooLong(
+            String parameter1,
+            String parameter2,
+            String parameter3) {
+        return null;
+    }
+
+    public SomeReturnType anotherLongMethodWithManyParameters(
+            int parameter1,
+            int parameter2,
+            int parameter3,
+            int parameter4,
+            int parameter5) {
+        return null;
+    }
+
+    public Constructor(
+            String veryLongParameterName1,
+            String veryLongParameterName2,
+            String veryLongParameterName3,
+            String veryLongParameterName4) {
+        super();
+    }
+}
