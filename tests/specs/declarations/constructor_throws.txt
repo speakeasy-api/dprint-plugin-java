@@ -1,0 +1,22 @@
+== input ==
+public class Test {
+    public Test() throws IOException, SQLException {
+        initialize();
+    }
+
+    public Test(String param1, String param2) throws IOException {
+        this.param1 = param1;
+        this.param2 = param2;
+    }
+}
+== output ==
+public class Test {
+    public Test() throws IOException, SQLException {
+        initialize();
+    }
+
+    public Test(String param1, String param2) throws IOException {
+        this.param1 = param1;
+        this.param2 = param2;
+    }
+}

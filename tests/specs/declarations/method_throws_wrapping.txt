@@ -1,0 +1,30 @@
+== input ==
+public class Test {
+    public void veryLongMethodNameThatWillDefinitelyCauseWrapping() throws IOException, SQLException, InterruptedException {
+        performAction();
+    }
+
+    public SomeReturnType anotherLongMethodNameWithManyParameters(String param1, String param2) throws IOException, JacksonException {
+        return null;
+    }
+
+    public void shortMethod() throws IOException {
+        doWork();
+    }
+}
+== output ==
+public class Test {
+    public void veryLongMethodNameThatWillDefinitelyCauseWrapping()
+            throws IOException, SQLException, InterruptedException {
+        performAction();
+    }
+
+    public SomeReturnType anotherLongMethodNameWithManyParameters(String param1, String param2)
+            throws IOException, JacksonException {
+        return null;
+    }
+
+    public void shortMethod() throws IOException {
+        doWork();
+    }
+}

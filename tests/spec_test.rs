@@ -407,6 +407,11 @@ fn spec_file_method_throws() {
 }
 
 #[test]
+fn spec_file_method_throws_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_throws_wrapping.txt"));
+}
+
+#[test]
 fn spec_file_method_generic() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/method_generic.txt"));
 }
@@ -424,6 +429,11 @@ fn spec_file_field_with_init() {
 #[test]
 fn spec_file_constructor_basic() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/constructor_basic.txt"));
+}
+
+#[test]
+fn spec_file_constructor_throws() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/constructor_throws.txt"));
 }
 
 #[test]

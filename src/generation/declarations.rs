@@ -415,6 +415,9 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
 }
 
 /// Format a constructor declaration.
+///
+/// Handles wrapping of the throws clause onto a continuation line when the
+/// constructor signature would exceed `line_width`.
 pub fn gen_constructor_declaration<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -422,6 +425,11 @@ pub fn gen_constructor_declaration<'a>(
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
     let mut need_space = false;
+
+    // Pre-calculate: estimate constructor signature line width to decide throws wrapping.
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let sig_width = estimate_method_sig_width(node, context.source);
+    let wrap_throws = indent_width + sig_width > context.config.line_width as usize;
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -448,8 +456,17 @@ pub fn gen_constructor_declaration<'a>(
                 need_space = true;
             }
             "throws" => {
-                items.extend(helpers::gen_space());
-                items.extend(gen_throws(child, context));
+                if wrap_throws {
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::NewLine);
+                    items.extend(gen_throws(child, context));
+                    items.push_signal(Signal::FinishIndent);
+                    items.push_signal(Signal::FinishIndent);
+                } else {
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_throws(child, context));
+                }
                 need_space = true;
             }
             "constructor_body" => {
@@ -915,6 +932,7 @@ fn gen_throws<'a>(
 ) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
+    let mut first_type = true;
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -924,7 +942,11 @@ fn gen_throws<'a>(
                 items.extend(helpers::gen_space());
             }
             _ if child.is_named() => {
-                items.extend(helpers::gen_space());
+                // Only add space before first type (after "throws")
+                if first_type {
+                    items.extend(helpers::gen_space());
+                    first_type = false;
+                }
                 items.extend(gen_node(child, context));
             }
             _ => {}

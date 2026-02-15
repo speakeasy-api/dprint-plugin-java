@@ -6,7 +6,7 @@ public class Test {
 }
 == output ==
 public class Test {
-    public void riskyOperation() throws IOException,  SQLException {
+    public void riskyOperation() throws IOException, SQLException {
         performAction();
     }
 }
