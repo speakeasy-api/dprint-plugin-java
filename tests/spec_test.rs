@@ -477,8 +477,23 @@ fn spec_file_annotation_basic() {
 }
 
 #[test]
+fn spec_file_annotation_placement() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/annotation_placement.txt"));
+}
+
+#[test]
 fn spec_file_varargs() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/varargs.txt"));
+}
+
+#[test]
+fn spec_file_argument_list_wrapping() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/argument_list_wrapping.txt"));
+}
+
+#[test]
+fn spec_file_argument_list_pjf_parity() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/argument_list_pjf_parity.txt"));
 }
 
 #[test]
@@ -725,6 +740,12 @@ fn spec_file_array_initializer_comments() {
 #[test]
 fn spec_builder_pattern_wrapping() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/builder_pattern_wrapping.txt"));
+}
+
+// ---- Comments ----
+#[test]
+fn spec_file_trailing_whitespace() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/comments/trailing_whitespace.txt"));
 }
 
 // ---- Instability debugging ----

@@ -77,9 +77,13 @@ fn gen_block_comment_preserved(text: &str) -> PrintItems {
         // Strip trailing \r for CRLF files
         let line = line.strip_suffix('\r').unwrap_or(line);
 
+        // Strip trailing whitespace from the line, handling both end-of-line
+        // spaces and spaces before the closing */
+        let line = strip_comment_line_trailing_ws(line);
+
         if i == 0 {
-            // First line: emit as-is
-            items.push_string(line.to_string());
+            // First line: emit as-is (already trimmed)
+            items.push_string(line.clone());
         } else {
             // Continuation lines: trim leading whitespace and add a single
             // space indent so `*` aligns under `/*`
@@ -99,6 +103,27 @@ fn gen_block_comment_preserved(text: &str) -> PrintItems {
     }
 
     items
+}
+
+/// Strip trailing whitespace from a block comment line.
+/// This handles both trailing spaces at the end of the line and trailing
+/// spaces before the closing */ delimiter. Preserves a single space before */
+/// if the comment had any non-whitespace content before it.
+fn strip_comment_line_trailing_ws(line: &str) -> String {
+    // First, trim any trailing whitespace from the end
+    let line = line.trim_end();
+
+    // If the line ends with */, check for trailing spaces before it
+    if let Some(rest) = line.strip_suffix("*/") {
+        let rest_trimmed = rest.trim_end();
+        // If there's content before the */, preserve a single space
+        if !rest_trimmed.is_empty() && !rest_trimmed.ends_with(char::is_whitespace) {
+            return format!("{} */", rest_trimmed);
+        }
+        return format!("{}*/", rest_trimmed);
+    }
+
+    line.to_string()
 }
 
 /// Format a Javadoc comment with tag reflowing.
