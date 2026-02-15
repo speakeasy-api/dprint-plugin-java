@@ -265,17 +265,16 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
         // But skip this if the current child is a comment (comments handle their own spacing)
         // Also skip if previous was a line comment (line comments are transparent for spacing)
         // Block comments still need blank lines after them
-        if let Some(pk) = prev_kind {
-            if !child.is_extra() && pk != "line_comment" {
+        if let Some(pk) = prev_kind
+            && !child.is_extra() && pk != "line_comment" {
                 let needs_double_newline = (pk == "package_declaration")
-                    || (pk == "import_declaration" && child.kind() != "import_declaration")
-                    || (pk != "import_declaration" && pk != "package_declaration");
+                    || pk != "import_declaration"
+                    || child.kind() != "import_declaration";
 
                 if needs_double_newline {
                     items.push_signal(Signal::NewLine);
                 }
             }
-        }
         // Note: if prev_was_comment, the comment already includes a trailing newline,
         // so we don't need to add another one here
 
@@ -284,11 +283,10 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
         prev_was_comment = false;
 
         // Add newline after each top-level declaration
-        if i < non_import_children.len() - 1 {
-            if non_import_children[i + 1..].iter().any(|c| !c.is_extra()) {
+        if i < non_import_children.len() - 1
+            && non_import_children[i + 1..].iter().any(|c| !c.is_extra()) {
                 items.push_signal(Signal::NewLine);
             }
-        }
     }
 
     // Ensure file ends with a newline

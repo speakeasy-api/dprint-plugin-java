@@ -266,6 +266,7 @@ pub fn gen_method_invocation<'a>(
     }
 
     // Flatten the chain into (root, [(method_invocation_node, method_name_node, type_args, arg_list, trailing_comment), ...])
+    #[allow(clippy::type_complexity)]
     let mut segments: Vec<(
         tree_sitter::Node<'a>,
         tree_sitter::Node<'a>,
@@ -432,6 +433,7 @@ fn gen_method_invocation_simple<'a>(
 /// Check if any argument list in a chain segment contains a lambda with a block body.
 /// This is used to force chain wrapping when lambdas with block bodies are present,
 /// since the multi-line block content would produce incorrect indentation on a single line.
+#[allow(clippy::type_complexity)]
 fn chain_has_lambda_block(
     segments: &[(
         tree_sitter::Node,
@@ -442,11 +444,10 @@ fn chain_has_lambda_block(
     )],
 ) -> bool {
     for (_, _, _, arg_list, _) in segments {
-        if let Some(al) = arg_list {
-            if arg_list_has_lambda_block(*al) {
+        if let Some(al) = arg_list
+            && arg_list_has_lambda_block(*al) {
                 return true;
             }
-        }
     }
     false
 }
@@ -513,6 +514,7 @@ fn extract_trailing_line_comment<'a>(node: tree_sitter::Node<'a>) -> Option<tree
     None
 }
 
+#[allow(clippy::type_complexity)]
 fn flatten_chain<'a>(
     node: tree_sitter::Node<'a>,
     segments: &mut Vec<(

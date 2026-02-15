@@ -51,11 +51,10 @@ pub fn gen_block_comment(node: tree_sitter::Node, context: &FormattingContext) -
     let text = &context.source[node.start_byte()..node.end_byte()];
 
     // Check if this is a Javadoc comment
-    if text.starts_with("/**") && !text.starts_with("/***") {
-        if context.config.format_javadoc {
+    if text.starts_with("/**") && !text.starts_with("/***")
+        && context.config.format_javadoc {
             return gen_javadoc(node, context, context.config);
         }
-    }
 
     // For non-Javadoc block comments, preserve content but normalize
     // indentation of continuation lines to align with the opening `/*`.

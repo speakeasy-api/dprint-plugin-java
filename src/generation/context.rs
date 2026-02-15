@@ -65,7 +65,7 @@ impl<'a> FormattingContext<'a> {
 
     /// Check if the given node kind is in the parent stack.
     pub fn has_ancestor(&self, kind: &'static str) -> bool {
-        self.parent_stack.iter().any(|&k| k == kind)
+        self.parent_stack.contains(&kind)
     }
 }
 
