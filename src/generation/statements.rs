@@ -83,21 +83,10 @@ pub fn gen_local_variable_declaration<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                items.extend(declarations::gen_modifiers(child, context));
-                let mut mc = child.walk();
-                let has_ann = child.children(&mut mc).any(|c| {
-                    c.kind() == "marker_annotation" || c.kind() == "annotation"
-                });
-                let mut mc2 = child.walk();
-                let has_kw = child.children(&mut mc2).any(|c| {
-                    c.kind() != "marker_annotation" && c.kind() != "annotation"
-                });
-                if has_ann && !has_kw {
-                    items.push_signal(Signal::NewLine);
-                    need_space = false;
-                } else {
-                    need_space = true;
-                }
+                let (modifier_items, ends_with_newline) = declarations::gen_modifiers(child, context);
+                items.extend(modifier_items);
+                // Only need space if modifiers didn't end with newline
+                need_space = !ends_with_newline;
             }
             // Type nodes
             "void_type" | "integral_type" | "floating_point_type" | "boolean_type"

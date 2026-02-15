@@ -1,0 +1,30 @@
+== input ==
+public class SDK {
+    private static final Headers headers = Headers.EMPTY;
+    private final AsyncSDK asyncSDK;
+    private SDKConfiguration config;
+
+    public SDK() {
+        this.asyncSDK = new AsyncSDK();
+    }
+
+    public void method1() {}
+    public void method2() {}
+}
+== output ==
+public class SDK {
+
+    private static final Headers headers = Headers.EMPTY;
+
+    private final AsyncSDK asyncSDK;
+
+    private SDKConfiguration config;
+
+    public SDK() {
+        this.asyncSDK = new AsyncSDK();
+    }
+
+    public void method1() {}
+
+    public void method2() {}
+}

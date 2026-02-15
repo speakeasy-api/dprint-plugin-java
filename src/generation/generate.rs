@@ -226,30 +226,45 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                         .is_some_and(|pk| {
                             pk != "line_comment" && pk != "block_comment"
                         });
+                    let is_block_comment = child.kind() == "block_comment";
+
                     if prev_is_different_section && !prev_was_comment {
+                        // Add blank line before comment (previous statement's newline + this newline = blank line)
+                        items.push_signal(Signal::NewLine);
+                        // For block comments (not line comments), add an extra newline
+                        if is_block_comment {
+                            items.push_signal(Signal::NewLine);
+                        }
+                    } else if prev_was_comment {
+                        // Separate consecutive comments
                         items.push_signal(Signal::NewLine);
                     }
-                    items.push_signal(Signal::NewLine);
+                    // Don't add newline here - the previous statement already ended with one
                 }
                 items.extend(gen_node(*child, context));
+                prev_kind = Some(child.kind());
                 prev_was_comment = true;
             }
             continue;
         }
 
         // Add blank lines between different top-level sections
+        // But skip this if the current child is a comment (comments handle their own spacing)
+        // Also skip if previous was a line comment (line comments are transparent for spacing)
+        // Block comments still need blank lines after them
         if let Some(pk) = prev_kind {
-            let needs_double_newline = (pk == "package_declaration")
-                || (pk == "import_declaration" && child.kind() != "import_declaration")
-                || (pk != "import_declaration" && pk != "package_declaration");
+            if !child.is_extra() && pk != "line_comment" {
+                let needs_double_newline = (pk == "package_declaration")
+                    || (pk == "import_declaration" && child.kind() != "import_declaration")
+                    || (pk != "import_declaration" && pk != "package_declaration");
 
-            if needs_double_newline {
-                items.push_signal(Signal::NewLine);
+                if needs_double_newline {
+                    items.push_signal(Signal::NewLine);
+                }
             }
-        } else if prev_was_comment {
-            // A comment preceded this first non-comment node — add newline
-            items.push_signal(Signal::NewLine);
         }
+        // Note: if prev_was_comment, the comment already includes a trailing newline,
+        // so we don't need to add another one here
 
         items.extend(gen_node(*child, context));
         prev_kind = Some(child.kind());

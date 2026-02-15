@@ -1,0 +1,30 @@
+== input ==
+class Test {
+    void test() {
+        contextRunner.withUserConfiguration(CustomConfig.class).withPropertyValues("key=value").run(ctx -> {
+            assertThat(ctx).isNotNull();
+        });
+
+        SDK.builder().serverURL("http://localhost").build();
+
+        new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(Config.class)).run(context -> {
+            // test
+        });
+    }
+}
+== output ==
+class Test {
+
+    void test() {
+        contextRunner.withUserConfiguration(CustomConfig.class)
+                .withPropertyValues("key=value")
+                .run(ctx -> {
+                    assertThat(ctx).isNotNull();
+                });
+        SDK.builder().serverURL("http://localhost").build();
+        new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(Config.class)).run(context -> {
+            // test
+
+        });
+    }
+}

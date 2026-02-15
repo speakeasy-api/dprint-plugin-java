@@ -1,0 +1,45 @@
+== input ==
+class Test {
+    @Test void shouldCreateRetryConfig() {
+        // test body
+    }
+
+    @Override public String toString() {
+        return "test";
+    }
+
+    @SuppressWarnings("unchecked") private List<String> items;
+
+    @Deprecated @Override public void legacy() {
+    }
+
+    void method() {
+        @SuppressWarnings("unchecked") List<String> local = new ArrayList<>();
+    }
+}
+== output ==
+class Test {
+
+    @Test
+    void shouldCreateRetryConfig() {
+        // test body
+
+    }
+
+    @Override
+    public String toString() {
+        return "test";
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> items;
+
+    @Deprecated
+    @Override
+    public void legacy() {}
+
+    void method() {
+        @SuppressWarnings("unchecked")
+        List<String> local = new ArrayList<>();
+    }
+}

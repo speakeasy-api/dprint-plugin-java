@@ -1,0 +1,22 @@
+== input ==
+class Test {
+    // PJF keeps this on one line after the opening paren (bin-packing style)
+    void test1() {
+        return new SDKException(
+                message,
+                rawResponse.statusCode(),
+                Utils.extractByteArrayFromBody(rawResponse),
+                rawResponse,
+                cause);
+    }
+}
+== output ==
+class Test {
+
+    // PJF keeps this on one line after the opening paren (bin-packing style)
+
+    void test1() {
+        return new SDKException(
+                message, rawResponse.statusCode(), Utils.extractByteArrayFromBody(rawResponse), rawResponse, cause);
+    }
+}

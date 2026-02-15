@@ -85,8 +85,10 @@ pub fn gen_class_declaration<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                items.extend(gen_modifiers(child, context));
-                need_space = true;
+                let (modifier_items, ends_with_newline) = gen_modifiers(child, context);
+                items.extend(modifier_items);
+                // Only need space if modifiers didn't end with newline
+                need_space = !ends_with_newline;
             }
             "class" => {
                 if need_space {
@@ -163,8 +165,10 @@ pub fn gen_interface_declaration<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                items.extend(gen_modifiers(child, context));
-                need_space = true;
+                let (modifier_items, ends_with_newline) = gen_modifiers(child, context);
+                items.extend(modifier_items);
+                // Only need space if modifiers didn't end with newline
+                need_space = !ends_with_newline;
             }
             "interface" => {
                 if need_space {
@@ -227,8 +231,10 @@ pub fn gen_enum_declaration<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                items.extend(gen_modifiers(child, context));
-                need_space = true;
+                let (modifier_items, ends_with_newline) = gen_modifiers(child, context);
+                items.extend(modifier_items);
+                // Only need space if modifiers didn't end with newline
+                need_space = !ends_with_newline;
             }
             "enum" => {
                 if need_space {
@@ -287,8 +293,10 @@ pub fn gen_record_declaration<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                items.extend(gen_modifiers(child, context));
-                need_space = true;
+                let (modifier_items, ends_with_newline) = gen_modifiers(child, context);
+                items.extend(modifier_items);
+                // Only need space if modifiers didn't end with newline
+                need_space = !ends_with_newline;
             }
             "record" => {
                 if need_space {
@@ -346,8 +354,10 @@ pub fn gen_annotation_type_declaration<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                items.extend(gen_modifiers(child, context));
-                need_space = true;
+                let (modifier_items, ends_with_newline) = gen_modifiers(child, context);
+                items.extend(modifier_items);
+                // Only need space if modifiers didn't end with newline
+                need_space = !ends_with_newline;
             }
             "@interface" => {
                 if need_space {
@@ -396,8 +406,10 @@ pub fn gen_method_declaration<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                items.extend(gen_modifiers(child, context));
-                need_space = true;
+                let (modifier_items, ends_with_newline) = gen_modifiers(child, context);
+                items.extend(modifier_items);
+                // Only need space if modifiers didn't end with newline
+                need_space = !ends_with_newline;
             }
             "type_parameters" => {
                 if need_space {
@@ -557,8 +569,10 @@ pub fn gen_constructor_declaration<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                items.extend(gen_modifiers(child, context));
-                need_space = true;
+                let (modifier_items, ends_with_newline) = gen_modifiers(child, context);
+                items.extend(modifier_items);
+                // Only need space if modifiers didn't end with newline
+                need_space = !ends_with_newline;
             }
             "type_parameters" => {
                 if need_space {
@@ -616,8 +630,10 @@ pub fn gen_field_declaration<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                items.extend(gen_modifiers(child, context));
-                need_space = true;
+                let (modifier_items, ends_with_newline) = gen_modifiers(child, context);
+                items.extend(modifier_items);
+                // Only need space if modifiers didn't end with newline
+                need_space = !ends_with_newline;
             }
             // Type nodes
             "void_type" | "integral_type" | "floating_point_type" | "boolean_type"
@@ -674,10 +690,13 @@ const JLS_MODIFIER_ORDER: &[&str] = &[
 ///
 /// Annotations are placed on their own line before keyword modifiers.
 /// Keyword modifiers are reordered to JLS canonical order.
+///
+/// Returns (items, ends_with_newline) where ends_with_newline is true
+/// if the output ends with a newline (i.e., has annotations but no keywords).
 pub fn gen_modifiers<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
-) -> PrintItems {
+) -> (PrintItems, bool) {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
     let children: Vec<_> = node.children(&mut cursor).collect();
@@ -704,10 +723,8 @@ pub fn gen_modifiers<'a>(
     // Emit annotations, each on their own line
     for ann in &annotations {
         items.extend(gen_node(**ann, context));
-        if !keywords.is_empty() || ann != annotations.last().unwrap() {
-            // Newline after each annotation (before keywords or next annotation)
-            items.push_signal(Signal::NewLine);
-        }
+        // Always add newline after each annotation
+        items.push_signal(Signal::NewLine);
     }
 
     // Emit keyword modifiers on a single line
@@ -720,7 +737,9 @@ pub fn gen_modifiers<'a>(
         first = false;
     }
 
-    items
+    // Return true if we ended with a newline (annotations but no keywords)
+    let ends_with_newline = !annotations.is_empty() && keywords.is_empty();
+    (items, ends_with_newline)
 }
 
 /// Format type parameters: `<T, U extends Comparable<U>>`
@@ -993,8 +1012,11 @@ fn gen_enum_constant<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "modifiers" => {
-                items.extend(gen_modifiers(child, context));
-                items.extend(helpers::gen_space());
+                let (modifier_items, ends_with_newline) = gen_modifiers(child, context);
+                items.extend(modifier_items);
+                if !ends_with_newline {
+                    items.extend(helpers::gen_space());
+                }
             }
             "identifier" => {
                 items.extend(helpers::gen_node_text(child, context.source));
@@ -1258,6 +1280,9 @@ fn estimate_decl_flat_width(node: tree_sitter::Node, source: &str) -> usize {
 /// Wraps with 8-space continuation indent when the argument list would
 /// exceed `line_width`. Uses stable width estimation based on `context.indent_level()`
 /// to avoid instability between formatting passes.
+///
+/// When wrapping, uses PJF-style "bin-packing": tries to fit all args on one
+/// continuation line first, only putting each arg on its own line if they don't fit.
 pub fn gen_argument_list<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -1280,12 +1305,43 @@ pub fn gen_argument_list<'a>(
     let indent_width = context.indent_level() * context.config.indent_width as usize;
     let prefix_width = estimate_prefix_width(node, context.source);
 
-    let should_wrap = args.len() > 1
-        && indent_width + prefix_width + args_flat_width + 2 >= context.config.line_width as usize;
+    // Check if args fit on the same line as the prefix
+    let fits_on_one_line = args.len() <= 1
+        || indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize;
+
+    // If not, check if args fit on ONE continuation line (8-space indent = 2 levels of indent_width)
+    let continuation_indent = indent_width + (2 * context.config.indent_width as usize);
+    let fits_on_continuation_line = continuation_indent + args_flat_width + 1 < context.config.line_width as usize;
 
     items.push_string("(".to_string());
 
-    if should_wrap {
+    if fits_on_one_line {
+        // Keep all args on the same line as the opening paren
+        for (i, arg) in args.iter().enumerate() {
+            items.extend(gen_node(**arg, context));
+            if i < args.len() - 1 {
+                items.push_string(",".to_string());
+                items.extend(helpers::gen_space());
+            }
+        }
+        items.push_string(")".to_string());
+    } else if fits_on_continuation_line {
+        // Wrap after opening paren, but put all args on ONE continuation line (bin-packing)
+        items.push_signal(Signal::StartIndent);
+        items.push_signal(Signal::StartIndent);
+        items.push_signal(Signal::NewLine);
+        for (i, arg) in args.iter().enumerate() {
+            items.extend(gen_node(**arg, context));
+            if i < args.len() - 1 {
+                items.push_string(",".to_string());
+                items.extend(helpers::gen_space());
+            }
+        }
+        items.push_string(")".to_string());
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
+    } else {
+        // Args don't fit on one continuation line, put each arg on its own line
         items.push_signal(Signal::StartIndent);
         items.push_signal(Signal::StartIndent);
         for (i, arg) in args.iter().enumerate() {
@@ -1298,15 +1354,6 @@ pub fn gen_argument_list<'a>(
         items.push_string(")".to_string());
         items.push_signal(Signal::FinishIndent);
         items.push_signal(Signal::FinishIndent);
-    } else {
-        for (i, arg) in args.iter().enumerate() {
-            items.extend(gen_node(**arg, context));
-            if i < args.len() - 1 {
-                items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
-            }
-        }
-        items.push_string(")".to_string());
     }
 
     items

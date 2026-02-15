@@ -1,0 +1,82 @@
+== input ==
+class Test {
+    // Short args that should stay on one line (under 100 chars)
+    void test1() {
+        return new SDKException(message, rawResponse.statusCode(), Utils.extractByteArray(rawResponse), rawResponse, cause);
+    }
+
+    // Very long args that should wrap each on own line
+    void test2() {
+        return veryLongMethodName(veryLongArgumentOne, veryLongArgumentTwo, veryLongArgumentThree, veryLongArgumentFour, veryLongArgumentFive);
+    }
+
+    // Constructor with 5 short args - keep on one line if fits
+    void test3() {
+        Foo f = new Foo(a, b, c, d, e);
+    }
+
+    // Method call that fits exactly at line width
+    void test4() {
+        someMethod(arg1, arg2, arg3, arg4);
+    }
+
+    // Very long method and arg names - but still fits on continuation line
+    void test5() {
+        veryLongMethodNameThatTakesUpLotsOfSpace(veryLongArgumentNameOne, veryLongArgumentNameTwo, veryLongArgumentNameThree, veryLongArgumentNameFour);
+    }
+
+    // Extremely long args that exceed continuation line - wrap each
+    void test6() {
+        method(veryLongArgumentNameNumberOne, veryLongArgumentNameNumberTwo, veryLongArgumentNameNumberThree, veryLongArgumentNameNumberFour, veryLongArgumentNameNumberFive);
+    }
+}
+== output ==
+class Test {
+
+    // Short args that should stay on one line (under 100 chars)
+
+    void test1() {
+        return new SDKException(message, rawResponse.statusCode(), Utils.extractByteArray(rawResponse), rawResponse, cause);
+    }
+
+    // Very long args that should wrap each on own line
+
+    void test2() {
+        return veryLongMethodName(
+                veryLongArgumentOne,
+                veryLongArgumentTwo,
+                veryLongArgumentThree,
+                veryLongArgumentFour,
+                veryLongArgumentFive);
+    }
+
+    // Constructor with 5 short args - keep on one line if fits
+
+    void test3() {
+        Foo f = new Foo(a, b, c, d, e);
+    }
+
+    // Method call that fits exactly at line width
+
+    void test4() {
+        someMethod(arg1, arg2, arg3, arg4);
+    }
+
+    // Very long method and arg names - but still fits on continuation line
+
+    void test5() {
+        veryLongMethodNameThatTakesUpLotsOfSpace(
+                veryLongArgumentNameOne, veryLongArgumentNameTwo, veryLongArgumentNameThree, veryLongArgumentNameFour);
+    }
+
+    // Extremely long args that exceed continuation line - wrap each
+
+    void test6() {
+        method(
+                veryLongArgumentNameNumberOne,
+                veryLongArgumentNameNumberTwo,
+                veryLongArgumentNameNumberThree,
+                veryLongArgumentNameNumberFour,
+                veryLongArgumentNameNumberFive);
+    }
+}

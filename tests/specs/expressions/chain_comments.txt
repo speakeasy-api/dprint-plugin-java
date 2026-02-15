@@ -1,0 +1,8 @@
+== input ==
+return Helpers.copy(request) //
+        .setHeader("Authorization", "Bearer " + token) //
+        .build();
+== output ==
+return Helpers.copy(request) //
+        .setHeader("Authorization", "Bearer " + token) //
+        .build();

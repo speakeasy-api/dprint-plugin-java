@@ -265,8 +265,8 @@ pub fn gen_method_invocation<'a>(
         return gen_method_invocation_simple(node, context);
     }
 
-    // Flatten the chain into (root, [(method_invocation_node, method_name_node, type_args, arg_list), ...])
-    let mut segments: Vec<(tree_sitter::Node<'a>, tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)> = Vec::new();
+    // Flatten the chain into (root, [(method_invocation_node, method_name_node, type_args, arg_list, trailing_comment), ...])
+    let mut segments: Vec<(tree_sitter::Node<'a>, tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)> = Vec::new();
     let root = flatten_chain(node, &mut segments);
 
     // Force wrapping if any segment has a lambda with a block body
@@ -277,9 +277,9 @@ pub fn gen_method_invocation<'a>(
     let root_text = &context.source[root.start_byte()..root.end_byte()];
     let root_width = collapse_whitespace(root_text).len();
 
-    // Sum up each segment: . + name + type_args + arg_list
+    // Sum up each segment: . + name + type_args + arg_list + comment
     let mut segments_width = 0;
-    for (_, name_node, type_args, arg_list) in &segments {
+    for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
         segments_width += 1; // for the '.'
         let name_text = &context.source[name_node.start_byte()..name_node.end_byte()];
         segments_width += name_text.len();
@@ -293,6 +293,11 @@ pub fn gen_method_invocation<'a>(
             let al_text = &context.source[al.start_byte()..al.end_byte()];
             segments_width += collapse_whitespace(al_text).len();
         }
+
+        if let Some(tc) = trailing_comment {
+            let tc_text = &context.source[tc.start_byte()..tc.end_byte()];
+            segments_width += 1 + tc_text.len(); // space + comment
+        }
     }
 
     let chain_flat_width = root_width + segments_width;
@@ -304,7 +309,7 @@ pub fn gen_method_invocation<'a>(
     if should_wrap {
         // PJF style: keep root + first segment on same line, wrap subsequent segments
         // with 8-space continuation indent (2x indent_width)
-        if let Some((_, name_node, type_args, arg_list)) = segments.first() {
+        if let Some((_, name_node, type_args, arg_list, trailing_comment)) = segments.first() {
             // First segment stays inline with root
             items.push_string(".".to_string());
             if let Some(ta) = type_args {
@@ -314,14 +319,24 @@ pub fn gen_method_invocation<'a>(
             if let Some(al) = arg_list {
                 items.extend(declarations::gen_argument_list(*al, context));
             }
+            // Emit trailing comment if present
+            if let Some(tc) = trailing_comment {
+                items.extend(helpers::gen_space());
+                items.extend(gen_node(*tc, context));
+            }
         }
 
         // Remaining segments wrap with continuation indent
         if segments.len() > 1 {
             items.push_signal(Signal::StartIndent);
             items.push_signal(Signal::StartIndent);
-            for (_, name_node, type_args, arg_list) in &segments[1..] {
-                items.push_signal(Signal::NewLine);
+            let mut prev_had_comment = segments.first().and_then(|(_, _, _, _, tc)| *tc).is_some();
+            for (_, name_node, type_args, arg_list, trailing_comment) in &segments[1..] {
+                // If previous segment had a trailing line comment, it already added a newline,
+                // so we don't need to add another one
+                if !prev_had_comment {
+                    items.push_signal(Signal::NewLine);
+                }
                 items.push_string(".".to_string());
                 if let Some(ta) = type_args {
                     items.extend(gen_node(*ta, context));
@@ -330,13 +345,21 @@ pub fn gen_method_invocation<'a>(
                 if let Some(al) = arg_list {
                     items.extend(declarations::gen_argument_list(*al, context));
                 }
+                // Emit trailing comment if present
+                if let Some(tc) = trailing_comment {
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_node(*tc, context));
+                    prev_had_comment = true;
+                } else {
+                    prev_had_comment = false;
+                }
             }
             items.push_signal(Signal::FinishIndent);
             items.push_signal(Signal::FinishIndent);
         }
     } else {
         // Keep on one line
-        for (_, name_node, type_args, arg_list) in segments {
+        for (_, name_node, type_args, arg_list, trailing_comment) in segments {
             items.push_string(".".to_string());
             if let Some(ta) = type_args {
                 items.extend(gen_node(ta, context));
@@ -344,6 +367,11 @@ pub fn gen_method_invocation<'a>(
             items.extend(helpers::gen_node_text(name_node, context.source));
             if let Some(al) = arg_list {
                 items.extend(declarations::gen_argument_list(al, context));
+            }
+            // Emit trailing comment if present
+            if let Some(tc) = trailing_comment {
+                items.extend(helpers::gen_space());
+                items.extend(gen_node(tc, context));
             }
         }
     }
@@ -398,9 +426,9 @@ fn gen_method_invocation_simple<'a>(
 /// This is used to force chain wrapping when lambdas with block bodies are present,
 /// since the multi-line block content would produce incorrect indentation on a single line.
 fn chain_has_lambda_block(
-    segments: &[(tree_sitter::Node, tree_sitter::Node, Option<tree_sitter::Node>, Option<tree_sitter::Node>)],
+    segments: &[(tree_sitter::Node, tree_sitter::Node, Option<tree_sitter::Node>, Option<tree_sitter::Node>, Option<tree_sitter::Node>)],
 ) -> bool {
-    for (_, _, _, arg_list) in segments {
+    for (_, _, _, arg_list, _) in segments {
         if let Some(al) = arg_list {
             if arg_list_has_lambda_block(*al) {
                 return true;
@@ -451,9 +479,30 @@ fn chain_depth(node: tree_sitter::Node) -> usize {
 /// Returns the root object node (the non-method-invocation at the bottom).
 /// Segments are collected in call order (first call first).
 /// Each segment is (invocation_node, name_node, type_args, arg_list).
+/// Extract trailing line comment that appears on the same line as the given node
+fn extract_trailing_line_comment<'a>(node: tree_sitter::Node<'a>) -> Option<tree_sitter::Node<'a>> {
+    let node_end_row = node.end_position().row;
+
+    // Look for a line_comment sibling that starts on the same row
+    let mut next = node.next_sibling();
+    while let Some(sibling) = next {
+        if sibling.kind() == "line_comment" {
+            if sibling.start_position().row == node_end_row {
+                return Some(sibling);
+            }
+            return None; // Comment on different line
+        }
+        if !sibling.is_extra() {
+            return None; // Non-comment node in the way
+        }
+        next = sibling.next_sibling();
+    }
+    None
+}
+
 fn flatten_chain<'a>(
     node: tree_sitter::Node<'a>,
-    segments: &mut Vec<(tree_sitter::Node<'a>, tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)>,
+    segments: &mut Vec<(tree_sitter::Node<'a>, tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)>,
 ) -> tree_sitter::Node<'a> {
     // Collect the chain in reverse (innermost first), then reverse at the end.
     let mut chain = Vec::new();
@@ -469,8 +518,11 @@ fn flatten_chain<'a>(
         };
         let arg_list = current.child_by_field_name("arguments");
 
+        // Check for trailing line comment on this segment
+        let trailing_comment = extract_trailing_line_comment(current);
+
         if let Some(name_node) = name {
-            chain.push((current, name_node, type_args, arg_list));
+            chain.push((current, name_node, type_args, arg_list, trailing_comment));
         }
 
         match object {

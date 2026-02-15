@@ -1,0 +1,13 @@
+== input ==
+if (error.isPresent()) {
+    throw error.get();
+}
+// check credentials
+Optional<Credentials> credentials = credentials(context.securitySource());
+== output ==
+if (error.isPresent()) {
+    throw error.get();
+}
+
+// check credentials
+Optional<Credentials> credentials = credentials(context.securitySource());

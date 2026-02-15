@@ -632,6 +632,11 @@ fn spec_file_local_variable_annotations() {
 }
 
 #[test]
+fn spec_file_block_comment_blank_line() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/block_comment_blank_line.txt"));
+}
+
+#[test]
 fn spec_file_switch_case_block() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/statements/switch_case_block.txt"));
 }
@@ -740,6 +745,16 @@ fn spec_file_array_initializer_comments() {
 #[test]
 fn spec_builder_pattern_wrapping() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/builder_pattern_wrapping.txt"));
+}
+
+#[test]
+fn spec_file_chain_comments() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/chain_comments.txt"));
+}
+
+#[test]
+fn spec_file_chain_inline_comments() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/chain_inline_comments.txt"));
 }
 
 // ---- Comments ----
