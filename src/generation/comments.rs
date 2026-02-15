@@ -9,6 +9,8 @@ use super::context::FormattingContext;
 ///
 /// Preserves the comment text as-is, only normalizing to ensure a single
 /// space after the `//` prefix (unless the comment is empty or starts with `///`).
+/// ALWAYS emits a newline after the comment to prevent it from commenting out
+/// subsequent code on the same line.
 pub fn gen_line_comment(node: tree_sitter::Node, context: &FormattingContext) -> PrintItems {
     let mut items = PrintItems::new();
     let text = &context.source[node.start_byte()..node.end_byte()];
@@ -32,6 +34,10 @@ pub fn gen_line_comment(node: tree_sitter::Node, context: &FormattingContext) ->
         // Fallback: emit as-is
         items.push_string(text.to_string());
     }
+
+    // CRITICAL: Line comments MUST be followed by a newline, otherwise they
+    // will comment out whatever code follows on the same line
+    items.push_signal(Signal::NewLine);
 
     items
 }

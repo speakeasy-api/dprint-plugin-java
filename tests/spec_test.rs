@@ -622,6 +622,11 @@ fn spec_file_method_chain_breaking() {
     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_chain_breaking.txt"));
 }
 
+#[test]
+fn spec_file_method_chain_line_comment() {
+    run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/expressions/method_chain_line_comment.txt"));
+}
+
 // ---- Instability debugging ----
 
 /// Debug helper: format and check stability

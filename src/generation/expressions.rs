@@ -69,7 +69,7 @@ pub fn gen_update_expression<'a>(
 
 /// Format a method invocation: `obj.method(args)` or `method(args)`
 ///
-/// For chains of 2+ method calls (e.g., `a.b().c().d()`), this flattens the
+/// For chains of 3+ method calls (e.g., `a.b().c().d()`), this flattens the
 /// chain and inserts `Signal::PossibleNewLine` before each `.` so dprint-core
 /// can break the line when it exceeds `max_width`.
 pub fn gen_method_invocation<'a>(
@@ -81,15 +81,16 @@ pub fn gen_method_invocation<'a>(
         return gen_method_invocation_simple(node, context);
     }
 
-    // Flatten the chain into (root, [(method_name_node, type_args, arg_list), ...])
-    let mut segments: Vec<(tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)> = Vec::new();
+    // Flatten the chain into (root, [(method_invocation_node, method_name_node, type_args, arg_list), ...])
+    let mut segments: Vec<(tree_sitter::Node<'a>, tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)> = Vec::new();
     let root = flatten_chain(node, &mut segments);
 
     let mut items = PrintItems::new();
     items.extend(gen_node(root, context));
 
     items.push_signal(Signal::StartIndent);
-    for (name_node, type_args, arg_list) in segments {
+
+    for (_invocation_node, name_node, type_args, arg_list) in segments {
         items.push_signal(Signal::PossibleNewLine);
         items.push_string(".".to_string());
         items.extend(helpers::gen_node_text(name_node, context.source));
@@ -100,6 +101,7 @@ pub fn gen_method_invocation<'a>(
             items.extend(declarations::gen_argument_list(al, context));
         }
     }
+
     items.push_signal(Signal::FinishIndent);
 
     items
@@ -126,6 +128,17 @@ fn gen_method_invocation_simple<'a>(
             }
             "type_arguments" => {
                 items.extend(gen_node(child, context));
+            }
+            "line_comment" if child.is_extra() => {
+                // Line comment within the method invocation (e.g., after argument list)
+                // Add space before comment, then emit it (which will add newline)
+                items.extend(helpers::gen_space());
+                items.extend(super::comments::gen_line_comment(child, context));
+            }
+            "block_comment" if child.is_extra() => {
+                // Block comment within the method invocation
+                items.extend(helpers::gen_space());
+                items.extend(super::comments::gen_block_comment(child, context));
             }
             _ if child.is_named() => {
                 items.extend(gen_node(child, context));
@@ -161,9 +174,10 @@ fn chain_depth(node: tree_sitter::Node) -> usize {
 /// Flatten a nested method_invocation chain into segments.
 /// Returns the root object node (the non-method-invocation at the bottom).
 /// Segments are collected in call order (first call first).
+/// Each segment is (invocation_node, name_node, type_args, arg_list).
 fn flatten_chain<'a>(
     node: tree_sitter::Node<'a>,
-    segments: &mut Vec<(tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)>,
+    segments: &mut Vec<(tree_sitter::Node<'a>, tree_sitter::Node<'a>, Option<tree_sitter::Node<'a>>, Option<tree_sitter::Node<'a>>)>,
 ) -> tree_sitter::Node<'a> {
     // Collect the chain in reverse (innermost first), then reverse at the end.
     let mut chain = Vec::new();
@@ -180,7 +194,7 @@ fn flatten_chain<'a>(
         let arg_list = current.child_by_field_name("arguments");
 
         if let Some(name_node) = name {
-            chain.push((name_node, type_args, arg_list));
+            chain.push((current, name_node, type_args, arg_list));
         }
 
         match object {

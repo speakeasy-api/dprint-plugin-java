@@ -1,0 +1,14 @@
+== input ==
+public class Test {
+    void test() {
+        x = a.b()// comment
+.c();
+    }
+}
+== output ==
+public class Test {
+    void test() {
+        x = a.b() // comment
+        .c();
+    }
+}
