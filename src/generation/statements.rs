@@ -36,6 +36,7 @@ pub fn gen_block<'a>(
     items.push_signal(Signal::StartIndent);
     context.indent();
 
+    let mut prev_was_line_comment = false;
     for stmt in &stmts {
         if stmt.is_extra() {
             let is_trailing = comments::is_trailing_comment(**stmt);
@@ -43,16 +44,23 @@ pub fn gen_block<'a>(
                 // Trailing comment: append on same line
                 items.extend(helpers::gen_space());
                 items.extend(gen_node(**stmt, context));
+                prev_was_line_comment = stmt.kind() == "line_comment";
             } else {
                 // Leading/standalone comment
-                items.push_signal(Signal::NewLine);
+                if !prev_was_line_comment {
+                    items.push_signal(Signal::NewLine);
+                }
                 items.extend(gen_node(**stmt, context));
+                prev_was_line_comment = stmt.kind() == "line_comment";
             }
             continue;
         }
 
-        items.push_signal(Signal::NewLine);
+        if !prev_was_line_comment {
+            items.push_signal(Signal::NewLine);
+        }
         items.extend(gen_node(**stmt, context));
+        prev_was_line_comment = false;
     }
 
     items.push_signal(Signal::FinishIndent);

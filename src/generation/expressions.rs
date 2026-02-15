@@ -279,7 +279,7 @@ pub fn gen_method_invocation<'a>(
 
     // Sum up each segment: . + name + type_args + arg_list
     let mut segments_width = 0;
-    for (name_node, type_args, arg_list) in &segments {
+    for (_, name_node, type_args, arg_list) in &segments {
         segments_width += 1; // for the '.'
         let name_text = &context.source[name_node.start_byte()..name_node.end_byte()];
         segments_width += name_text.len();
@@ -305,7 +305,7 @@ pub fn gen_method_invocation<'a>(
         // Force line breaks with 8-space continuation indent (2x indent_width)
         items.push_signal(Signal::StartIndent);
         items.push_signal(Signal::StartIndent);
-        for (name_node, type_args, arg_list) in segments {
+        for (_, name_node, type_args, arg_list) in segments {
             items.push_signal(Signal::NewLine);
             items.push_string(".".to_string());
             if let Some(ta) = type_args {
@@ -320,7 +320,7 @@ pub fn gen_method_invocation<'a>(
         items.push_signal(Signal::FinishIndent);
     } else {
         // Keep on one line
-        for (name_node, type_args, arg_list) in segments {
+        for (_, name_node, type_args, arg_list) in segments {
             items.push_string(".".to_string());
             if let Some(ta) = type_args {
                 items.extend(gen_node(ta, context));
@@ -382,9 +382,9 @@ fn gen_method_invocation_simple<'a>(
 /// This is used to force chain wrapping when lambdas with block bodies are present,
 /// since the multi-line block content would produce incorrect indentation on a single line.
 fn chain_has_lambda_block(
-    segments: &[(tree_sitter::Node, Option<tree_sitter::Node>, Option<tree_sitter::Node>)],
+    segments: &[(tree_sitter::Node, tree_sitter::Node, Option<tree_sitter::Node>, Option<tree_sitter::Node>)],
 ) -> bool {
-    for (_, _, arg_list) in segments {
+    for (_, _, _, arg_list) in segments {
         if let Some(al) = arg_list {
             if arg_list_has_lambda_block(*al) {
                 return true;
@@ -717,7 +717,7 @@ pub fn gen_array_initializer<'a>(
     if has_comments {
         // Expanded format: one element per line
         items.push_signal(Signal::StartIndent);
-        let mut first = true;
+        let mut prev_was_line_comment = false;
 
         for child in node.children(&mut cursor) {
             match child.kind() {
@@ -727,25 +727,27 @@ pub fn gen_array_initializer<'a>(
                 }
                 _ if child.is_extra() => {
                     // Comment node
-                    items.push_signal(Signal::NewLine);
+                    if !prev_was_line_comment {
+                        items.push_signal(Signal::NewLine);
+                    }
                     items.extend(gen_node(child, context));
+                    prev_was_line_comment = child.kind() == "line_comment";
                 }
                 _ if child.is_named() => {
                     // Element node
-                    if !first {
+                    if !prev_was_line_comment {
                         items.push_signal(Signal::NewLine);
-                    }
-                    if first {
-                        items.push_signal(Signal::NewLine);
-                        first = false;
                     }
                     items.extend(gen_node(child, context));
+                    prev_was_line_comment = false;
                 }
                 _ => {}
             }
         }
 
-        items.push_signal(Signal::NewLine);
+        if !prev_was_line_comment {
+            items.push_signal(Signal::NewLine);
+        }
         items.push_signal(Signal::FinishIndent);
     } else {
         // Compact format: inline
