@@ -652,10 +652,28 @@ pub fn gen_field_declaration<'a>(
 
 // --- Internal helpers ---
 
+/// JLS canonical order for Java modifiers (JLS 8.1.1, 8.3.1, 8.4.3)
+const JLS_MODIFIER_ORDER: &[&str] = &[
+    "public",
+    "protected",
+    "private",
+    "abstract",
+    "default",
+    "static",
+    "final",
+    "transient",
+    "volatile",
+    "synchronized",
+    "native",
+    "strictfp",
+    "sealed",
+    "non-sealed",
+];
+
 /// Format modifiers (public, static, final, abstract, etc.)
 ///
-/// Annotations are placed on their own line before keyword modifiers,
-/// matching standard Java formatting conventions (Google/Palantir style).
+/// Annotations are placed on their own line before keyword modifiers.
+/// Keyword modifiers are reordered to JLS canonical order.
 pub fn gen_modifiers<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -669,10 +687,19 @@ pub fn gen_modifiers<'a>(
         .iter()
         .filter(|c| c.kind() == "marker_annotation" || c.kind() == "annotation")
         .collect();
-    let keywords: Vec<_> = children
+    let mut keywords: Vec<_> = children
         .iter()
         .filter(|c| c.kind() != "marker_annotation" && c.kind() != "annotation")
         .collect();
+
+    // Sort keyword modifiers by JLS canonical order
+    keywords.sort_by_key(|kw| {
+        let text = &context.source[kw.start_byte()..kw.end_byte()];
+        JLS_MODIFIER_ORDER
+            .iter()
+            .position(|m| *m == text)
+            .unwrap_or(usize::MAX)
+    });
 
     // Emit annotations, each on their own line
     for ann in &annotations {
@@ -1129,7 +1156,10 @@ pub fn gen_variable_declarator<'a>(
             false
         }
     });
-    let wrap_value = has_value && !value_is_ternary && !value_is_logical_binary && !value_is_array_with_comments && {
+    // If the value is a method_invocation, skip variable declarator wrapping.
+    // The method chain's own wrapping logic will handle line-breaking.
+    let value_is_method_chain = children.iter().any(|c| c.kind() == "method_invocation");
+    let wrap_value = has_value && !value_is_ternary && !value_is_logical_binary && !value_is_array_with_comments && !value_is_method_chain && {
         let indent_width = context.indent_level() * context.config.indent_width as usize;
         let decl_flat_width = if let Some(parent) = node.parent() {
             estimate_decl_flat_width(parent, context.source)
@@ -1311,19 +1341,11 @@ fn gen_body_with_members<'a>(
     items.push_signal(Signal::StartIndent);
     context.indent();
 
-    // Check if there's a Javadoc comment before the first non-comment member
-    let has_leading_javadoc = members.iter().take_while(|m| m.is_extra()).any(|m| {
-        is_javadoc_comment(**m, context.source)
-    });
-
-    // If there's a leading javadoc, add blank line after opening brace
-    if has_leading_javadoc {
-        items.push_signal(Signal::NewLine);
-    }
+    // Always add blank line after opening brace (PJF parity)
+    items.push_signal(Signal::NewLine);
 
     let mut prev_kind: Option<&str> = None;
     let mut prev_was_comment = false;
-    let mut prev_was_javadoc = false;
 
     for member in &members {
         if member.is_extra() {
@@ -1334,41 +1356,22 @@ fn gen_body_with_members<'a>(
                 items.extend(gen_node(**member, context));
             } else {
                 // Leading/standalone comment within body
-                let is_javadoc = is_javadoc_comment(**member, context.source);
-
-                // Add blank line before a comment block if:
-                // - After a previous member (non-comment):
-                //   - After multiline member, OR
-                //   - Before any javadoc comment
+                // Add blank line before comment if after a previous member (PJF parity)
                 if prev_kind.is_some() && !prev_was_comment {
-                    if let Some(pk) = prev_kind {
-                        // Always add blank line before javadoc, or after multiline members
-                        if is_javadoc || is_multiline_member(pk) {
-                            items.push_signal(Signal::NewLine);
-                        }
-                    }
+                    items.push_signal(Signal::NewLine);
                 }
 
                 items.push_signal(Signal::NewLine);
                 items.extend(gen_node(**member, context));
                 prev_was_comment = true;
-                prev_was_javadoc = is_javadoc;
             }
             continue;
         }
 
-        // Add blank line between different member types or before/after methods.
-        // Also add blank line after a javadoc comment for any member.
-        if let Some(pk) = prev_kind {
-            if !prev_was_comment && (is_multiline_member(pk) || is_multiline_member(member.kind())) {
-                items.push_signal(Signal::NewLine);
-            } else if prev_was_javadoc {
-                // If previous was a javadoc comment, add blank line only if:
-                // - This is a field and we're not at the first member after the brace
-                // This ensures fields with javadoc get a blank line before them
-                // We already have one newline from the comment itself
-                // Don't add another unless it's needed for spacing
-            }
+        // Add blank line between all members (PJF parity)
+        // Skip if previous was a comment (comments handle their own spacing)
+        if prev_kind.is_some() && !prev_was_comment {
+            items.push_signal(Signal::NewLine);
         }
 
         items.push_signal(Signal::NewLine);
@@ -1376,7 +1379,6 @@ fn gen_body_with_members<'a>(
 
         prev_kind = Some(member.kind());
         prev_was_comment = false;
-        prev_was_javadoc = false;
     }
 
     items.push_signal(Signal::FinishIndent);
@@ -1387,26 +1389,3 @@ fn gen_body_with_members<'a>(
     items
 }
 
-/// Check if a comment node is a Javadoc comment (starts with /**)
-fn is_javadoc_comment(node: tree_sitter::Node, source: &str) -> bool {
-    if node.kind() != "block_comment" {
-        return false;
-    }
-    let text = &source[node.start_byte()..node.end_byte()];
-    text.starts_with("/**") && !text.starts_with("/***")
-}
-
-/// Returns true for member kinds that should have blank lines around them.
-fn is_multiline_member(kind: &str) -> bool {
-    matches!(
-        kind,
-        "method_declaration"
-            | "constructor_declaration"
-            | "class_declaration"
-            | "interface_declaration"
-            | "enum_declaration"
-            | "record_declaration"
-            | "static_initializer"
-            | "block"
-    )
-}

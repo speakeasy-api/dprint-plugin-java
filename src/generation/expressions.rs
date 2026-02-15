@@ -302,22 +302,38 @@ pub fn gen_method_invocation<'a>(
     items.extend(gen_node(root, context));
 
     if should_wrap {
-        // Force line breaks with 8-space continuation indent (2x indent_width)
-        items.push_signal(Signal::StartIndent);
-        items.push_signal(Signal::StartIndent);
-        for (_, name_node, type_args, arg_list) in segments {
-            items.push_signal(Signal::NewLine);
+        // PJF style: keep root + first segment on same line, wrap subsequent segments
+        // with 8-space continuation indent (2x indent_width)
+        if let Some((_, name_node, type_args, arg_list)) = segments.first() {
+            // First segment stays inline with root
             items.push_string(".".to_string());
             if let Some(ta) = type_args {
-                items.extend(gen_node(ta, context));
+                items.extend(gen_node(*ta, context));
             }
-            items.extend(helpers::gen_node_text(name_node, context.source));
+            items.extend(helpers::gen_node_text(*name_node, context.source));
             if let Some(al) = arg_list {
-                items.extend(declarations::gen_argument_list(al, context));
+                items.extend(declarations::gen_argument_list(*al, context));
             }
         }
-        items.push_signal(Signal::FinishIndent);
-        items.push_signal(Signal::FinishIndent);
+
+        // Remaining segments wrap with continuation indent
+        if segments.len() > 1 {
+            items.push_signal(Signal::StartIndent);
+            items.push_signal(Signal::StartIndent);
+            for (_, name_node, type_args, arg_list) in &segments[1..] {
+                items.push_signal(Signal::NewLine);
+                items.push_string(".".to_string());
+                if let Some(ta) = type_args {
+                    items.extend(gen_node(*ta, context));
+                }
+                items.extend(helpers::gen_node_text(*name_node, context.source));
+                if let Some(al) = arg_list {
+                    items.extend(declarations::gen_argument_list(*al, context));
+                }
+            }
+            items.push_signal(Signal::FinishIndent);
+            items.push_signal(Signal::FinishIndent);
+        }
     } else {
         // Keep on one line
         for (_, name_node, type_args, arg_list) in segments {
