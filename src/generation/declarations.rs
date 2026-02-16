@@ -599,7 +599,8 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
 /// - For method invocations: receiver + method name
 /// - For object creation: `new` + type name
 ///
-/// Only considers the last line of the prefix to handle multiline modifiers/annotations.
+/// Uses the parent-to-node text as the base measurement, then walks up
+/// ancestors to account for keywords/LHS that share the same line.
 fn estimate_prefix_width(node: tree_sitter::Node, source: &str) -> usize {
     let parent = match node.parent() {
         Some(p) => p,
@@ -611,9 +612,44 @@ fn estimate_prefix_width(node: tree_sitter::Node, source: &str) -> usize {
 
     // Only consider the last line to handle multiline modifiers/annotations
     let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
+    let mut width = last_line.trim_start().len();
 
-    // Trim and return the length
-    last_line.trim_start().len()
+    // Walk up ancestors to accumulate prefix from keywords/LHS that share the line.
+    // Stop when we hit a node that may introduce a line break (e.g., variable_declarator
+    // wraps at `=`, method_declaration can wrap return type from name).
+    let mut ancestor = parent.parent();
+    let parent_start_row = parent.start_position().row;
+    while let Some(anc) = ancestor {
+        // Only add prefix from ancestors that start on the same source line
+        if anc.start_position().row != parent_start_row {
+            break;
+        }
+        match anc.kind() {
+            "return_statement" => {
+                width += 7; // "return "
+                break;
+            }
+            "throw_statement" => {
+                width += 6; // "throw "
+                break;
+            }
+            "assignment_expression" => {
+                // Add LHS width: e.g., "this.baseUrl = " before the RHS
+                let lhs_text = &source[anc.start_byte()..parent.start_byte()];
+                let lhs_last_line = lhs_text.lines().last().unwrap_or(lhs_text);
+                width += lhs_last_line.trim_start().len();
+                break;
+            }
+            // These are wrapping boundaries — stop walking
+            "variable_declarator" | "local_variable_declaration" | "field_declaration"
+            | "method_declaration" | "constructor_declaration" => break,
+            _ => {
+                ancestor = anc.parent();
+            }
+        }
+    }
+
+    width
 }
 
 /// Estimate the width of a class/interface/enum/record declaration line
@@ -1195,8 +1231,10 @@ pub fn gen_formal_parameters<'a>(
         // PJF bin-packing: first try putting ALL params on one continuation line.
         // If they fit, use single-line continuation. If not, fall back to one-per-line.
         let continuation_col = indent_width + 2 * (context.config.indent_width as usize);
+        // Account for suffix after ): typically " {" for methods/constructors = 3 chars (") {")
+        // Use +3 instead of +1 and strict < to match PJF behavior
         let all_fit_continuation =
-            continuation_col + param_text_width + 1 <= context.config.line_width as usize; // +1 for ')'
+            continuation_col + param_text_width + 3 < context.config.line_width as usize;
 
         // 2x StartIndent for 8-space continuation indent
         items.push_signal(Signal::StartIndent);
@@ -1437,8 +1475,6 @@ pub fn gen_variable_declarator<'a>(
                     } else {
                         // PJF preference: if chain WOULD wrap at current position,
                         // check if wrapping at '=' allows the chain to stay inline.
-                        // This avoids `var = chain.method1()\n        .method2()` in favor
-                        // of `var =\n        chain.method1().method2()`.
                         let current_col = indent_col + lhs_width + 3; // after "LHS = "
                         let chain_fits_current = expressions::chain_fits_inline_at(
                             *val,
@@ -1447,7 +1483,8 @@ pub fn gen_variable_declarator<'a>(
                             context.config,
                         );
                         if !chain_fits_current {
-                            // Chain would wrap. Wrap at '=' if chain fits at continuation.
+                            // Chain would wrap at current position. Check if it fits
+                            // inline at continuation indent — if so, wrap at '='.
                             let continuation_col =
                                 indent_col + 2 * (context.config.indent_width as usize);
                             expressions::chain_fits_inline_at(

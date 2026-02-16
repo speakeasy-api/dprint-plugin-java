@@ -383,15 +383,22 @@ pub fn gen_method_invocation<'a>(
 
     // PJF's METHOD_CHAIN_COLUMN_LIMIT: check if ANY dot's column position exceeds 80.
     // Walk through segments accumulating position. If any dot exceeds the threshold, wrap.
+    // Exception: single-invocation chains (root + 1 method) use line_width as threshold
+    // per PJF's LastLevelBreakability.ACCEPT_INLINE_CHAIN_IF_SIMPLE optimization.
     let line_width = context.config.line_width as usize;
     let chain_threshold = context.config.method_chain_threshold as usize;
+    let effective_chain_threshold = if segments.len() == 1 {
+        line_width // Single-method chains only wrap at line_width (120)
+    } else {
+        chain_threshold // Multi-method chains wrap at column 80
+    };
 
     let mut any_dot_exceeds = false;
     let mut cumulative = root_width;
     for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
         // The dot for this segment appears at cumulative position
         let dot_position = indent_col + prefix_width + cumulative;
-        if dot_position > chain_threshold {
+        if dot_position > effective_chain_threshold {
             any_dot_exceeds = true;
         }
         // Add this segment's width to cumulative
@@ -444,12 +451,24 @@ pub fn gen_method_invocation<'a>(
                 0
             };
 
-        // PJF always uses METHOD_CHAIN_COLUMN_LIMIT (80) for wrap_first decision,
-        // regardless of chain length. If indent + root + first_segment > 80, ALL
-        // segments wrap (UNIFIED fill mode). This ensures contextRunner.withPropertyValues(...)
-        // wraps at 87 > 80 even though 2-segment threshold is 120.
+        // PJF chain prefix detection:
+        // Class-reference roots (uppercase, e.g., SDK, AuthResponse, pkg.AuthResponse)
+        // form a "prefix" with the first method call that always stays inline.
+        // For other roots, the first segment wraps when root+first exceeds chain_threshold.
         let chain_threshold = context.config.method_chain_threshold as usize;
-        let wrap_first = (indent_col + root_width + first_seg_width) > chain_threshold;
+        let root_is_class_ref = {
+            let root_text = &context.source[root.start_byte()..root.end_byte()];
+            let last_component = root_text.rsplit('.').next().unwrap_or(root_text);
+            last_component
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_uppercase())
+        };
+        let wrap_first = if root_is_class_ref {
+            false // Class-ref prefix: root + first method always stay inline
+        } else {
+            (indent_col + root_width + first_seg_width) > chain_threshold
+        };
 
         if wrap_first {
             // ALL segments wrap (including first)

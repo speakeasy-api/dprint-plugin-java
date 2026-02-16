@@ -36,7 +36,8 @@ class Test {
     // Short args that should stay on one line (under 100 chars)
 
     void test1() {
-        return new SDKException(message, rawResponse.statusCode(), Utils.extractByteArray(rawResponse), rawResponse, cause);
+        return new SDKException(
+                message, rawResponse.statusCode(), Utils.extractByteArray(rawResponse), rawResponse, cause);
     }
 
     // Very long args that should wrap each on own line
