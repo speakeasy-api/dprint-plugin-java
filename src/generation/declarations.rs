@@ -406,7 +406,55 @@ pub fn gen_method_declaration<'a>(
     // Compute width of everything up to and including `)` + throws clause.
     let indent_width = context.indent_level() * context.config.indent_width as usize;
     let sig_width = estimate_method_sig_width(node, context.source);
-    let wrap_throws = indent_width + sig_width > context.config.line_width as usize;
+    let line_width = context.config.line_width as usize;
+    let wrap_throws = indent_width + sig_width > line_width;
+
+    // PJF: wrap between return type and method name when the signature is too long.
+    // Example: `public CompletableFuture<VeryLongResponse>\n        methodName(params) {`
+    let wrap_before_name = {
+        let mut cursor_pre = node.walk();
+        let children_pre: Vec<_> = node.children(&mut cursor_pre).collect();
+        // Find the method name (identifier) position
+        let name_idx = children_pre
+            .iter()
+            .position(|c| c.kind() == "identifier");
+        if let Some(idx) = name_idx {
+            // Width of everything up to and including the return type
+            let mut return_type_width = 0;
+            for c in &children_pre[..idx] {
+                let text = &context.source[c.start_byte()..c.end_byte()];
+                let last_line = text.lines().last().unwrap_or(text);
+                if return_type_width > 0 {
+                    return_type_width += 1; // space
+                }
+                return_type_width += last_line.trim().len();
+            }
+            // Width of identifier + remaining sig (params, throws)
+            let name_text = &context.source[children_pre[idx].start_byte()
+                ..children_pre[idx].end_byte()];
+            let name_width = name_text.len();
+            // Estimate params width
+            let params_width: usize = children_pre.iter().find_map(|c| {
+                if c.kind() == "formal_parameters" {
+                    let text = &context.source[c.start_byte()..c.end_byte()];
+                    Some(expressions::collapse_whitespace(text).len())
+                } else {
+                    None
+                }
+            }).unwrap_or(2); // "()" minimum
+            // PJF wraps before method name only when return_type + name + "(" alone
+            // doesn't fit (not just when the full sig with params is too long).
+            // If wrapping params alone can fix it, we don't wrap the name.
+            let name_line_width = indent_width + return_type_width + 1 + name_width + 1; // +1 for "("
+            let continuation_col = indent_width + 2 * context.config.indent_width as usize;
+            let name_at_continuation = continuation_col + name_width + params_width;
+            name_line_width > line_width && name_at_continuation <= line_width
+        } else {
+            false
+        }
+    };
+
+    let mut did_wrap_name = false;
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -439,7 +487,17 @@ pub fn gen_method_declaration<'a>(
                 need_space = true;
             }
             "identifier" => {
-                if need_space {
+                if wrap_before_name {
+                    // Wrap: put method name on continuation-indent line
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::StartIndent);
+                    items.push_signal(Signal::NewLine);
+                    did_wrap_name = true;
+                    // Tell formal_parameters the effective prefix is just the method name
+                    let name_text =
+                        &context.source[child.start_byte()..child.end_byte()];
+                    context.set_override_prefix_width(Some(name_text.len()));
+                } else if need_space {
                     items.extend(helpers::gen_space());
                 }
                 items.extend(helpers::gen_node_text(child, context.source));
@@ -451,12 +509,16 @@ pub fn gen_method_declaration<'a>(
             }
             "throws" => {
                 if wrap_throws {
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::StartIndent);
+                    if !did_wrap_name {
+                        items.push_signal(Signal::StartIndent);
+                        items.push_signal(Signal::StartIndent);
+                    }
                     items.push_signal(Signal::NewLine);
                     items.extend(gen_throws(child, context));
-                    items.push_signal(Signal::FinishIndent);
-                    items.push_signal(Signal::FinishIndent);
+                    if !did_wrap_name {
+                        items.push_signal(Signal::FinishIndent);
+                        items.push_signal(Signal::FinishIndent);
+                    }
                 } else {
                     items.extend(helpers::gen_space());
                     items.extend(gen_throws(child, context));
@@ -464,11 +526,21 @@ pub fn gen_method_declaration<'a>(
                 need_space = true;
             }
             "block" => {
+                if did_wrap_name {
+                    items.push_signal(Signal::FinishIndent);
+                    items.push_signal(Signal::FinishIndent);
+                }
                 items.extend(helpers::gen_space());
                 items.extend(gen_node(child, context));
                 need_space = false;
+                did_wrap_name = false; // consumed
             }
             ";" => {
+                if did_wrap_name {
+                    items.push_signal(Signal::FinishIndent);
+                    items.push_signal(Signal::FinishIndent);
+                    did_wrap_name = false;
+                }
                 items.push_string(";".to_string());
                 need_space = false;
             }
@@ -478,6 +550,11 @@ pub fn gen_method_declaration<'a>(
             }
             _ => {}
         }
+    }
+
+    if did_wrap_name {
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
     }
 
     items
@@ -1103,11 +1180,14 @@ pub fn gen_formal_parameters<'a>(
         .sum();
     let indent_width = context.indent_level() * context.config.indent_width as usize;
 
-    // Account for the prefix width (method name, return type, etc.) on the same line
-    let prefix_width = estimate_prefix_width(node, context.source);
+    // Account for the prefix width (method name, return type, etc.) on the same line.
+    // If the method name was wrapped to a continuation line, use the override prefix width.
+    let prefix_width = context
+        .take_override_prefix_width()
+        .unwrap_or_else(|| estimate_prefix_width(node, context.source));
 
-    let should_wrap = params.len() > 1
-        && indent_width + prefix_width + param_text_width + 2 >= context.config.line_width as usize;
+    let should_wrap =
+        indent_width + prefix_width + param_text_width + 2 >= context.config.line_width as usize;
 
     items.push_string("(".to_string());
 
@@ -1385,8 +1465,9 @@ pub fn gen_variable_declarator<'a>(
                     // Check 1: The RHS alone wouldn't fit on one line at continuation indent.
                     let rhs_too_wide = continuation_indent + rhs_flat_width > line_width;
 
-                    // Check 2: The total line (indent + LHS + " = " + RHS) exceeds line_width.
-                    let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width;
+                    // Check 2: The total line (indent + LHS + " = " + RHS + ";") exceeds line_width.
+                    // Add 1 for the trailing ";" from the parent declaration.
+                    let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
                     let total_too_wide = total_line_width > line_width;
 
                     rhs_too_wide || total_too_wide

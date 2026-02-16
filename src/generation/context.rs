@@ -29,6 +29,11 @@ pub struct FormattingContext<'a> {
     /// When true, the chain wrapper knows the LHS prefix is on the previous line
     /// and should use prefix_width=0 with continuation indent.
     assignment_wrapped: bool,
+
+    /// Override prefix width for the next formal_parameters call.
+    /// Used when method name wraps to continuation line, making the effective
+    /// prefix shorter than what estimate_prefix_width computes from source.
+    override_prefix_width: Option<usize>,
 }
 
 impl<'a> FormattingContext<'a> {
@@ -41,6 +46,7 @@ impl<'a> FormattingContext<'a> {
             parent_stack: Vec::new(),
             continuation_indent_levels: 0,
             assignment_wrapped: false,
+            override_prefix_width: None,
         }
     }
 
@@ -106,6 +112,16 @@ impl<'a> FormattingContext<'a> {
     /// Check if the current chain is inside an assignment that already wrapped at '='.
     pub fn is_assignment_wrapped(&self) -> bool {
         self.assignment_wrapped
+    }
+
+    /// Set override prefix width for the next formal_parameters call.
+    pub fn set_override_prefix_width(&mut self, width: Option<usize>) {
+        self.override_prefix_width = width;
+    }
+
+    /// Take (consume) the override prefix width, if any.
+    pub fn take_override_prefix_width(&mut self) -> Option<usize> {
+        self.override_prefix_width.take()
     }
 }
 

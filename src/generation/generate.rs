@@ -356,25 +356,84 @@ fn gen_generic_type<'a>(
 }
 
 /// Format type arguments: `<String, Integer>`
+///
+/// When type arguments are too long, wraps each on its own line at double
+/// continuation indent (PJF style):
+/// ```java
+/// AsyncRequestOperation<
+///         BinaryAndStringUploadRequest,
+///         org.openapis.review.openapi.models.operations.async.BinaryAndStringUploadResponse>
+/// ```
 fn gen_type_arguments<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
+    let children: Vec<_> = node.children(&mut cursor).collect();
 
-    for child in node.children(&mut cursor) {
-        match child.kind() {
-            "<" => items.push_string("<".to_string()),
-            ">" => items.push_string(">".to_string()),
-            "," => {
+    // Collect type argument nodes
+    let type_args: Vec<_> = children.iter().filter(|c| c.is_named()).collect();
+
+    // Estimate flat width of the entire type_arguments including angle brackets
+    let args_flat_width: usize = type_args
+        .iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let text = &context.source[a.start_byte()..a.end_byte()];
+            let flat = expressions::collapse_whitespace(text).len();
+            flat + if i < type_args.len() - 1 { 2 } else { 0 } // ", " between args
+        })
+        .sum();
+
+    // Estimate prefix width: everything on the current line before the `<`
+    let prefix_width = {
+        // Walk up to find the start of the containing line construct
+        let parent = node.parent();
+        if let Some(p) = parent {
+            let prefix_text = &context.source[p.start_byte()..node.start_byte()];
+            let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
+            last_line.trim_start().len()
+        } else {
+            0
+        }
+    };
+
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let line_width = context.config.line_width as usize;
+
+    // Check if type args fit inline: prefix + <args> must fit on line
+    let total_inline = indent_width + prefix_width + 1 + args_flat_width + 1; // <args>
+    let should_wrap = type_args.len() > 1 && total_inline > line_width;
+
+    if should_wrap {
+        items.push_string("<".to_string());
+        items.push_signal(Signal::StartIndent);
+        items.push_signal(Signal::StartIndent);
+        for (i, arg) in type_args.iter().enumerate() {
+            items.push_signal(Signal::NewLine);
+            items.extend(gen_node(**arg, context));
+            if i < type_args.len() - 1 {
                 items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
             }
-            _ if child.is_named() => {
-                items.extend(gen_node(child, context));
+        }
+        items.push_string(">".to_string());
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
+    } else {
+        for child in &children {
+            match child.kind() {
+                "<" => items.push_string("<".to_string()),
+                ">" => items.push_string(">".to_string()),
+                "," => {
+                    items.push_string(",".to_string());
+                    items.extend(helpers::gen_space());
+                }
+                _ if child.is_named() => {
+                    items.extend(gen_node(*child, context));
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
 
