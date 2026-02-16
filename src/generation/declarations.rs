@@ -3,6 +3,7 @@ use dprint_core::formatting::Signal;
 
 use super::comments;
 use super::context::FormattingContext;
+use super::expressions;
 use super::generate::gen_node;
 use super::helpers;
 
@@ -1051,7 +1052,7 @@ fn gen_enum_constant<'a>(
                 items.extend(helpers::gen_node_text(child, context.source));
             }
             "argument_list" => {
-                items.extend(gen_argument_list(child, context));
+                items.extend(gen_node(child, context));
             }
             "class_body" => {
                 items.extend(helpers::gen_space());
@@ -1189,15 +1190,38 @@ pub fn gen_variable_declarator<'a>(
     // If the value is a ternary expression, skip variable declarator wrapping.
     // The ternary's own wrapping logic will handle line-breaking before ? and :.
     let value_is_ternary = children.iter().any(|c| c.kind() == "ternary_expression");
-    // If the value is a logical binary expression (&& or ||), skip variable declarator wrapping.
-    // The binary expression's own wrapping logic will handle line-breaking.
-    let value_is_logical_binary = children.iter().any(|c| {
+    // If the value is a wrappable binary expression (&&, ||, or string +), skip variable
+    // declarator wrapping. The binary expression's own wrapping logic will handle line-breaking.
+    let value_is_wrappable_binary = children.iter().any(|c| {
         if c.kind() == "binary_expression" {
             let op = c
                 .children(&mut c.walk())
                 .find(|ch| !ch.is_named())
                 .map(|ch| &context.source[ch.start_byte()..ch.end_byte()]);
-            matches!(op, Some("&&") | Some("||"))
+            match op {
+                Some("&&") | Some("||") => true,
+                Some("+") => {
+                    // Check if it's string concatenation by looking for string_literal operands
+                    let mut cursor = c.walk();
+                    c.children(&mut cursor)
+                        .filter(|ch| ch.is_named())
+                        .any(|ch| {
+                            ch.kind() == "string_literal"
+                                || (ch.kind() == "binary_expression" && {
+                                    let inner_op = ch
+                                        .children(&mut ch.walk())
+                                        .find(|ic| !ic.is_named())
+                                        .map(|ic| &context.source[ic.start_byte()..ic.end_byte()]);
+                                    inner_op == Some("+")
+                                        && ch
+                                            .children(&mut ch.walk())
+                                            .filter(|ic| ic.is_named())
+                                            .any(|ic| ic.kind() == "string_literal")
+                                })
+                        })
+                }
+                _ => false,
+            }
         } else {
             false
         }
@@ -1212,22 +1236,53 @@ pub fn gen_variable_declarator<'a>(
             false
         }
     });
-    // If the value is a method_invocation, skip variable declarator wrapping.
-    // The method chain's own wrapping logic will handle line-breaking.
-    let value_is_method_chain = children.iter().any(|c| c.kind() == "method_invocation");
+    // PJF-style assignment wrapping: only break at `=` when the RHS expression
+    // itself would be multi-line (i.e., wouldn't fit on one line even at continuation
+    // indent). This matches PJF's `breakOnlyIfInnerLevelsThenFitOnOneLine` behavior.
+    //
+    // If the RHS is a single expression that fits on one line (even if the total line
+    // with LHS exceeds line_width), we do NOT wrap at `=`.
     let wrap_value = has_value
         && !value_is_ternary
-        && !value_is_logical_binary
+        && !value_is_wrappable_binary
         && !value_is_array_with_comments
-        && !value_is_method_chain
         && {
-            let indent_width = context.indent_level() * context.config.indent_width as usize;
-            let decl_flat_width = if let Some(parent) = node.parent() {
-                estimate_decl_flat_width(parent, context.source)
+            // Find the RHS value expression (the named child after `=`)
+            let mut found_eq = false;
+            let value_node = children.iter().find(|c| {
+                if c.kind() == "=" {
+                    found_eq = true;
+                    return false;
+                }
+                found_eq && c.is_named()
+            });
+
+            if let Some(val) = value_node {
+                // Compute the flat width of just the RHS expression (collapse whitespace
+                // to get the "on one line" width)
+                let val_text = &context.source[val.start_byte()..val.end_byte()];
+                let rhs_flat_width = expressions::collapse_whitespace(val_text).len();
+
+                let indent_unit = context.config.indent_width as usize;
+                let indent_col = context.indent_level() * indent_unit;
+                // Continuation indent: current indent + 2 indent units (double indent for wrapping)
+                let continuation_indent = indent_col + indent_unit * 2;
+                let line_width = context.config.line_width as usize;
+
+                // Check 1: If the RHS is a method chain that would wrap, the RHS
+                // is inherently multi-line, so we should wrap at `=`.
+                let rhs_is_wrapping_chain = val.kind() == "method_invocation"
+                    && expressions::chain_depth(*val) >= 1
+                    && (rhs_flat_width > context.config.method_chain_threshold as usize
+                        || (indent_col + rhs_flat_width) > line_width);
+
+                // Check 2: The RHS alone wouldn't fit on one line at continuation indent.
+                let rhs_too_wide = continuation_indent + rhs_flat_width > line_width;
+
+                rhs_is_wrapping_chain || rhs_too_wide
             } else {
-                0
-            };
-            indent_width + decl_flat_width > context.config.line_width as usize
+                false
+            }
         };
 
     let mut saw_eq = false;
@@ -1265,53 +1320,6 @@ pub fn gen_variable_declarator<'a>(
     }
 
     items
-}
-
-/// Estimate the flat width of a field/local-variable declaration as if it were
-/// on a single line: `modifiers type name = value;`
-///
-/// Walks the declaration's children and computes widths from source text,
-/// stripping leading indent from each line and joining with single spaces.
-fn estimate_decl_flat_width(node: tree_sitter::Node, source: &str) -> usize {
-    let mut cursor = node.walk();
-    let mut width = 0;
-    let mut need_space = false;
-
-    for child in node.children(&mut cursor) {
-        if child.is_extra() {
-            continue;
-        }
-        match child.kind() {
-            ";" => {
-                width += 1;
-            }
-            "," => {
-                width += 1;
-                need_space = true;
-            }
-            _ => {
-                if need_space && width > 0 {
-                    width += 1;
-                }
-                let text = &source[child.start_byte()..child.end_byte()];
-                let mut w = 0;
-                for (i, line) in text.lines().enumerate() {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() {
-                        continue;
-                    }
-                    if i > 0 && w > 0 {
-                        w += 1;
-                    }
-                    w += trimmed.len();
-                }
-                width += w;
-                need_space = true;
-            }
-        }
-    }
-
-    width
 }
 
 /// Format an argument list: `(arg1, arg2, arg3)`

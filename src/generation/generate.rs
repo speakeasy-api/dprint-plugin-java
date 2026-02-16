@@ -108,7 +108,9 @@ pub fn gen_node<'a>(
         "ternary_expression" => expressions::gen_ternary_expression(node, context),
         "object_creation_expression" => expressions::gen_object_creation_expression(node, context),
         "array_creation_expression" => expressions::gen_array_creation_expression(node, context),
-        "array_initializer" => expressions::gen_array_initializer(node, context),
+        "array_initializer" | "element_value_array_initializer" => {
+            expressions::gen_array_initializer(node, context)
+        }
         "array_access" => expressions::gen_array_access(node, context),
         "cast_expression" => expressions::gen_cast_expression(node, context),
         "instanceof_expression" => expressions::gen_instanceof_expression(node, context),
@@ -181,6 +183,7 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
     // Second pass: emit nodes in order
     let mut prev_kind: Option<&str> = None;
     let mut prev_was_comment = false;
+    let mut prev_comment_end_line: Option<usize> = None;
     let mut emitted_imports = false;
 
     // Check if we have a package declaration
@@ -243,10 +246,16 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
 
                     if prev_is_different_section && !prev_was_comment {
                         // Add blank line before comment (previous statement's newline + this newline = blank line)
-                        items.push_signal(Signal::NewLine);
-                        // For block comments (not line comments), add an extra newline
-                        if is_block_comment {
+                        // Exception: after imports, we only add ONE blank line total (not two)
+                        if prev_kind == Some("import_declaration") && is_block_comment {
+                            // Add one newline to create the blank line (import already has its newline)
                             items.push_signal(Signal::NewLine);
+                        } else {
+                            items.push_signal(Signal::NewLine);
+                            // For block comments (not line comments), add an extra newline
+                            if is_block_comment {
+                                items.push_signal(Signal::NewLine);
+                            }
                         }
                     } else if prev_was_comment {
                         // Separate consecutive comments
@@ -257,14 +266,28 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                 items.extend(gen_node(*child, context));
                 prev_kind = Some(child.kind());
                 prev_was_comment = true;
+                prev_comment_end_line = Some(child.end_position().row);
             }
             continue;
+        }
+
+        // Preserve blank line between header comment and package declaration if present in source
+        if prev_was_comment && child.kind() == "package_declaration" {
+            // Check if there was a blank line between the comment and package in the original source
+            if let Some(prev_end_line) = prev_comment_end_line {
+                let package_start_line = child.start_position().row;
+                if package_start_line > prev_end_line + 1 {
+                    // There was a blank line in the source — preserve it
+                    items.push_signal(Signal::NewLine);
+                }
+            }
         }
 
         // Add blank lines between different top-level sections
         // But skip this if the current child is a comment (comments handle their own spacing)
         // Also skip if previous was a line comment (line comments are transparent for spacing)
         // Block comments still need blank lines after them
+        // Special case: after imports, we only add ONE blank line (not two)
         if let Some(pk) = prev_kind
             && !child.is_extra()
             && pk != "line_comment"
@@ -584,6 +607,9 @@ fn gen_annotation<'a>(
 }
 
 /// Format annotation argument list: `("value")` or `(key = value)`
+///
+/// When any argument contains an `element_value_array_initializer`, forces all
+/// arguments to separate lines with continuation indent (+8), matching PJF behavior.
 fn gen_annotation_argument_list<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -591,28 +617,83 @@ fn gen_annotation_argument_list<'a>(
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
 
-    items.push_string("(".to_string());
-    let mut first = true;
-
-    for child in node.children(&mut cursor) {
-        match child.kind() {
-            "(" | ")" => {}
-            "," => {
-                items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
-            }
-            _ if child.is_named() => {
-                if !first {
-                    // Comma already handled
-                }
-                items.extend(gen_node(child, context));
-                first = false;
-            }
-            _ => {}
+    // Check if any argument contains a multi-element array initializer.
+    // A single-element array (e.g., @SuppressWarnings({"unchecked"})) stays compact.
+    let has_multi_element_array = node.children(&mut cursor).any(|child| {
+        // Find an element_value_array_initializer either as the child itself
+        // or as a grandchild (inside element_value_pair)
+        let arr_node = if child.kind() == "element_value_array_initializer" {
+            Some(child)
+        } else if child.kind() == "element_value_pair" {
+            let mut c = child.walk();
+            child
+                .children(&mut c)
+                .find(|gc| gc.kind() == "element_value_array_initializer")
+        } else {
+            None
+        };
+        if let Some(arr) = arr_node {
+            let mut ac = arr.walk();
+            let element_count = arr.children(&mut ac).filter(|c| c.is_named()).count();
+            element_count > 1
+        } else {
+            false
         }
+    });
+
+    // Reset cursor
+    cursor = node.walk();
+
+    if has_multi_element_array {
+        // Multi-line format: force all args to separate lines with continuation indent (+8)
+        items.push_string("(".to_string());
+        // Double indent = +8 (continuation indent)
+        items.push_signal(Signal::StartIndent);
+        items.push_signal(Signal::StartIndent);
+
+        let named_children: Vec<_> = node
+            .children(&mut cursor)
+            .filter(|c| c.is_named())
+            .collect();
+        let count = named_children.len();
+
+        for (i, child) in named_children.iter().enumerate() {
+            items.push_signal(Signal::NewLine);
+            items.extend(gen_node(*child, context));
+            if i < count - 1 {
+                items.push_string(",".to_string());
+            }
+        }
+
+        items.push_string(")".to_string());
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
+    } else {
+        // Inline format
+        items.push_string("(".to_string());
+        let mut first = true;
+
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "(" | ")" => {}
+                "," => {
+                    items.push_string(",".to_string());
+                    items.extend(helpers::gen_space());
+                }
+                _ if child.is_named() => {
+                    if !first {
+                        // Comma already handled
+                    }
+                    items.extend(gen_node(child, context));
+                    first = false;
+                }
+                _ => {}
+            }
+        }
+
+        items.push_string(")".to_string());
     }
 
-    items.push_string(")".to_string());
     items
 }
 

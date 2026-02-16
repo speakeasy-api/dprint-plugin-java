@@ -1,0 +1,20 @@
+== input ==
+public class Test {
+
+    void test() {
+        throw new IllegalStateException("Security configuration is present but no security options are configured. " + "Please configure at least one security option in your application properties.");
+        String short = "hello" + " " + "world";
+        String msg = "This is a very long message that should be wrapped when combined with " + "another very long string that pushes it over the line width limit.";
+    }
+}
+== output ==
+public class Test {
+
+    void test() {
+        throw new IllegalStateException("Security configuration is present but no security options are configured. "
+                + "Please configure at least one security option in your application properties.");
+        String short = "hello" + " " + "world";
+        String msg = "This is a very long message that should be wrapped when combined with "
+                + "another very long string that pushes it over the line width limit.";
+    }
+}

@@ -6,6 +6,7 @@ public class Test {
         MediumType<Generic> mediumVar = new MediumType<>(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11);
         Map<String, List<Integer>> map = someMethod().withLongChain().andAnotherMethod(param1, param2, param3).build();
         Map<String, List<Integer>> map2 = someMethod().withLongChain().andAnotherMethod(param1, param2, param3).buildX();
+        VeryLongTypeName<WithGenericParams> veryLongVarName = someMethod().withLongChain().andAnotherMethod(param1, param2, param3).buildMoreStuff();
     }
 
     private AsyncRequestlessOperation<GetNamespaceConflictResponse> fieldOperation = new GetNamespaceConflict.Async(sdkConfiguration, _headers);
@@ -17,17 +18,18 @@ public class Test {
 public class Test {
 
     void test() {
-        AsyncRequestlessOperation<GetNamespaceConflictResponse> operation =
-                new GetNamespaceConflict.Async(sdkConfiguration, _headers);
+        AsyncRequestlessOperation<GetNamespaceConflictResponse> operation = new GetNamespaceConflict.Async(sdkConfiguration, _headers);
         String shortVar = "short";
-        MediumType<Generic> mediumVar =
-                new MediumType<>(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11);
+        MediumType<Generic> mediumVar = new MediumType<>(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11);
         Map<String, List<Integer>> map = someMethod().withLongChain().andAnotherMethod(param1, param2, param3).build();
         Map<String, List<Integer>> map2 = someMethod().withLongChain().andAnotherMethod(param1, param2, param3).buildX();
+        VeryLongTypeName<WithGenericParams> veryLongVarName =
+                someMethod().withLongChain()
+                        .andAnotherMethod(param1, param2, param3)
+                        .buildMoreStuff();
     }
 
-    private AsyncRequestlessOperation<GetNamespaceConflictResponse> fieldOperation =
-            new GetNamespaceConflict.Async(sdkConfiguration, _headers);
+    private AsyncRequestlessOperation<GetNamespaceConflictResponse> fieldOperation = new GetNamespaceConflict.Async(sdkConfiguration, _headers);
 
     private int simpleField = 42;
 

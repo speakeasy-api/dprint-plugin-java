@@ -1,0 +1,51 @@
+== input ==
+@TestPropertySource(properties = {"openapi.server-url=https://test.api.example.com", "openapi.server-idx=2", "openapi.server-variables.subdomain=test"})
+public class TestArrayWrapping {}
+
+@SuppressWarnings({"unchecked"})
+class TestSingleArrayElement {}
+
+@Schema(description = "short")
+class TestNoArray {}
+
+@MultiArg(name = "test", values = {"a", "b", "c"}, count = 3)
+class TestMultiArgWithArray {}
+
+@TestPropertySource(
+    properties = {"openapi.server-url=https://test.api.example.com",
+        "openapi.server-idx=2",
+        "openapi.server-variables.subdomain=test"}
+)
+class TestAlreadyWrapped {}
+== output ==
+@TestPropertySource(
+        properties = {
+            "openapi.server-url=https://test.api.example.com",
+            "openapi.server-idx=2",
+            "openapi.server-variables.subdomain=test",
+        })
+public class TestArrayWrapping {}
+
+@SuppressWarnings({"unchecked"})
+class TestSingleArrayElement {}
+
+@Schema(description = "short")
+class TestNoArray {}
+
+@MultiArg(
+        name = "test",
+        values = {
+            "a",
+            "b",
+            "c",
+        },
+        count = 3)
+class TestMultiArgWithArray {}
+
+@TestPropertySource(
+        properties = {
+            "openapi.server-url=https://test.api.example.com",
+            "openapi.server-idx=2",
+            "openapi.server-variables.subdomain=test",
+        })
+class TestAlreadyWrapped {}

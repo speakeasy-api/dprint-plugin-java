@@ -554,6 +554,43 @@ fn spec_file_package_basic() {
 }
 
 #[test]
+fn spec_file_package_header_blank_line() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/package_header_blank_line.txt"
+    ));
+}
+
+#[test]
+fn spec_package_no_header_comment() {
+    run_spec(
+        "package_no_header_comment",
+        "package com.example;\n\nimport java.util.List;\n\npublic class Foo {}\n",
+        "package com.example;\n\nimport java.util.List;\n\npublic class Foo {}\n",
+    );
+}
+
+#[test]
+fn spec_header_comment_no_blank_preserved() {
+    // No blank line in source → no blank line in output (PJF preserves)
+    run_spec(
+        "header_comment_no_blank",
+        "/*\n * License.\n */\npackage com.example;\n\npublic class Foo {}\n",
+        "/*\n * License.\n */\npackage com.example;\n\npublic class Foo {}\n",
+    );
+}
+
+#[test]
+fn spec_header_comment_blank_preserved() {
+    // Blank line in source → blank line in output (PJF preserves)
+    run_spec(
+        "header_comment_blank",
+        "/*\n * License.\n */\n\npackage com.example;\n\npublic class Foo {}\n",
+        "/*\n * License.\n */\n\npackage com.example;\n\npublic class Foo {}\n",
+    );
+}
+
+#[test]
 fn spec_file_annotation_basic() {
     run_spec_file(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -566,6 +603,22 @@ fn spec_file_annotation_placement() {
     run_spec_file(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/specs/declarations/annotation_placement.txt"
+    ));
+}
+
+#[test]
+fn spec_file_annotation_brace_spacing() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/annotation_brace_spacing.txt"
+    ));
+}
+
+#[test]
+fn spec_file_annotation_arg_wrapping() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/annotation_arg_wrapping.txt"
     ));
 }
 
@@ -609,10 +662,13 @@ fn spec_file_modifier_order() {
     ));
 }
 
-// #[test]
-// fn spec_file_variable_assignment_wrapping() {
-//     run_spec_file(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/specs/declarations/variable_assignment_wrapping.txt"));
-// }
+#[test]
+fn spec_file_variable_assignment_wrapping() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/variable_assignment_wrapping.txt"
+    ));
+}
 
 #[test]
 fn spec_file_class_extends_wrapping() {
@@ -838,6 +894,22 @@ fn spec_file_binary_wrapping() {
     run_spec_file(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/specs/expressions/binary_wrapping.txt"
+    ));
+}
+
+#[test]
+fn spec_file_binary_if_condition_wrapping() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/binary_if_condition_wrapping.txt"
+    ));
+}
+
+#[test]
+fn spec_file_string_concat_wrapping() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/string_concat_wrapping.txt"
     ));
 }
 
@@ -1301,4 +1373,87 @@ fn spec_file_instance_initializer_with_members() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/specs/declarations/instance_initializer_with_members.txt"
     ));
+}
+
+#[test]
+fn spec_file_argument_list_nested_builders() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/argument_list_nested_builders.txt"
+    ));
+}
+
+#[test]
+fn spec_file_chain_first_call_wrap() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/pjf_parity/chain_first_call_wrap.txt"
+    ));
+}
+
+#[test]
+fn spec_chain_wrapping_pjf_column_position() {
+    // PJF wraps ALL segments (including first) when indent + root + first segment > 80
+    // contextRunner (13) + .withPropertyValues("openapi.security.option3.oauth2=test-token") (66) = 79
+    // At indent 8: column 87 > 80, so ALL segments wrap including first.
+    run_spec(
+        "chain_wrapping_pjf_column",
+        r#"class Test {
+    void test() {
+        contextRunner.withPropertyValues("openapi.security.option3.oauth2=test-token").run(context -> {
+            assertThat(context).hasNotFailed();
+        });
+    }
+}
+"#,
+        r#"class Test {
+
+    void test() {
+        contextRunner
+                .withPropertyValues("openapi.security.option3.oauth2=test-token")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                });
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn spec_chain_short_root_first_inline() {
+    // Short root+first segment stays inline (under column 80)
+    // obj (3) + .method1() (10) = 13. At indent 8: column 21 < 80.
+    // Chain total 52 < 80 so stays fully inline.
+    run_spec(
+        "chain_short_inline",
+        "class Test {\n    void test() {\n        obj.method1().method2().method3();\n    }\n}\n",
+        "class Test {\n\n    void test() {\n        obj.method1().method2().method3();\n    }\n}\n",
+    );
+}
+
+#[test]
+fn spec_chain_wrap_first_when_long_root() {
+    // Long root + first segment exceeds column 80 -> ALL wrap
+    // veryLongReceiverName (20) + .firstMethod("some-long-argument-value-here") (42) = 62
+    // At indent 8: column 70 < 80, so first stays inline.
+    // But chain total > 80, so wrapping is triggered. First segment stays inline.
+    run_spec(
+        "chain_wrap_first_long",
+        r#"class Test {
+    void test() {
+        veryLongReceiverName.firstMethod("some-long-argument-value-here").secondMethod().thirdMethod();
+    }
+}
+"#,
+        r#"class Test {
+
+    void test() {
+        veryLongReceiverName.firstMethod("some-long-argument-value-here")
+                .secondMethod()
+                .thirdMethod();
+    }
+}
+"#,
+    );
 }

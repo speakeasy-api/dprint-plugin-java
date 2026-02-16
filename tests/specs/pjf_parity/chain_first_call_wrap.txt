@@ -22,9 +22,11 @@ class Test {
                     assertThat(ctx).isNotNull();
                 });
         SDK.builder().serverURL("http://localhost").build();
-        new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(Config.class)).run(context -> {
-            // test
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(Config.class))
+                .run(context -> {
+                    // test
 
-        });
+                });
     }
 }

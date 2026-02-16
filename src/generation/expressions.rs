@@ -8,7 +8,7 @@ use super::helpers;
 
 /// Collapse whitespace in a string: replace newlines and multiple spaces with single spaces.
 /// This helps estimate the "flat" width of a code fragment as if formatted on one line.
-fn collapse_whitespace(s: &str) -> String {
+pub(super) fn collapse_whitespace(s: &str) -> String {
     let mut result = String::new();
     let mut prev_was_space = false;
     for c in s.chars() {
@@ -25,45 +25,125 @@ fn collapse_whitespace(s: &str) -> String {
     result.trim().to_string()
 }
 
+/// Check if a binary expression's `+` operator is being used for string concatenation.
+/// Returns true if at least one operand is a string_literal or is itself a string concatenation.
+fn is_string_concat(node: tree_sitter::Node, source: &str) -> bool {
+    if node.kind() != "binary_expression" {
+        return false;
+    }
+    let mut cursor = node.walk();
+    let children: Vec<_> = node.children(&mut cursor).collect();
+    let op = children
+        .iter()
+        .find(|c| !c.is_named())
+        .map(|c| &source[c.start_byte()..c.end_byte()]);
+    if op != Some("+") {
+        return false;
+    }
+    children.iter().filter(|c| c.is_named()).any(|c| {
+        c.kind() == "string_literal"
+            || (c.kind() == "binary_expression" && is_string_concat(*c, source))
+    })
+}
+
+/// Check if a binary expression operator is one we should consider for wrapping.
+/// This includes logical operators (&&, ||) and string concatenation (+).
+fn is_wrappable_op(op: Option<&str>, node: tree_sitter::Node, source: &str) -> bool {
+    match op {
+        Some("&&") | Some("||") => true,
+        Some("+") => is_string_concat(node, source),
+        _ => false,
+    }
+}
+
+/// Find the start byte of the containing statement/expression for line width calculation.
+/// Walks up through parent nodes to find the outermost construct that starts the logical line.
+fn find_line_start_byte(node: tree_sitter::Node) -> usize {
+    let mut current = node;
+    loop {
+        if let Some(parent) = current.parent() {
+            match parent.kind() {
+                "variable_declarator" => {
+                    if let Some(grandparent) = parent.parent() {
+                        match grandparent.kind() {
+                            "local_variable_declaration" | "field_declaration" => {
+                                return grandparent.start_byte();
+                            }
+                            _ => return current.start_byte(),
+                        }
+                    }
+                    return current.start_byte();
+                }
+                "parenthesized_expression" => {
+                    current = parent;
+                    continue;
+                }
+                "if_statement" | "while_statement" | "do_statement" => {
+                    return parent.start_byte();
+                }
+                "return_statement" | "throw_statement" => {
+                    return parent.start_byte();
+                }
+                "argument_list" => {
+                    if let Some(grandparent) = parent.parent() {
+                        match grandparent.kind() {
+                            "method_invocation"
+                            | "object_creation_expression"
+                            | "explicit_constructor_invocation" => {
+                                return grandparent.start_byte();
+                            }
+                            _ => {}
+                        }
+                    }
+                    return current.start_byte();
+                }
+                _ => return current.start_byte(),
+            }
+        } else {
+            return current.start_byte();
+        }
+    }
+}
+
 /// Format a binary expression: `a + b`, `x && y`, etc.
 ///
-/// For long chains of `&&` or `||` operators, wraps before each operator
-/// with 8-space continuation indent (PJF style):
+/// For long chains of `&&`, `||`, or string `+` operators, wraps before each
+/// operator with 8-space continuation indent (PJF style):
 /// ```java
 /// return Utils.enhancedDeepEquals(this.contentType, other.contentType)
 ///         && Utils.enhancedDeepEquals(this.statusCode, other.statusCode)
 ///         && Utils.enhancedDeepEquals(this.rawResponse, other.rawResponse);
 /// ```
+///
+/// Also wraps long string concatenation:
+/// ```java
+/// throw new IllegalStateException("First part of message. "
+///         + "Second part of message.");
+/// ```
 pub fn gen_binary_expression<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
-    // Get the operator of this binary expression
     let mut cursor = node.walk();
     let operator = node
         .children(&mut cursor)
         .find(|c| !c.is_named())
         .map(|c| context.source[c.start_byte()..c.end_byte()].to_string());
 
-    // Check if this is a logical operator (&& or ||)
-    let is_logical_op = matches!(operator.as_deref(), Some("&&") | Some("||"));
+    let is_wrappable = is_wrappable_op(operator.as_deref(), node, context.source);
 
-    if is_logical_op {
-        // Check if this node is the RIGHT child of a parent binary_expression with && or ||
-        // If so, we're nested and should let the parent handle the whole chain
+    if is_wrappable {
         let is_nested_in_chain = if let Some(parent) = node.parent() {
             if parent.kind() == "binary_expression" {
-                // Check if we're the right child
                 let parent_children: Vec<_> = parent.children(&mut parent.walk()).collect();
                 let right_child = parent_children.iter().rev().find(|c| c.is_named());
                 if let Some(right) = right_child {
                     if right.id() == node.id() {
-                        // We're the right child, check if parent has && or ||
                         let parent_op = parent_children
                             .iter()
                             .find(|c| !c.is_named())
                             .map(|c| context.source[c.start_byte()..c.end_byte()].to_string());
-                        matches!(parent_op.as_deref(), Some("&&") | Some("||"))
+                        is_wrappable_op(parent_op.as_deref(), parent, context.source)
                     } else {
                         false
                     }
@@ -78,39 +158,20 @@ pub fn gen_binary_expression<'a>(
         };
 
         if !is_nested_in_chain {
-            // We're at the root of the chain
-            // Flatten the chain and collect all operands and operators
-            let (operands, operators) = flatten_logical_chain(node, context.source);
+            let (operands, operators) = flatten_wrappable_chain(node, context.source);
 
-            // Estimate the flat width of the entire expression.
-            // For a variable declaration, we need to check the full line including the prefix.
-            // Walk up to find if we're inside a statement that spans from the start of the line.
             let should_wrap = {
                 let indent_width = context.indent_level() * context.config.indent_width as usize;
 
-                // Find the start of the line by looking for the containing statement
-                let line_start_byte = if let Some(parent) = node.parent() {
-                    // Check if parent is a variable_declarator
-                    if parent.kind() == "variable_declarator" {
-                        // Go up to local_variable_declaration or field_declaration
-                        if let Some(grandparent) = parent.parent() {
-                            match grandparent.kind() {
-                                "local_variable_declaration" | "field_declaration" => {
-                                    grandparent.start_byte()
-                                }
-                                _ => node.start_byte(),
-                            }
-                        } else {
-                            node.start_byte()
-                        }
-                    } else {
-                        node.start_byte()
-                    }
-                } else {
-                    node.start_byte()
-                };
+                let line_start_byte = find_line_start_byte(node);
 
-                let line_text = &context.source[line_start_byte..node.end_byte()];
+                // Find the end of the source line to include trailing content like `) {` or `;`
+                let line_end_byte = context.source[node.end_byte()..]
+                    .find('\n')
+                    .map(|pos| node.end_byte() + pos)
+                    .unwrap_or(context.source.len());
+
+                let line_text = &context.source[line_start_byte..line_end_byte];
                 let line_flat_width: usize =
                     line_text.lines().map(|l| l.trim().len()).sum::<usize>()
                         + line_text.lines().count().saturating_sub(1);
@@ -119,7 +180,6 @@ pub fn gen_binary_expression<'a>(
             };
 
             if should_wrap {
-                // Wrapped: break before each && or || with 8-space continuation indent
                 let mut items = PrintItems::new();
 
                 items.extend(gen_node(operands[0], context));
@@ -149,7 +209,6 @@ pub fn gen_binary_expression<'a>(
         if child.is_named() {
             items.extend(gen_node(child, context));
         } else {
-            // Operator token
             let op = &context.source[child.start_byte()..child.end_byte()];
             items.extend(helpers::gen_space());
             items.push_string(op.to_string());
@@ -160,9 +219,9 @@ pub fn gen_binary_expression<'a>(
     items
 }
 
-/// Flatten a chain of binary expressions with && or || operators.
+/// Flatten a chain of binary expressions with wrappable operators (&&, ||, string +).
 /// Returns (operands, operators) where operands[i] op operators[i] = operands[i+1].
-fn flatten_logical_chain<'a>(
+fn flatten_wrappable_chain<'a>(
     node: tree_sitter::Node<'a>,
     source: &str,
 ) -> (Vec<tree_sitter::Node<'a>>, Vec<String>) {
@@ -180,7 +239,6 @@ fn flatten_logical_chain<'a>(
             return;
         }
 
-        // Get operator
         let mut cursor = node.walk();
         let children: Vec<_> = node.children(&mut cursor).collect();
 
@@ -189,23 +247,22 @@ fn flatten_logical_chain<'a>(
             .find(|c| !c.is_named())
             .map(|c| source[c.start_byte()..c.end_byte()].to_string());
 
-        // Only flatten if it's && or ||
-        if !matches!(op.as_deref(), Some("&&") | Some("||")) {
+        let op_str = op.as_deref();
+        let is_wrappable = match op_str {
+            Some("&&") | Some("||") => true,
+            Some("+") => is_string_concat(node, source),
+            _ => false,
+        };
+        if !is_wrappable {
             operands.push(node);
             return;
         }
 
-        // Get left and right operands
         let left = children.iter().find(|c| c.is_named()).unwrap();
         let right = children.iter().rev().find(|c| c.is_named()).unwrap();
 
-        // Recursively collect left side
         collect(*left, source, operands, operators);
-
-        // Add this operator
         operators.push(op.unwrap());
-
-        // Recursively collect right side
         collect(*right, source, operands, operators);
     }
 
@@ -254,14 +311,15 @@ pub fn gen_update_expression<'a>(
 /// Format a method invocation: `obj.method(args)` or `method(args)`
 ///
 /// For chains of 2+ method calls (e.g., `a.b().c().d()`), this flattens the
-/// chain and checks if the flat width exceeds `method_chain_threshold`. If so,
-/// it breaks the line before each `.method()` with 8-space continuation indent.
+/// chain and uses PJF-style column-position wrapping: if the column where the
+/// first `.` would appear exceeds `method_chain_threshold` (default 80), ALL
+/// segments wrap onto new lines with 8-space continuation indent.
 pub fn gen_method_invocation<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
     let depth = chain_depth(node);
-    if depth < 2 {
+    if depth < 1 {
         return gen_method_invocation_simple(node, context);
     }
 
@@ -279,10 +337,14 @@ pub fn gen_method_invocation<'a>(
     // Force wrapping if any segment has a lambda with a block body
     let force_wrap = chain_has_lambda_block(&segments);
 
-    // Calculate the flat width by estimating the formatted width of each component.
-    // We compute this as the text length with newlines/multi-space runs collapsed to single spaces.
+    // PJF-style chain wrapping: if the chain's flat width (root + all segments) exceeds
+    // method_chain_threshold (default 80), wrap ALL segments onto new lines with +8
+    // continuation indent. The key PJF difference: ALL segments wrap (including first),
+    // rather than keeping the first segment inline with root.
     let root_text = &context.source[root.start_byte()..root.end_byte()];
     let root_width = collapse_whitespace(root_text).len();
+
+    let indent_col = context.indent_level() * (context.config.indent_width as usize);
 
     // Sum up each segment: . + name + type_args + arg_list + comment
     let mut segments_width = 0;
@@ -308,40 +370,62 @@ pub fn gen_method_invocation<'a>(
     }
 
     let chain_flat_width = root_width + segments_width;
+
+    // Use method_chain_threshold for the flat-width decision.
+    // For chains in argument lists, use a more aggressive threshold to account for
+    // the extra indentation from the containing argument list.
+    let is_in_argument_list = context.has_ancestor("argument_list");
+    let threshold = if is_in_argument_list {
+        (context.config.line_width as usize) / 2
+    } else {
+        context.config.method_chain_threshold as usize
+    };
+
+    // Also wrap if the full line (indent + chain) exceeds line_width
+    let line_width = context.config.line_width as usize;
+
     let should_wrap =
-        force_wrap || chain_flat_width > context.config.method_chain_threshold as usize;
+        force_wrap || chain_flat_width > threshold || (indent_col + chain_flat_width) > line_width;
 
     let mut items = PrintItems::new();
     items.extend(gen_node(root, context));
 
     if should_wrap {
-        // PJF style: keep root + first segment on same line, wrap subsequent segments
-        // with 8-space continuation indent (2x indent_width)
-        if let Some((_, name_node, type_args, arg_list, trailing_comment)) = segments.first() {
-            // First segment stays inline with root
-            items.push_string(".".to_string());
-            if let Some(ta) = type_args {
-                items.extend(gen_node(*ta, context));
-            }
-            items.extend(helpers::gen_node_text(*name_node, context.source));
-            if let Some(al) = arg_list {
-                items.extend(declarations::gen_argument_list(*al, context));
-            }
-            // Emit trailing comment if present
-            if let Some(tc) = trailing_comment {
-                items.extend(helpers::gen_space());
-                items.extend(gen_node(*tc, context));
-            }
-        }
+        // PJF-style wrapping with column-position check:
+        // Compute the width of root + first segment to decide if the first segment
+        // stays inline or wraps too.
+        let first_seg_width =
+            if let Some((_, name_node, type_args, arg_list, trailing_comment)) = segments.first() {
+                let mut w = 1; // '.'
+                let name_text = &context.source[name_node.start_byte()..name_node.end_byte()];
+                w += name_text.len();
+                if let Some(ta) = type_args {
+                    let ta_text = &context.source[ta.start_byte()..ta.end_byte()];
+                    w += collapse_whitespace(ta_text).len();
+                }
+                if let Some(al) = arg_list {
+                    let al_text = &context.source[al.start_byte()..al.end_byte()];
+                    w += collapse_whitespace(al_text).len();
+                }
+                if let Some(tc) = trailing_comment {
+                    let tc_text = &context.source[tc.start_byte()..tc.end_byte()];
+                    w += 1 + tc_text.len();
+                }
+                w
+            } else {
+                0
+            };
 
-        // Remaining segments wrap with continuation indent
-        if segments.len() > 1 {
+        // If root + first segment exceeds the column threshold, wrap ALL segments
+        // (including first). Otherwise, keep first segment inline with root.
+        let wrap_first = (indent_col + root_width + first_seg_width) > threshold;
+
+        if wrap_first {
+            // ALL segments wrap (including first)
             items.push_signal(Signal::StartIndent);
             items.push_signal(Signal::StartIndent);
-            let mut prev_had_comment = segments.first().and_then(|(_, _, _, _, tc)| *tc).is_some();
-            for (_, name_node, type_args, arg_list, trailing_comment) in &segments[1..] {
-                // If previous segment had a trailing line comment, it already added a newline,
-                // so we don't need to add another one
+            let mut prev_had_comment = false;
+            for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
                 if !prev_had_comment {
                     items.push_signal(Signal::NewLine);
                 }
@@ -351,9 +435,8 @@ pub fn gen_method_invocation<'a>(
                 }
                 items.extend(helpers::gen_node_text(*name_node, context.source));
                 if let Some(al) = arg_list {
-                    items.extend(declarations::gen_argument_list(*al, context));
+                    items.extend(gen_node(*al, context));
                 }
-                // Emit trailing comment if present
                 if let Some(tc) = trailing_comment {
                     items.extend(helpers::gen_space());
                     items.extend(gen_node(*tc, context));
@@ -364,6 +447,51 @@ pub fn gen_method_invocation<'a>(
             }
             items.push_signal(Signal::FinishIndent);
             items.push_signal(Signal::FinishIndent);
+        } else {
+            // Keep first segment inline with root, wrap subsequent segments
+            if let Some((_, name_node, type_args, arg_list, trailing_comment)) = segments.first() {
+                items.push_string(".".to_string());
+                if let Some(ta) = type_args {
+                    items.extend(gen_node(*ta, context));
+                }
+                items.extend(helpers::gen_node_text(*name_node, context.source));
+                if let Some(al) = arg_list {
+                    items.extend(gen_node(*al, context));
+                }
+                if let Some(tc) = trailing_comment {
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_node(*tc, context));
+                }
+            }
+
+            if segments.len() > 1 {
+                items.push_signal(Signal::StartIndent);
+                items.push_signal(Signal::StartIndent);
+                let mut prev_had_comment =
+                    segments.first().and_then(|(_, _, _, _, tc)| *tc).is_some();
+                for (_, name_node, type_args, arg_list, trailing_comment) in &segments[1..] {
+                    if !prev_had_comment {
+                        items.push_signal(Signal::NewLine);
+                    }
+                    items.push_string(".".to_string());
+                    if let Some(ta) = type_args {
+                        items.extend(gen_node(*ta, context));
+                    }
+                    items.extend(helpers::gen_node_text(*name_node, context.source));
+                    if let Some(al) = arg_list {
+                        items.extend(gen_node(*al, context));
+                    }
+                    if let Some(tc) = trailing_comment {
+                        items.extend(helpers::gen_space());
+                        items.extend(gen_node(*tc, context));
+                        prev_had_comment = true;
+                    } else {
+                        prev_had_comment = false;
+                    }
+                }
+                items.push_signal(Signal::FinishIndent);
+                items.push_signal(Signal::FinishIndent);
+            }
         }
     } else {
         // Keep on one line
@@ -374,7 +502,7 @@ pub fn gen_method_invocation<'a>(
             }
             items.extend(helpers::gen_node_text(name_node, context.source));
             if let Some(al) = arg_list {
-                items.extend(declarations::gen_argument_list(al, context));
+                items.extend(gen_node(al, context));
             }
             // Emit trailing comment if present
             if let Some(tc) = trailing_comment {
@@ -404,7 +532,7 @@ fn gen_method_invocation_simple<'a>(
                 items.extend(helpers::gen_node_text(child, context.source));
             }
             "argument_list" => {
-                items.extend(declarations::gen_argument_list(child, context));
+                items.extend(gen_node(child, context));
             }
             "type_arguments" => {
                 items.extend(gen_node(child, context));
@@ -469,9 +597,9 @@ fn arg_list_has_lambda_block(node: tree_sitter::Node) -> bool {
     false
 }
 
-/// Count how deep a method invocation chain is.
-/// `a.b()` = 1, `a.b().c()` = 2, `a.b().c().d()` = 3, etc.
-fn chain_depth(node: tree_sitter::Node) -> usize {
+/// Count how deep a method invocation chain is (number of nested method_invocations).
+/// `a.b()` = 0, `a.b().c()` = 1, `a.b().c().d()` = 2, etc.
+pub(super) fn chain_depth(node: tree_sitter::Node) -> usize {
     let mut depth = 0;
     let mut current = node;
     loop {
@@ -735,7 +863,7 @@ pub fn gen_object_creation_expression<'a>(
                 items.extend(gen_node(child, context));
             }
             "argument_list" => {
-                items.extend(declarations::gen_argument_list(child, context));
+                items.extend(gen_node(child, context));
             }
             "class_body" => {
                 items.extend(helpers::gen_space());
@@ -788,6 +916,10 @@ pub fn gen_array_creation_expression<'a>(
 ///
 /// When the initializer contains comments (is_extra() children), expands to
 /// one element per line to match PJF behavior.
+///
+/// When the parent is an annotation context (element_value_pair or
+/// annotation_argument_list) and there are multiple elements, forces
+/// one-element-per-line format with trailing comma, matching PJF behavior.
 pub fn gen_array_initializer<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -798,17 +930,43 @@ pub fn gen_array_initializer<'a>(
     // Check if this array initializer has any comments
     let has_comments = node.children(&mut cursor).any(|c| c.is_extra());
 
+    // Check if this is inside an annotation context
+    let in_annotation = node
+        .parent()
+        .map(|p| {
+            p.kind() == "annotation_argument_list"
+                || p.kind() == "element_value_pair"
+                || (p.kind() == "annotation_argument_list"
+                    && p.parent()
+                        .is_some_and(|gp| gp.kind().contains("annotation")))
+        })
+        .unwrap_or(false);
+
+    // Count named (element) children
+    cursor = node.walk();
+    let element_count = node.children(&mut cursor).filter(|c| c.is_named()).count();
+
+    // Force expanded format in annotation context with multiple elements
+    let force_expand = in_annotation && element_count > 1;
+
     // Reset cursor for iteration
     cursor = node.walk();
 
     items.push_string("{".to_string());
 
-    if has_comments {
+    if has_comments || force_expand {
         // Expanded format: one element per line
         items.push_signal(Signal::StartIndent);
         let mut prev_was_line_comment = false;
 
-        for child in node.children(&mut cursor) {
+        // Collect named children so we can add trailing comma
+        let all_children: Vec<_> = node.children(&mut cursor).collect();
+
+        // Count total named children for trailing comma logic
+        let named_count = all_children.iter().filter(|c| c.is_named()).count();
+        let mut named_idx = 0;
+
+        for child in &all_children {
             match child.kind() {
                 "{" | "}" => {}
                 "," => {
@@ -819,7 +977,7 @@ pub fn gen_array_initializer<'a>(
                     if !prev_was_line_comment {
                         items.push_signal(Signal::NewLine);
                     }
-                    items.extend(gen_node(child, context));
+                    items.extend(gen_node(*child, context));
                     prev_was_line_comment = child.kind() == "line_comment";
                 }
                 _ if child.is_named() => {
@@ -827,7 +985,23 @@ pub fn gen_array_initializer<'a>(
                     if !prev_was_line_comment {
                         items.push_signal(Signal::NewLine);
                     }
-                    items.extend(gen_node(child, context));
+                    items.extend(gen_node(*child, context));
+                    named_idx += 1;
+
+                    // Add trailing comma after last element in annotation context
+                    // (PJF always adds trailing comma in expanded arrays)
+                    if force_expand && named_idx == named_count {
+                        // Check if there's already a comma following this element
+                        let has_trailing_comma = all_children
+                            .iter()
+                            .skip_while(|c| c.id() != child.id())
+                            .skip(1)
+                            .any(|c| c.kind() == ",");
+                        if !has_trailing_comma {
+                            items.push_string(",".to_string());
+                        }
+                    }
+
                     prev_was_line_comment = false;
                 }
                 _ => {}
@@ -1043,7 +1217,7 @@ pub fn gen_explicit_constructor_invocation<'a>(
         match child.kind() {
             "this" => items.push_string("this".to_string()),
             "super" => items.push_string("super".to_string()),
-            "argument_list" => items.extend(declarations::gen_argument_list(child, context)),
+            "argument_list" => items.extend(gen_node(child, context)),
             ";" => items.push_string(";".to_string()),
             "type_arguments" => items.extend(gen_node(child, context)),
             _ if child.is_named() => items.extend(gen_node(child, context)),

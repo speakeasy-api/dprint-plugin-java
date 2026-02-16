@@ -1,0 +1,32 @@
+== input ==
+public class Test {
+
+    void test() {
+        if (httpClientConfiguration.getRedactedHeaders() != null && !httpClientConfiguration.getRedactedHeaders().isEmpty()) {
+            doSomething();
+        }
+        if (a && b) {
+            doSomething();
+        }
+        while (httpClientConfiguration.getRedactedHeaders() != null && !httpClientConfiguration.getRedactedHeaders().isEmpty()) {
+            doSomething();
+        }
+    }
+}
+== output ==
+public class Test {
+
+    void test() {
+        if (httpClientConfiguration.getRedactedHeaders() != null
+                && !httpClientConfiguration.getRedactedHeaders().isEmpty()) {
+            doSomething();
+        }
+        if (a && b) {
+            doSomething();
+        }
+        while (httpClientConfiguration.getRedactedHeaders() != null
+                && !httpClientConfiguration.getRedactedHeaders().isEmpty()) {
+            doSomething();
+        }
+    }
+}

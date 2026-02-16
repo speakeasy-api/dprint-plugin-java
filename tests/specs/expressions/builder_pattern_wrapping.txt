@@ -9,14 +9,16 @@ class Test {
 class Test {
 
     void test() {
-        SDK sdk = SDK.builder()
-                .serverURL("http://localhost:18080")
-                .client(testHttpClient)
-                .security(auth)
-                .build();
-        Deprecated1Response res = sdk.tag1()
-                .deprecated1()
-                .serverURL("http://test-server-url.example.com/api")
-                .call();
+        SDK sdk =
+                SDK.builder()
+                        .serverURL("http://localhost:18080")
+                        .client(testHttpClient)
+                        .security(auth)
+                        .build();
+        Deprecated1Response res =
+                sdk.tag1()
+                        .deprecated1()
+                        .serverURL("http://test-server-url.example.com/api")
+                        .call();
     }
 }
