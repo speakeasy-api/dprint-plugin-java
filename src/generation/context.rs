@@ -24,6 +24,11 @@ pub struct FormattingContext<'a> {
     /// that don't affect the base indent_level but need to be accounted for
     /// in width calculations for nested argument lists.
     continuation_indent_levels: usize,
+
+    /// Set when a variable_declarator or assignment_expression has wrapped at '='.
+    /// When true, the chain wrapper knows the LHS prefix is on the previous line
+    /// and should use prefix_width=0 with continuation indent.
+    assignment_wrapped: bool,
 }
 
 impl<'a> FormattingContext<'a> {
@@ -35,6 +40,7 @@ impl<'a> FormattingContext<'a> {
             indent_level: 0,
             parent_stack: Vec::new(),
             continuation_indent_levels: 0,
+            assignment_wrapped: false,
         }
     }
 
@@ -90,6 +96,16 @@ impl<'a> FormattingContext<'a> {
     /// Get the effective indent level including continuation indent.
     pub fn effective_indent_level(&self) -> usize {
         self.indent_level + self.continuation_indent_levels
+    }
+
+    /// Set the assignment_wrapped flag.
+    pub fn set_assignment_wrapped(&mut self, wrapped: bool) {
+        self.assignment_wrapped = wrapped;
+    }
+
+    /// Check if the current chain is inside an assignment that already wrapped at '='.
+    pub fn is_assignment_wrapped(&self) -> bool {
+        self.assignment_wrapped
     }
 }
 

@@ -24,18 +24,12 @@ public class Test {
     }
 
     public VeryLongReturnTypeName veryLongMethodNameThatMakesTheLineTooLong(
-            String parameter1,
-            String parameter2,
-            String parameter3) {
+            String parameter1, String parameter2, String parameter3) {
         return null;
     }
 
     public SomeReturnType anotherLongMethodWithManyParameters(
-            int parameter1,
-            int parameter2,
-            int parameter3,
-            int parameter4,
-            int parameter5) {
+            int parameter1, int parameter2, int parameter3, int parameter4, int parameter5) {
         return null;
     }
 

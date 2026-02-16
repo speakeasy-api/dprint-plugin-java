@@ -334,20 +334,27 @@ pub fn gen_method_invocation<'a>(
     )> = Vec::new();
     let root = flatten_chain(node, &mut segments);
 
-    // Force wrapping only for 3+ segment chains with lambda blocks.
-    // PJF keeps 2-segment chains with lambdas inline (e.g., task.get().whenComplete(lambda))
-    let force_wrap = segments.len() > 2 && chain_has_lambda_block(&segments);
-
-    // PJF-style chain wrapping: if the chain's flat width (root + all segments) exceeds
-    // method_chain_threshold (default 80), wrap ALL segments onto new lines with +8
-    // continuation indent. The key PJF difference: ALL segments wrap (including first),
-    // rather than keeping the first segment inline with root.
+    // PJF-style chain wrapping: compute chain "prefix width" — the width of the chain
+    // up to (but excluding) lambda block bodies. PJF measures where the chain DOTs fall,
+    // not the total content including multi-line lambda bodies.
     let root_text = &context.source[root.start_byte()..root.end_byte()];
     let root_width = collapse_whitespace(root_text).len();
 
-    let indent_col = context.indent_level() * (context.config.indent_width as usize);
+    // When the assignment/variable_declarator has already wrapped at '=',
+    // the chain starts at continuation indent with NO prefix on the same line.
+    // Adjust indent_col and prefix_width accordingly.
+    let indent_width = context.config.indent_width as usize;
+    let (indent_col, prefix_width) = if context.is_assignment_wrapped() {
+        // Assignment wrapped: chain is at continuation indent (base + 2*indent_width)
+        let cont_col = context.indent_level() * indent_width + 2 * indent_width;
+        (cont_col, 0)
+    } else {
+        let col = context.indent_level() * indent_width;
+        let prefix = compute_chain_prefix_width(node, context);
+        (col, prefix)
+    };
 
-    // Sum up each segment: . + name + type_args + arg_list + comment
+    // Sum up each segment: . + name + type_args + arg_list (with lambda body excluded)
     let mut segments_width = 0;
     for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
         segments_width += 1; // for the '.'
@@ -360,8 +367,10 @@ pub fn gen_method_invocation<'a>(
         }
 
         if let Some(al) = arg_list {
-            let al_text = &context.source[al.start_byte()..al.end_byte()];
-            segments_width += collapse_whitespace(al_text).len();
+            // If the argument list contains a lambda with a block body, only count
+            // the "header" width up to the opening '{', not the full body content.
+            // This matches PJF which measures chain prefix position, not total content.
+            segments_width += estimate_arg_list_width(*al, context.source);
         }
 
         if let Some(tc) = trailing_comment {
@@ -372,32 +381,39 @@ pub fn gen_method_invocation<'a>(
 
     let chain_flat_width = root_width + segments_width;
 
-    // PJF-style chain wrapping with position-based thresholds:
-    // - 2-segment chains (e.g., obj.method1().method2()): use line_width as threshold
-    //   PJF keeps short chains inline even at 100+ chars
-    // - 3+ segment chains: use method_chain_threshold (80) as column position limit
-    // - Direct chain arguments: use line_width/2 as a more aggressive threshold
-    //   (but NOT for chains inside lambda bodies that happen to be inside argument lists)
-    let is_direct_argument = node.parent().is_some_and(|p| p.kind() == "argument_list");
-    let is_short_chain = segments.len() <= 2;
+    // PJF's METHOD_CHAIN_COLUMN_LIMIT: check if ANY dot's column position exceeds 80.
+    // Walk through segments accumulating position. If any dot exceeds the threshold, wrap.
     let line_width = context.config.line_width as usize;
-    let threshold = if is_direct_argument {
-        line_width / 2
-    } else if is_short_chain {
-        line_width // 2-segment chains: only wrap if exceeds line_width
-    } else {
-        context.config.method_chain_threshold as usize // 3+ segments: 80-col position limit
-    };
+    let chain_threshold = context.config.method_chain_threshold as usize;
 
-    // Compute prefix width: content on the same line before the chain (assignment LHS, return, etc.)
-    // PJF considers the TOTAL line width, not just indent + chain.
-    let prefix_width = compute_chain_prefix_width(node, context);
+    let mut any_dot_exceeds = false;
+    let mut cumulative = root_width;
+    for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
+        // The dot for this segment appears at cumulative position
+        let dot_position = indent_col + prefix_width + cumulative;
+        if dot_position > chain_threshold {
+            any_dot_exceeds = true;
+        }
+        // Add this segment's width to cumulative
+        cumulative += 1; // '.'
+        let name_text = &context.source[name_node.start_byte()..name_node.end_byte()];
+        cumulative += name_text.len();
+        if let Some(ta) = type_args {
+            let ta_text = &context.source[ta.start_byte()..ta.end_byte()];
+            cumulative += collapse_whitespace(ta_text).len();
+        }
+        if let Some(al) = arg_list {
+            cumulative += estimate_arg_list_width(*al, context.source);
+        }
+        if let Some(tc) = trailing_comment {
+            let tc_text = &context.source[tc.start_byte()..tc.end_byte()];
+            cumulative += 1 + tc_text.len();
+        }
+    }
 
-    // Position-based check: also account for prefix (assignment LHS, etc.)
+    // Also check total line width (indent + prefix + chain) against line_width
     let effective_position = indent_col + prefix_width + chain_flat_width;
-    let should_wrap = force_wrap
-        || (indent_col + chain_flat_width) > threshold
-        || effective_position > line_width;
+    let should_wrap = any_dot_exceeds || effective_position > line_width;
 
     let mut items = PrintItems::new();
     items.extend(gen_node(root, context));
@@ -583,6 +599,95 @@ fn gen_method_invocation_simple<'a>(
 /// This is used to force chain wrapping when lambdas with block bodies are present,
 /// since the multi-line block content would produce incorrect indentation on a single line.
 #[allow(clippy::type_complexity)]
+/// Estimate argument list width for chain wrapping decisions.
+/// If the arg list contains a lambda with a block body, only count the "header"
+/// width up to the opening '{', since PJF measures chain prefix position, not
+/// total lambda body content.
+fn estimate_arg_list_width(arg_list: tree_sitter::Node, source: &str) -> usize {
+    // Check if arg list contains a lambda with a block body
+    let mut cursor = arg_list.walk();
+    let mut has_lambda_block = false;
+    for child in arg_list.children(&mut cursor) {
+        if child.kind() == "lambda_expression" {
+            let mut inner_cursor = child.walk();
+            for inner in child.children(&mut inner_cursor) {
+                if inner.kind() == "block" {
+                    has_lambda_block = true;
+                    break;
+                }
+            }
+        }
+        if has_lambda_block {
+            break;
+        }
+    }
+
+    if has_lambda_block {
+        // Find the opening '{' and count only up to it
+        let al_text = &source[arg_list.start_byte()..arg_list.end_byte()];
+        if let Some(brace_pos) = al_text.find('{') {
+            // Width is from '(' to '{' inclusive
+            let header = &al_text[..brace_pos + 1];
+            collapse_whitespace(header).len()
+        } else {
+            collapse_whitespace(al_text).len()
+        }
+    } else {
+        let al_text = &source[arg_list.start_byte()..arg_list.end_byte()];
+        collapse_whitespace(al_text).len()
+    }
+}
+
+/// Check if a method chain would fit inline (without wrapping) at a given column position.
+/// Used by gen_variable_declarator to determine if wrapping at '=' allows the chain to stay inline.
+pub fn chain_fits_inline_at(
+    node: tree_sitter::Node,
+    col: usize,
+    source: &str,
+    config: &crate::configuration::Configuration,
+) -> bool {
+    let mut segments: Vec<(
+        tree_sitter::Node,
+        tree_sitter::Node,
+        Option<tree_sitter::Node>,
+        Option<tree_sitter::Node>,
+        Option<tree_sitter::Node>,
+    )> = Vec::new();
+    let root = flatten_chain(node, &mut segments);
+
+    let root_text = &source[root.start_byte()..root.end_byte()];
+    let root_width = collapse_whitespace(root_text).len();
+
+    let chain_threshold = config.method_chain_threshold as usize;
+    let line_width = config.line_width as usize;
+
+    // Check per-dot positions — if ANY dot exceeds chain threshold, chain needs wrapping
+    let mut total_width = root_width;
+    for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
+        let dot_position = col + total_width;
+        if dot_position > chain_threshold {
+            return false;
+        }
+        total_width += 1; // '.'
+        let name_text = &source[name_node.start_byte()..name_node.end_byte()];
+        total_width += name_text.len();
+        if let Some(ta) = type_args {
+            let ta_text = &source[ta.start_byte()..ta.end_byte()];
+            total_width += collapse_whitespace(ta_text).len();
+        }
+        if let Some(al) = arg_list {
+            total_width += estimate_arg_list_width(*al, source);
+        }
+        if let Some(tc) = trailing_comment {
+            let tc_text = &source[tc.start_byte()..tc.end_byte()];
+            total_width += 1 + tc_text.len();
+        }
+    }
+
+    // Total line position must fit within line_width
+    (col + total_width) <= line_width
+}
+
 /// Compute the width of content that precedes a chain on the same line.
 /// For `this.field = chain.method()`, returns width of "this.field = " (prefix before chain).
 /// For `return chain.method()`, returns 7 (for "return ").
@@ -632,41 +737,6 @@ fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingConte
         Some("throw_statement") => 6,  // "throw "
         _ => 0,
     }
-}
-
-fn chain_has_lambda_block(
-    segments: &[(
-        tree_sitter::Node,
-        tree_sitter::Node,
-        Option<tree_sitter::Node>,
-        Option<tree_sitter::Node>,
-        Option<tree_sitter::Node>,
-    )],
-) -> bool {
-    for (_, _, _, arg_list, _) in segments {
-        if let Some(al) = arg_list
-            && arg_list_has_lambda_block(*al)
-        {
-            return true;
-        }
-    }
-    false
-}
-
-/// Check if an argument list contains a lambda expression with a block body.
-fn arg_list_has_lambda_block(node: tree_sitter::Node) -> bool {
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == "lambda_expression" {
-            let mut lc = child.walk();
-            for lchild in child.children(&mut lc) {
-                if lchild.kind() == "block" {
-                    return true;
-                }
-            }
-        }
-    }
-    false
 }
 
 /// Count how deep a method invocation chain is (number of nested method_invocations).
@@ -1291,22 +1361,76 @@ pub fn gen_method_reference<'a>(
 }
 
 /// Format an assignment expression: `x = y`, `x += y`
+///
+/// PJF wraps at `=` when the RHS is a chain that would fit at continuation indent,
+/// preferring `this.field =\n        chain.method()` over `this.field = chain\n        .method()`.
 pub fn gen_assignment_expression<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
     let mut items = PrintItems::new();
+
+    // Check if we should wrap at '=' for chain RHS
+    let lhs = node.child_by_field_name("left");
+    let rhs = node.child_by_field_name("right");
+    let indent_width = context.config.indent_width as usize;
+    let _line_width = context.config.line_width as usize;
+    let indent_col = context.indent_level() * indent_width;
+
+    let wrap_at_eq = if let (Some(lhs_node), Some(rhs_node)) = (lhs, rhs) {
+        let is_chain =
+            rhs_node.kind() == "method_invocation" && chain_depth(rhs_node) >= 1;
+        if is_chain {
+            let lhs_text = &context.source[lhs_node.start_byte()..lhs_node.end_byte()];
+            let lhs_width = collapse_whitespace(lhs_text).len();
+            // Check if chain would wrap at current position (after "LHS = ")
+            let current_col = indent_col + lhs_width + 3;
+            let chain_fits_current =
+                chain_fits_inline_at(rhs_node, current_col, context.source, context.config);
+            if !chain_fits_current {
+                // Chain would wrap. Wrap at '=' if chain fits at continuation indent.
+                let continuation_col = indent_col + 2 * indent_width;
+                chain_fits_inline_at(rhs_node, continuation_col, context.source, context.config)
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
     let mut cursor = node.walk();
+    let mut saw_op = false;
 
     for child in node.children(&mut cursor) {
         if child.is_named() {
+            if wrap_at_eq && saw_op && child.kind() == "method_invocation" {
+                context.set_assignment_wrapped(true);
+            }
             items.extend(gen_node(child, context));
+            if wrap_at_eq && saw_op {
+                context.set_assignment_wrapped(false);
+            }
         } else {
             let op = &context.source[child.start_byte()..child.end_byte()];
             items.extend(helpers::gen_space());
             items.push_string(op.to_string());
-            items.extend(helpers::gen_space());
+            saw_op = true;
+            if wrap_at_eq {
+                items.push_signal(Signal::StartIndent);
+                items.push_signal(Signal::StartIndent);
+                items.push_signal(Signal::NewLine);
+            } else {
+                items.extend(helpers::gen_space());
+            }
         }
+    }
+
+    if wrap_at_eq {
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
     }
 
     items

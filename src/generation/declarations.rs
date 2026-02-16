@@ -1112,14 +1112,34 @@ pub fn gen_formal_parameters<'a>(
     items.push_string("(".to_string());
 
     if should_wrap {
+        // PJF bin-packing: first try putting ALL params on one continuation line.
+        // If they fit, use single-line continuation. If not, fall back to one-per-line.
+        let continuation_col = indent_width + 2 * (context.config.indent_width as usize);
+        let all_fit_continuation =
+            continuation_col + param_text_width + 1 <= context.config.line_width as usize; // +1 for ')'
+
         // 2x StartIndent for 8-space continuation indent
         items.push_signal(Signal::StartIndent);
         items.push_signal(Signal::StartIndent);
-        for (i, param) in params.iter().enumerate() {
+
+        if all_fit_continuation {
+            // All params fit on one continuation-indent line (PJF bin-packing mode)
             items.push_signal(Signal::NewLine);
-            items.extend(gen_node(**param, context));
-            if i < params.len() - 1 {
-                items.push_string(",".to_string());
+            for (i, param) in params.iter().enumerate() {
+                items.extend(gen_node(**param, context));
+                if i < params.len() - 1 {
+                    items.push_string(",".to_string());
+                    items.extend(helpers::gen_space());
+                }
+            }
+        } else {
+            // One-per-line (too long even at continuation indent)
+            for (i, param) in params.iter().enumerate() {
+                items.push_signal(Signal::NewLine);
+                items.extend(gen_node(**param, context));
+                if i < params.len() - 1 {
+                    items.push_string(",".to_string());
+                }
             }
         }
         items.push_string(")".to_string());
@@ -1318,16 +1338,12 @@ pub fn gen_variable_declarator<'a>(
                     w
                 };
 
-                // PJF-style chain assignment: keep `= root.firstMethod()` inline when possible.
-                // Use flatten_chain to get the TRUE chain root and first segment,
-                // not just the outermost method_invocation's direct children.
+                // PJF-style chain assignment: prefer wrapping at '=' over wrapping the chain.
+                // Use flatten_chain to get the TRUE chain root and first segment.
                 let is_chain =
                     val.kind() == "method_invocation" && expressions::chain_depth(*val) >= 1;
 
                 if is_chain {
-                    // Use flatten_chain via helper to get true root + first segment width.
-                    // For `AuthResponse.builder().contentType().statusCode()`:
-                    //   root = "AuthResponse", first_seg = ".builder()"
                     let (root_width, first_seg_width) =
                         expressions::chain_root_first_seg_width(*val, context.source);
 
@@ -1335,8 +1351,35 @@ pub fn gen_variable_declarator<'a>(
                     let lhs_plus_first_seg =
                         indent_col + lhs_width + 3 + root_width + first_seg_width;
 
-                    // Only wrap at `=` if this doesn't fit
-                    lhs_plus_first_seg > line_width
+                    if lhs_plus_first_seg > line_width {
+                        // First segment doesn't fit -> must wrap at =
+                        true
+                    } else {
+                        // PJF preference: if chain WOULD wrap at current position,
+                        // check if wrapping at '=' allows the chain to stay inline.
+                        // This avoids `var = chain.method1()\n        .method2()` in favor
+                        // of `var =\n        chain.method1().method2()`.
+                        let current_col = indent_col + lhs_width + 3; // after "LHS = "
+                        let chain_fits_current = expressions::chain_fits_inline_at(
+                            *val,
+                            current_col,
+                            context.source,
+                            context.config,
+                        );
+                        if !chain_fits_current {
+                            // Chain would wrap. Wrap at '=' if chain fits at continuation.
+                            let continuation_col =
+                                indent_col + 2 * (context.config.indent_width as usize);
+                            expressions::chain_fits_inline_at(
+                                *val,
+                                continuation_col,
+                                context.source,
+                                context.config,
+                            )
+                        } else {
+                            false // Chain fits at current position, no wrapping needed
+                        }
+                    }
                 } else {
                     // Not a chain: use the old logic
                     // Check 1: The RHS alone wouldn't fit on one line at continuation indent.
@@ -1376,7 +1419,15 @@ pub fn gen_variable_declarator<'a>(
                 }
             }
             _ if child.is_named() => {
+                // If we wrapped at '=' and the RHS is a chain, tell the chain
+                // wrapper that the assignment already wrapped (prefix is on prev line)
+                if wrap_value && saw_eq && child.kind() == "method_invocation" {
+                    context.set_assignment_wrapped(true);
+                }
                 items.extend(gen_node(child, context));
+                if wrap_value && saw_eq {
+                    context.set_assignment_wrapped(false);
+                }
             }
             _ => {}
         }

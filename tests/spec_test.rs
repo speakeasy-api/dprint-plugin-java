@@ -264,11 +264,11 @@ fn spec_binary_expression() {
 
 #[test]
 fn spec_method_chain() {
-    // 4-segment chain wraps when indent + chain_flat_width > 80 (method_chain_threshold)
+    // PJF per-dot check: no dot exceeds column 80, so chain stays inline
     run_spec(
         "method_chain",
         "public class Test {\n\n    void test() {\n        list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        list.stream()\n                .filter(x -> x > 0)\n                .map(x -> x * 2)\n                .collect(Collectors.toList());\n    }\n}\n",
+        "public class Test {\n\n    void test() {\n        list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());\n    }\n}\n",
     );
 }
 

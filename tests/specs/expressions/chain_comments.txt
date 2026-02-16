@@ -4,5 +4,5 @@ return Helpers.copy(request) //
         .build();
 == output ==
 return Helpers.copy(request) //
-        .setHeader("Authorization", "Bearer " + token) //
-        .build();
+.setHeader("Authorization", "Bearer " + token) //
+.build();

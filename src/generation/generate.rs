@@ -622,23 +622,33 @@ fn gen_annotation_argument_list<'a>(
     // Reset cursor
     cursor = node.walk();
 
-    // Only force multi-line if the annotation wouldn't fit on one line
-    let force_multiline = has_multi_element_array && {
-        // Compute flat width of the entire annotation argument list
-        let text = &context.source[node.start_byte()..node.end_byte()];
-        let flat_width = super::expressions::collapse_whitespace(text).len();
+    // Compute flat width of the entire annotation argument list
+    let text = &context.source[node.start_byte()..node.end_byte()];
+    let flat_width = super::expressions::collapse_whitespace(text).len();
 
-        // Also need the annotation name width (go up to parent annotation node)
-        let annotation_prefix_width = if let Some(parent) = node.parent() {
-            let prefix = &context.source[parent.start_byte()..node.start_byte()];
-            prefix.len() // e.g., "@Target" = 7 chars
-        } else {
-            0
-        };
-
-        let indent_col = context.indent_level() * context.config.indent_width as usize;
-        indent_col + annotation_prefix_width + flat_width > context.config.line_width as usize
+    // Also need the annotation name width (go up to parent annotation node)
+    let annotation_prefix_width = if let Some(parent) = node.parent() {
+        let prefix = &context.source[parent.start_byte()..node.start_byte()];
+        prefix.len() // e.g., "@Target" = 7 chars
+    } else {
+        0
     };
+
+    let indent_col = context.indent_level() * context.config.indent_width as usize;
+    let annotation_total_width =
+        indent_col + annotation_prefix_width + flat_width;
+    let exceeds_line_width = annotation_total_width > context.config.line_width as usize;
+
+    // Force multi-line when:
+    // 1. Annotation has multi-element arrays (PJF always wraps these), OR
+    // 2. Annotation wouldn't fit on one line (PJF wraps long annotations one-per-line)
+    // But only if there are multiple arguments (single-arg annotations stay inline)
+    let named_arg_count = {
+        let mut c = node.walk();
+        node.children(&mut c).filter(|ch| ch.is_named()).count()
+    };
+    let force_multiline = (has_multi_element_array && exceeds_line_width)
+        || (exceeds_line_width && named_arg_count > 1);
 
     if force_multiline {
         // Multi-line format: force all args to separate lines with continuation indent (+8)

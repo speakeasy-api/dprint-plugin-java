@@ -13,12 +13,11 @@ public class Test {
 public class Test {
 
     void test() {
-        client.sendAsync(request, BodyHandlers.ofString())
-                .handle((resp, err) -> {
-                    if (err != null) {
-                        return null;
-                    }
-                    return resp.body();
-                });
+        client.sendAsync(request, BodyHandlers.ofString()).handle((resp, err) -> {
+            if (err != null) {
+                return null;
+            }
+            return resp.body();
+        });
     }
 }
