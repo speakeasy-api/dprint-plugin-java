@@ -1,0 +1,25 @@
+== input ==
+class Test {
+    void test() {
+        try {
+            doSomething();
+        } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+            handleException(e);
+        }
+    }
+}
+== output ==
+class Test {
+
+    void test() {
+        try {
+            doSomething();
+        } catch (NoSuchMethodException
+                | SecurityException
+                | IllegalAccessException
+                | IllegalArgumentException
+                | InvocationTargetException e) {
+            handleException(e);
+        }
+    }
+}

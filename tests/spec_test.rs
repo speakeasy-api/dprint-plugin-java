@@ -264,10 +264,11 @@ fn spec_binary_expression() {
 
 #[test]
 fn spec_method_chain() {
+    // 4-segment chain wraps when indent + chain_flat_width > 80 (method_chain_threshold)
     run_spec(
         "method_chain",
         "public class Test {\n\n    void test() {\n        list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());\n    }\n}\n",
+        "public class Test {\n\n    void test() {\n        list.stream()\n                .filter(x -> x > 0)\n                .map(x -> x * 2)\n                .collect(Collectors.toList());\n    }\n}\n",
     );
 }
 
@@ -1401,9 +1402,9 @@ fn spec_file_chain_first_call_wrap() {
 
 #[test]
 fn spec_chain_wrapping_pjf_column_position() {
-    // PJF wraps ALL segments (including first) when indent + root + first segment > 80
-    // contextRunner (13) + .withPropertyValues("openapi.security.option3.oauth2=test-token") (66) = 79
-    // At indent 8: column 87 > 80, so ALL segments wrap including first.
+    // PJF wraps ALL segments when indent + root + first_seg > 80 (UNIFIED fill mode).
+    // contextRunner (13) + .withPropertyValues("...") (66) = 79. At indent 8: 87 > 80.
+    // So ALL segments wrap including first.
     run_spec(
         "chain_wrapping_pjf_column",
         r#"class Test {

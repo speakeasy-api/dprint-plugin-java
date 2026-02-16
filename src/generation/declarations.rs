@@ -1269,17 +1269,6 @@ pub fn gen_variable_declarator<'a>(
                 let continuation_indent = indent_col + indent_unit * 2;
                 let line_width = context.config.line_width as usize;
 
-                // Check 1: If the RHS is a method chain that would wrap, the RHS
-                // is inherently multi-line, so we should wrap at `=`.
-                let rhs_is_wrapping_chain = val.kind() == "method_invocation"
-                    && expressions::chain_depth(*val) >= 1
-                    && (rhs_flat_width > context.config.method_chain_threshold as usize
-                        || (indent_col + rhs_flat_width) > line_width);
-
-                // Check 2: The RHS alone wouldn't fit on one line at continuation indent.
-                let rhs_too_wide = continuation_indent + rhs_flat_width > line_width;
-
-                // Check 3: The total line (indent + LHS type+name + " = " + RHS) exceeds line_width.
                 // Compute LHS width: type + variable name (everything before the `=` sign).
                 // We need to look at the parent node to get the type information.
                 let lhs_width = if let Some(parent) = node.parent() {
@@ -1328,10 +1317,37 @@ pub fn gen_variable_declarator<'a>(
                     }
                     w
                 };
-                let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width; // " = " is 3 chars
-                let total_too_wide = total_line_width > line_width;
 
-                rhs_is_wrapping_chain || rhs_too_wide || total_too_wide
+                // PJF-style chain assignment: keep `= root.firstMethod()` inline when possible.
+                // Use flatten_chain to get the TRUE chain root and first segment,
+                // not just the outermost method_invocation's direct children.
+                let is_chain =
+                    val.kind() == "method_invocation" && expressions::chain_depth(*val) >= 1;
+
+                if is_chain {
+                    // Use flatten_chain via helper to get true root + first segment width.
+                    // For `AuthResponse.builder().contentType().statusCode()`:
+                    //   root = "AuthResponse", first_seg = ".builder()"
+                    let (root_width, first_seg_width) =
+                        expressions::chain_root_first_seg_width(*val, context.source);
+
+                    // Check if `LHS = root.firstMethod()` fits on one line
+                    let lhs_plus_first_seg =
+                        indent_col + lhs_width + 3 + root_width + first_seg_width;
+
+                    // Only wrap at `=` if this doesn't fit
+                    lhs_plus_first_seg > line_width
+                } else {
+                    // Not a chain: use the old logic
+                    // Check 1: The RHS alone wouldn't fit on one line at continuation indent.
+                    let rhs_too_wide = continuation_indent + rhs_flat_width > line_width;
+
+                    // Check 2: The total line (indent + LHS + " = " + RHS) exceeds line_width.
+                    let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width;
+                    let total_too_wide = total_line_width > line_width;
+
+                    rhs_too_wide || total_too_wide
+                }
             } else {
                 false
             }

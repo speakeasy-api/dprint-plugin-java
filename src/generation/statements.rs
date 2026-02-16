@@ -608,6 +608,26 @@ pub fn gen_try_with_resources_statement<'a>(
     items
 }
 
+/// Estimate the flat width of a catch clause from the source text.
+/// Returns the width of `} catch (ExType1 | ExType2 ... e) {` on one line.
+fn estimate_catch_clause_width(node: tree_sitter::Node, source: &str) -> usize {
+    // We need to estimate: "} catch (" + types + " " + identifier + ") {"
+    let mut width = "} catch (".len();
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "catch_formal_parameter" {
+            let text = &source[child.start_byte()..child.end_byte()];
+            // Collapse all whitespace to single spaces for flat width
+            let flat_text: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+            width += flat_text.len();
+        }
+    }
+
+    width += ") {".len();
+    width
+}
+
 /// Format a catch clause: `catch (Exception e) { }`
 fn gen_catch_clause<'a>(
     node: tree_sitter::Node<'a>,
@@ -615,6 +635,11 @@ fn gen_catch_clause<'a>(
 ) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
+
+    // Pre-calculate: estimate catch clause line width to decide multi-exception wrapping
+    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let catch_width = estimate_catch_clause_width(node, context.source);
+    let should_wrap_catch = indent_width + catch_width > context.config.line_width as usize;
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -624,7 +649,11 @@ fn gen_catch_clause<'a>(
             }
             "catch_formal_parameter" => {
                 items.push_string("(".to_string());
-                items.extend(gen_catch_formal_parameter(child, context));
+                items.extend(gen_catch_formal_parameter(
+                    child,
+                    context,
+                    should_wrap_catch,
+                ));
                 items.push_string(")".to_string());
                 items.extend(helpers::gen_space());
             }
@@ -642,6 +671,7 @@ fn gen_catch_clause<'a>(
 fn gen_catch_formal_parameter<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
+    should_wrap: bool,
 ) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
@@ -657,7 +687,7 @@ fn gen_catch_formal_parameter<'a>(
                 if need_space {
                     items.extend(helpers::gen_space());
                 }
-                items.extend(gen_catch_type(child, context));
+                items.extend(gen_catch_type(child, context, should_wrap));
                 need_space = true;
             }
             "identifier" => {
@@ -674,25 +704,58 @@ fn gen_catch_formal_parameter<'a>(
 }
 
 /// Format a catch type: `Exception | RuntimeException`
+/// If `should_wrap` is true, wraps at `|` separators with continuation indent.
 fn gen_catch_type<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
+    should_wrap: bool,
 ) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
+    let children: Vec<_> = node.children(&mut cursor).collect();
 
-    for child in node.children(&mut cursor) {
-        match child.kind() {
-            "|" => {
-                items.extend(helpers::gen_space());
-                items.push_string("|".to_string());
-                items.extend(helpers::gen_space());
+    if !should_wrap {
+        // Short catch: keep on one line
+        for child in children {
+            match child.kind() {
+                "|" => {
+                    items.extend(helpers::gen_space());
+                    items.push_string("|".to_string());
+                    items.extend(helpers::gen_space());
+                }
+                _ if child.is_named() => {
+                    items.extend(gen_node(child, context));
+                }
+                _ => {}
             }
-            _ if child.is_named() => {
-                items.extend(gen_node(child, context));
-            }
-            _ => {}
         }
+    } else {
+        // Long catch: wrap at | with continuation indent
+        // Tree structure: Type1 | Type2 | Type3
+        // We want: Type1 on same line, then newline + | Type2, newline + | Type3, etc.
+
+        // Add continuation indent (+2 levels = +8 spaces)
+        items.push_signal(Signal::StartIndent);
+        items.push_signal(Signal::StartIndent);
+
+        for child in children {
+            match child.kind() {
+                "|" => {
+                    // For all | tokens, emit newline + | + space
+                    items.push_signal(Signal::NewLine);
+                    items.push_string("|".to_string());
+                    items.extend(helpers::gen_space());
+                }
+                _ if child.is_named() => {
+                    // Emit the type
+                    items.extend(gen_node(child, context));
+                }
+                _ => {}
+            }
+        }
+
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
     }
 
     items

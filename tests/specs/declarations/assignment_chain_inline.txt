@@ -1,0 +1,17 @@
+== input ==
+class Test {
+    void test() {
+        SDK sdk = SDK.builder().serverURL("url").client(http).build();
+        VeryLongTypeNameThatExceedsLineWidth x = VeryLongClassName.builder().method().build();
+        PostTest2Response res = sdk.testGroup().tag2().postTest().call();
+    }
+}
+== output ==
+class Test {
+
+    void test() {
+        SDK sdk = SDK.builder().serverURL("url").client(http).build();
+        VeryLongTypeNameThatExceedsLineWidth x = VeryLongClassName.builder().method().build();
+        PostTest2Response res = sdk.testGroup().tag2().postTest().call();
+    }
+}

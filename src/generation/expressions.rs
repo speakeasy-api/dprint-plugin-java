@@ -334,8 +334,9 @@ pub fn gen_method_invocation<'a>(
     )> = Vec::new();
     let root = flatten_chain(node, &mut segments);
 
-    // Force wrapping if any segment has a lambda with a block body
-    let force_wrap = chain_has_lambda_block(&segments);
+    // Force wrapping only for 3+ segment chains with lambda blocks.
+    // PJF keeps 2-segment chains with lambdas inline (e.g., task.get().whenComplete(lambda))
+    let force_wrap = segments.len() > 2 && chain_has_lambda_block(&segments);
 
     // PJF-style chain wrapping: if the chain's flat width (root + all segments) exceeds
     // method_chain_threshold (default 80), wrap ALL segments onto new lines with +8
@@ -371,21 +372,32 @@ pub fn gen_method_invocation<'a>(
 
     let chain_flat_width = root_width + segments_width;
 
-    // Use method_chain_threshold for the flat-width decision.
-    // For chains in argument lists, use a more aggressive threshold to account for
-    // the extra indentation from the containing argument list.
-    let is_in_argument_list = context.has_ancestor("argument_list");
-    let threshold = if is_in_argument_list {
-        (context.config.line_width as usize) / 2
+    // PJF-style chain wrapping with position-based thresholds:
+    // - 2-segment chains (e.g., obj.method1().method2()): use line_width as threshold
+    //   PJF keeps short chains inline even at 100+ chars
+    // - 3+ segment chains: use method_chain_threshold (80) as column position limit
+    // - Direct chain arguments: use line_width/2 as a more aggressive threshold
+    //   (but NOT for chains inside lambda bodies that happen to be inside argument lists)
+    let is_direct_argument = node.parent().is_some_and(|p| p.kind() == "argument_list");
+    let is_short_chain = segments.len() <= 2;
+    let line_width = context.config.line_width as usize;
+    let threshold = if is_direct_argument {
+        line_width / 2
+    } else if is_short_chain {
+        line_width // 2-segment chains: only wrap if exceeds line_width
     } else {
-        context.config.method_chain_threshold as usize
+        context.config.method_chain_threshold as usize // 3+ segments: 80-col position limit
     };
 
-    // Also wrap if the full line (indent + chain) exceeds line_width
-    let line_width = context.config.line_width as usize;
+    // Compute prefix width: content on the same line before the chain (assignment LHS, return, etc.)
+    // PJF considers the TOTAL line width, not just indent + chain.
+    let prefix_width = compute_chain_prefix_width(node, context);
 
-    let should_wrap =
-        force_wrap || chain_flat_width > threshold || (indent_col + chain_flat_width) > line_width;
+    // Position-based check: also account for prefix (assignment LHS, etc.)
+    let effective_position = indent_col + prefix_width + chain_flat_width;
+    let should_wrap = force_wrap
+        || (indent_col + chain_flat_width) > threshold
+        || effective_position > line_width;
 
     let mut items = PrintItems::new();
     items.extend(gen_node(root, context));
@@ -416,9 +428,12 @@ pub fn gen_method_invocation<'a>(
                 0
             };
 
-        // If root + first segment exceeds the column threshold, wrap ALL segments
-        // (including first). Otherwise, keep first segment inline with root.
-        let wrap_first = (indent_col + root_width + first_seg_width) > threshold;
+        // PJF always uses METHOD_CHAIN_COLUMN_LIMIT (80) for wrap_first decision,
+        // regardless of chain length. If indent + root + first_segment > 80, ALL
+        // segments wrap (UNIFIED fill mode). This ensures contextRunner.withPropertyValues(...)
+        // wraps at 87 > 80 even though 2-segment threshold is 120.
+        let chain_threshold = context.config.method_chain_threshold as usize;
+        let wrap_first = (indent_col + root_width + first_seg_width) > chain_threshold;
 
         if wrap_first {
             // ALL segments wrap (including first)
@@ -568,6 +583,57 @@ fn gen_method_invocation_simple<'a>(
 /// This is used to force chain wrapping when lambdas with block bodies are present,
 /// since the multi-line block content would produce incorrect indentation on a single line.
 #[allow(clippy::type_complexity)]
+/// Compute the width of content that precedes a chain on the same line.
+/// For `this.field = chain.method()`, returns width of "this.field = " (prefix before chain).
+/// For `return chain.method()`, returns 7 (for "return ").
+/// This lets the chain wrapping decision account for the full line width, not just indent + chain.
+fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingContext) -> usize {
+    let parent = node.parent();
+    match parent.map(|p| p.kind()) {
+        Some("assignment_expression") => {
+            // e.g., `this.field = chain...` — prefix is LHS + " = "
+            if let Some(p) = parent {
+                if let Some(lhs) = p.child_by_field_name("left") {
+                    let lhs_text = &context.source[lhs.start_byte()..lhs.end_byte()];
+                    return collapse_whitespace(lhs_text).len() + 3; // " = "
+                }
+            }
+            0
+        }
+        Some("variable_declarator") => {
+            // e.g., `Type var = chain...` — prefix includes type + name + " = "
+            // Look at grandparent (local_variable_declaration) for type info
+            if let Some(p) = parent {
+                if let Some(gp) = p.parent() {
+                    let mut type_width = 0;
+                    let mut cursor = gp.walk();
+                    for child in gp.children(&mut cursor) {
+                        if child.id() == p.id() {
+                            break;
+                        }
+                        if child.is_named() {
+                            let text = &context.source[child.start_byte()..child.end_byte()];
+                            if type_width > 0 {
+                                type_width += 1; // space between tokens
+                            }
+                            type_width += collapse_whitespace(text).len();
+                        }
+                    }
+                    // Add variable name width
+                    if let Some(name) = p.child_by_field_name("name") {
+                        let name_text = &context.source[name.start_byte()..name.end_byte()];
+                        return type_width + 1 + name_text.len() + 3; // " name = "
+                    }
+                }
+            }
+            0
+        }
+        Some("return_statement") => 7, // "return "
+        Some("throw_statement") => 6,  // "throw "
+        _ => 0,
+    }
+}
+
 fn chain_has_lambda_block(
     segments: &[(
         tree_sitter::Node,
@@ -622,6 +688,37 @@ pub(super) fn chain_depth(node: tree_sitter::Node) -> usize {
         }
     }
     depth
+}
+
+/// Compute the width of the chain root + first segment for assignment wrapping decisions.
+/// For a chain like `AuthResponse.builder().contentType().statusCode()`, this returns
+/// (root_width="AuthResponse", first_seg_width=".builder()") so the caller can check
+/// if `LHS = AuthResponse.builder()` fits on one line.
+pub fn chain_root_first_seg_width(node: tree_sitter::Node, source: &str) -> (usize, usize) {
+    let mut segments = Vec::new();
+    let root = flatten_chain(node, &mut segments);
+
+    let root_text = &source[root.start_byte()..root.end_byte()];
+    let root_width = collapse_whitespace(root_text).len();
+
+    let first_seg_width = if let Some((_, name_node, type_args, arg_list, _)) = segments.first() {
+        let mut w = 1; // '.'
+        let name_text = &source[name_node.start_byte()..name_node.end_byte()];
+        w += name_text.len();
+        if let Some(ta) = type_args {
+            let ta_text = &source[ta.start_byte()..ta.end_byte()];
+            w += collapse_whitespace(ta_text).len();
+        }
+        if let Some(al) = arg_list {
+            let al_text = &source[al.start_byte()..al.end_byte()];
+            w += collapse_whitespace(al_text).len();
+        }
+        w
+    } else {
+        0
+    };
+
+    (root_width, first_seg_width)
 }
 
 /// Flatten a nested method_invocation chain into segments.
@@ -885,13 +982,16 @@ pub fn gen_object_creation_expression<'a>(
     items
 }
 
-/// Format an array creation expression: `new int[n]`, `new int[]{1, 2, 3}`
+/// Format an array creation expression: `new int[n]`, `new int[] {1, 2, 3}`
 pub fn gen_array_creation_expression<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
+
+    // Check if we have an array_initializer to add space between dimensions and initializer
+    let has_initializer = node.child_by_field_name("value").is_some();
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -904,6 +1004,10 @@ pub fn gen_array_creation_expression<'a>(
             }
             "dimensions" => {
                 items.extend(helpers::gen_node_text(child, context.source));
+                // Add space after dimensions if array_initializer follows
+                if has_initializer {
+                    items.extend(helpers::gen_space());
+                }
             }
             "array_initializer" => {
                 items.extend(gen_array_initializer(child, context));

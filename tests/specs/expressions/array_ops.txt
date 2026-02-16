@@ -11,7 +11,7 @@ public class Test {
 public class Test {
 
     void test() {
-        int[] arr = new int[]{1, 2, 3};
+        int[] arr = new int[] {1, 2, 3};
         int x = arr[0];
         arr[1] = 42;
         String[][] matrix = new String[3][4];

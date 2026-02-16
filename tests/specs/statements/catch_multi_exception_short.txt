@@ -1,0 +1,21 @@
+== input ==
+class Test {
+    void test() {
+        try {
+            doSomething();
+        } catch (IOException | SQLException e) {
+            handleException(e);
+        }
+    }
+}
+== output ==
+class Test {
+
+    void test() {
+        try {
+            doSomething();
+        } catch (IOException | SQLException e) {
+            handleException(e);
+        }
+    }
+}

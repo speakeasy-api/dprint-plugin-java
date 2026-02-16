@@ -20,17 +20,16 @@ class Test {
                         .build(),
                 res.namespaceTypesTest().orElse(null));
         GetNamespaceTypesResponse res = sdk.namespaceTests().types().getNamespaceTypes().call();
-        Organization org =
-                Organization.builder()
-                        .name("Acme Corp")
-                        .address(Address.builder()
-                                .street("123 Main St")
-                                .city("Springfield")
-                                .location(Location.builder()
-                                        .latitude(37.7749)
-                                        .longitude(-122.4194)
-                                        .build())
+        Organization org = Organization.builder()
+                .name("Acme Corp")
+                .address(Address.builder()
+                        .street("123 Main St")
+                        .city("Springfield")
+                        .location(Location.builder()
+                                .latitude(37.7749)
+                                .longitude(-122.4194)
                                 .build())
-                        .build();
+                        .build())
+                .build();
     }
 }

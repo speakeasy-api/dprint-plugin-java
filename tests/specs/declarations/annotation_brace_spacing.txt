@@ -16,5 +16,5 @@ import java.lang.annotation.Target;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class Test {
 
-    int[] arr = new int[]{1, 2, 3};
+    int[] arr = new int[] {1, 2, 3};
 }
