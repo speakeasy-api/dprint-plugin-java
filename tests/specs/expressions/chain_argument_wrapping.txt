@@ -1,0 +1,20 @@
+== input ==
+class Test {
+    void test() {
+        // Test: argument lists inside chain segments should wrap when args exceed line width
+        // accounting for the chain's continuation indent (+8 spaces)
+        contextRunner.withPropertyValues("openapi.retry-config.strategy=BACKOFF", "openapi.security.option3.oauth2=test-token").run(context -> { });
+    }
+}
+== output ==
+class Test {
+
+    void test() {
+        // Test: argument lists inside chain segments should wrap when args exceed line width
+        // accounting for the chain's continuation indent (+8 spaces)
+        contextRunner
+                .withPropertyValues(
+                        "openapi.retry-config.strategy=BACKOFF", "openapi.security.option3.oauth2=test-token")
+                .run(context -> {});
+    }
+}

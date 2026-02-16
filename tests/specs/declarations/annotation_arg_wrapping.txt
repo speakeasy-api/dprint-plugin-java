@@ -11,6 +11,9 @@ class TestNoArray {}
 @MultiArg(name = "test", values = {"a", "b", "c"}, count = 3)
 class TestMultiArgWithArray {}
 
+@Target({ElementType.TYPE, ElementType.METHOD})
+class TestShortArrayStaysInline {}
+
 @TestPropertySource(
     properties = {"openapi.server-url=https://test.api.example.com",
         "openapi.server-idx=2",
@@ -32,15 +35,11 @@ class TestSingleArrayElement {}
 @Schema(description = "short")
 class TestNoArray {}
 
-@MultiArg(
-        name = "test",
-        values = {
-            "a",
-            "b",
-            "c",
-        },
-        count = 3)
+@MultiArg(name = "test", values = {"a", "b", "c"}, count = 3)
 class TestMultiArgWithArray {}
+
+@Target({ElementType.TYPE, ElementType.METHOD})
+class TestShortArrayStaysInline {}
 
 @TestPropertySource(
         properties = {

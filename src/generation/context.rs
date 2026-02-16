@@ -18,6 +18,12 @@ pub struct FormattingContext<'a> {
     /// Stack of parent node kinds for context-aware formatting.
     /// The top of the stack is the immediate parent.
     parent_stack: Vec<&'static str>,
+
+    /// Additional continuation indent levels (for chain wrapping).
+    /// When a method chain wraps, we add +2 levels of continuation indent
+    /// that don't affect the base indent_level but need to be accounted for
+    /// in width calculations for nested argument lists.
+    continuation_indent_levels: usize,
 }
 
 impl<'a> FormattingContext<'a> {
@@ -28,6 +34,7 @@ impl<'a> FormattingContext<'a> {
             config,
             indent_level: 0,
             parent_stack: Vec::new(),
+            continuation_indent_levels: 0,
         }
     }
 
@@ -66,6 +73,23 @@ impl<'a> FormattingContext<'a> {
     /// Check if the given node kind is in the parent stack.
     pub fn has_ancestor(&self, kind: &'static str) -> bool {
         self.parent_stack.contains(&kind)
+    }
+
+    /// Add continuation indent levels (for wrapped chains).
+    pub fn add_continuation_indent(&mut self, levels: usize) {
+        self.continuation_indent_levels += levels;
+    }
+
+    /// Remove continuation indent levels (for wrapped chains).
+    pub fn remove_continuation_indent(&mut self, levels: usize) {
+        if self.continuation_indent_levels >= levels {
+            self.continuation_indent_levels -= levels;
+        }
+    }
+
+    /// Get the effective indent level including continuation indent.
+    pub fn effective_indent_level(&self) -> usize {
+        self.indent_level + self.continuation_indent_levels
     }
 }
 

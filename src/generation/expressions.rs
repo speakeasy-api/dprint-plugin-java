@@ -424,6 +424,8 @@ pub fn gen_method_invocation<'a>(
             // ALL segments wrap (including first)
             items.push_signal(Signal::StartIndent);
             items.push_signal(Signal::StartIndent);
+            // Track continuation indent for argument list width calculations
+            context.add_continuation_indent(2);
             let mut prev_had_comment = false;
             for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
                 if !prev_had_comment {
@@ -445,6 +447,7 @@ pub fn gen_method_invocation<'a>(
                     prev_had_comment = false;
                 }
             }
+            context.remove_continuation_indent(2);
             items.push_signal(Signal::FinishIndent);
             items.push_signal(Signal::FinishIndent);
         } else {
@@ -467,6 +470,8 @@ pub fn gen_method_invocation<'a>(
             if segments.len() > 1 {
                 items.push_signal(Signal::StartIndent);
                 items.push_signal(Signal::StartIndent);
+                // Track continuation indent for argument list width calculations
+                context.add_continuation_indent(2);
                 let mut prev_had_comment =
                     segments.first().and_then(|(_, _, _, _, tc)| *tc).is_some();
                 for (_, name_node, type_args, arg_list, trailing_comment) in &segments[1..] {
@@ -489,6 +494,7 @@ pub fn gen_method_invocation<'a>(
                         prev_had_comment = false;
                     }
                 }
+                context.remove_continuation_indent(2);
                 items.push_signal(Signal::FinishIndent);
                 items.push_signal(Signal::FinishIndent);
             }
@@ -946,8 +952,31 @@ pub fn gen_array_initializer<'a>(
     cursor = node.walk();
     let element_count = node.children(&mut cursor).filter(|c| c.is_named()).count();
 
-    // Force expanded format in annotation context with multiple elements
-    let force_expand = in_annotation && element_count > 1;
+    // Force expanded format in annotation context with multiple elements,
+    // but only if the annotation wouldn't fit on one line
+    let force_expand = if in_annotation && element_count > 1 {
+        // Find the annotation node to check the full width
+        let mut current = node;
+        let mut should_expand = true; // Default to expanding if annotation not found
+        while let Some(parent) = current.parent() {
+            if parent.kind() == "marker_annotation"
+                || parent.kind() == "annotation"
+                || parent.kind() == "normal_annotation"
+            {
+                // Compute flat width of the entire annotation
+                let ann_text = &context.source[parent.start_byte()..parent.end_byte()];
+                let flat_width = collapse_whitespace(ann_text).len();
+                let indent_col =
+                    context.effective_indent_level() * context.config.indent_width as usize;
+                should_expand = indent_col + flat_width > context.config.line_width as usize;
+                break;
+            }
+            current = parent;
+        }
+        should_expand
+    } else {
+        false
+    };
 
     // Reset cursor for iteration
     cursor = node.walk();

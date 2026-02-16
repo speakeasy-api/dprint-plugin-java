@@ -148,15 +148,6 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                 child.children(&mut c).any(|ch| ch.kind() == "static")
             };
 
-            // Extract import path to check for java.lang.* simple class imports
-            let import_path = extract_import_path(*child, context.source);
-
-            // Skip java.lang.X imports (simple class names only, not sub-packages)
-            // Keep: java.lang.annotation.Retention, static imports from java.lang
-            if !is_static && is_java_lang_simple_import(&import_path) {
-                continue; // Skip this import
-            }
-
             if is_static {
                 static_imports.push(*child);
             } else {
@@ -339,19 +330,6 @@ fn extract_import_path(node: tree_sitter::Node, source: &str) -> String {
         }
     }
     String::new()
-}
-
-/// Check if an import is a simple java.lang.* import that should be removed.
-/// Returns true for: java.lang.String, java.lang.Override, etc.
-/// Returns false for: java.lang.annotation.*, java.util.*, etc.
-fn is_java_lang_simple_import(import_path: &str) -> bool {
-    if let Some(rest) = import_path.strip_prefix("java.lang.") {
-        // Check if there are more dots (sub-package)
-        // If no more dots and not a wildcard, it's a simple class import
-        !rest.contains('.') && rest != "*"
-    } else {
-        false
-    }
 }
 
 /// Format a generic type: `List<String>`, `Map<K, V>`
@@ -644,7 +622,25 @@ fn gen_annotation_argument_list<'a>(
     // Reset cursor
     cursor = node.walk();
 
-    if has_multi_element_array {
+    // Only force multi-line if the annotation wouldn't fit on one line
+    let force_multiline = has_multi_element_array && {
+        // Compute flat width of the entire annotation argument list
+        let text = &context.source[node.start_byte()..node.end_byte()];
+        let flat_width = super::expressions::collapse_whitespace(text).len();
+
+        // Also need the annotation name width (go up to parent annotation node)
+        let annotation_prefix_width = if let Some(parent) = node.parent() {
+            let prefix = &context.source[parent.start_byte()..node.start_byte()];
+            prefix.len() // e.g., "@Target" = 7 chars
+        } else {
+            0
+        };
+
+        let indent_col = context.indent_level() * context.config.indent_width as usize;
+        indent_col + annotation_prefix_width + flat_width > context.config.line_width as usize
+    };
+
+    if force_multiline {
         // Multi-line format: force all args to separate lines with continuation indent (+8)
         items.push_string("(".to_string());
         // Double indent = +8 (continuation indent)

@@ -1279,7 +1279,59 @@ pub fn gen_variable_declarator<'a>(
                 // Check 2: The RHS alone wouldn't fit on one line at continuation indent.
                 let rhs_too_wide = continuation_indent + rhs_flat_width > line_width;
 
-                rhs_is_wrapping_chain || rhs_too_wide
+                // Check 3: The total line (indent + LHS type+name + " = " + RHS) exceeds line_width.
+                // Compute LHS width: type + variable name (everything before the `=` sign).
+                // We need to look at the parent node to get the type information.
+                let lhs_width = if let Some(parent) = node.parent() {
+                    let mut w = 0;
+                    let mut cursor = parent.walk();
+
+                    for c in parent.children(&mut cursor) {
+                        // Skip until we find our variable_declarator
+                        if c == node {
+                            // Now add the variable_declarator's children up to the `=`
+                            for vc in children.iter() {
+                                if vc.kind() == "=" {
+                                    break;
+                                }
+                                let text = &context.source[vc.start_byte()..vc.end_byte()];
+                                if w > 0 {
+                                    w += 1;
+                                } // space between tokens
+                                w += expressions::collapse_whitespace(text).len();
+                            }
+                            break;
+                        }
+
+                        // Accumulate width from type nodes and modifiers before variable_declarator
+                        if c.is_named() && c.kind() != "modifiers" {
+                            let text = &context.source[c.start_byte()..c.end_byte()];
+                            if w > 0 {
+                                w += 1;
+                            } // space between tokens
+                            w += expressions::collapse_whitespace(text).len();
+                        }
+                    }
+                    w
+                } else {
+                    // Fallback: just the variable_declarator's LHS parts
+                    let mut w = 0;
+                    for c in children.iter() {
+                        if c.kind() == "=" {
+                            break;
+                        }
+                        let text = &context.source[c.start_byte()..c.end_byte()];
+                        if w > 0 {
+                            w += 1;
+                        }
+                        w += expressions::collapse_whitespace(text).len();
+                    }
+                    w
+                };
+                let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width; // " = " is 3 chars
+                let total_too_wide = total_line_width > line_width;
+
+                rhs_is_wrapping_chain || rhs_too_wide || total_too_wide
             } else {
                 false
             }
@@ -1351,9 +1403,16 @@ pub fn gen_argument_list<'a>(
         })
         .sum();
 
-    // Use indent level (stable across passes) + arg_list_text_width for wrap decision.
-    // Account for the prefix width (receiver, method name, etc.) on the same line.
-    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    // Use effective indent level (including continuation indent from wrapped chains)
+    // only when we're actually inside a method invocation chain.
+    // For annotations and other contexts, use the base indent level.
+    let is_in_chain = context.has_ancestor("method_invocation");
+    let indent_level = if is_in_chain {
+        context.effective_indent_level()
+    } else {
+        context.indent_level()
+    };
+    let indent_width = indent_level * context.config.indent_width as usize;
     let prefix_width = estimate_prefix_width(node, context.source);
 
     // Check if args fit on the same line as the prefix

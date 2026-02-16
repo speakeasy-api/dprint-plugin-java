@@ -11,6 +11,12 @@ public class Test {
         while (httpClientConfiguration.getRedactedHeaders() != null && !httpClientConfiguration.getRedactedHeaders().isEmpty()) {
             doSomething();
         }
+        // Borderline case - just under 120 chars should stay on one line
+        if (someObject.getProperty() != null && someObject.getAnotherProperty() != null && someObject.getMoreStuff()) {
+            doSomething();
+        }
+        // Return statement with binary expression
+        return httpClientConfiguration.getRedactedHeaders() != null && !httpClientConfiguration.getRedactedHeaders().isEmpty();
     }
 }
 == output ==
@@ -28,5 +34,12 @@ public class Test {
                 && !httpClientConfiguration.getRedactedHeaders().isEmpty()) {
             doSomething();
         }
+        // Borderline case - just under 120 chars should stay on one line
+        if (someObject.getProperty() != null && someObject.getAnotherProperty() != null && someObject.getMoreStuff()) {
+            doSomething();
+        }
+        // Return statement with binary expression
+        return httpClientConfiguration.getRedactedHeaders() != null
+                && !httpClientConfiguration.getRedactedHeaders().isEmpty();
     }
 }

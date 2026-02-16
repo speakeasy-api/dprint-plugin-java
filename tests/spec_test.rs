@@ -1058,6 +1058,14 @@ fn spec_builder_pattern_wrapping() {
 }
 
 #[test]
+fn spec_chain_argument_wrapping() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/chain_argument_wrapping.txt"
+    ));
+}
+
+#[test]
 fn spec_file_chain_comments() {
     run_spec_file(concat!(
         env!("CARGO_MANIFEST_DIR"),
