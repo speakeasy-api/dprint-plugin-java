@@ -444,14 +444,34 @@ fn gen_type_arguments<'a>(
     let should_wrap = total_inline > line_width;
 
     if should_wrap {
+        // Check if all type args fit on ONE continuation line (bin-packing)
+        let continuation_col =
+            indent_width + 2 * context.config.indent_width as usize;
+        let all_fit_continuation =
+            continuation_col + args_flat_width + 1 + trailing <= line_width; // args + ">" [+ " {"]
+
         items.push_string("<".to_string());
         items.push_signal(Signal::StartIndent);
         items.push_signal(Signal::StartIndent);
-        for (i, arg) in type_args.iter().enumerate() {
+
+        if all_fit_continuation {
+            // All type args on one continuation line
             items.push_signal(Signal::NewLine);
-            items.extend(gen_node(**arg, context));
-            if i < type_args.len() - 1 {
-                items.push_string(",".to_string());
+            for (i, arg) in type_args.iter().enumerate() {
+                items.extend(gen_node(**arg, context));
+                if i < type_args.len() - 1 {
+                    items.push_string(",".to_string());
+                    items.extend(helpers::gen_space());
+                }
+            }
+        } else {
+            // One per line
+            for (i, arg) in type_args.iter().enumerate() {
+                items.push_signal(Signal::NewLine);
+                items.extend(gen_node(**arg, context));
+                if i < type_args.len() - 1 {
+                    items.push_string(",".to_string());
+                }
             }
         }
         items.push_string(">".to_string());
