@@ -395,11 +395,12 @@ pub fn gen_method_invocation<'a>(
         // PJF chain prefix detection:
         // Determine how many initial segments form the "prefix" (stay inline with root).
         //
-        // Rules (derived from PJF source analysis):
-        // 1. Class-ref roots (uppercase): root + first method always forms prefix
-        // 2. Method-call roots: no prefix (wrap all segments)
-        // 3. Non-class-ref roots with 3+ segments: first zero-arg method is prefix
-        // 4. Non-class-ref roots with ≤2 segments: no prefix (wrap all)
+        // Two rules (derived from PJF source analysis):
+        // 1. If any dot exceeds METHOD_CHAIN_COLUMN_LIMIT (80): everything before that
+        //    dot stays inline as prefix, everything from that dot wraps.
+        // 2. If no dot exceeds 80 but total exceeds line_width: use zero-arg prefix
+        //    (consecutive zero-arg methods from start stay inline).
+        // 3. Class-ref roots: always at least 1 prefix (root + first method).
         let root_is_class_ref = {
             let root_text = &context.source[root.start_byte()..root.end_byte()];
             let last_component = root_text.rsplit('.').next().unwrap_or(root_text);
@@ -409,38 +410,19 @@ pub fn gen_method_invocation<'a>(
                 .is_some_and(|c| c.is_ascii_uppercase())
         };
 
-        // Count consecutive zero-arg methods from the start
-        let mut zero_arg_prefix_count = 0;
-        for (_, _, _, arg_list, _) in &segments {
-            let is_zero_arg = arg_list.map_or(true, |al| {
-                let mut c = al.walk();
-                !al.children(&mut c).any(|child| child.is_named())
-            });
-            if is_zero_arg {
-                zero_arg_prefix_count += 1;
-            } else {
-                break;
-            }
-        }
-
         let prefix_count = if root_is_class_ref {
-            // Class-ref: always at least 1 (root + first method), plus any additional zero-arg
-            1.max(zero_arg_prefix_count)
-        } else if root.kind() == "method_invocation" {
-            // Bare method call root (e.g., someMethod().chain()): no prefix extension.
-            // PJF doesn't extend prefix past a method call boundary.
-            0
-        } else if segments.len() <= 2 {
-            // 2-segment chains: PJF wraps all segments with no prefix for
-            // non-class-ref roots (e.g., sdkConfiguration.hooks().afterError(...))
-            0
-        } else if zero_arg_prefix_count >= 1 {
-            // 3+ segment chains with identifier/field root: first zero-arg method
-            // is prefix (PJF behavior). e.g., sdk.tag1() stays inline, .deprecated1() wraps
+            // Class-ref: always keep first method inline (e.g., SDK.builder())
             1
-        } else {
-            // No zero-arg prefix methods: wrap all segments
+        } else if root.kind() == "method_invocation" {
+            // Bare method call root (e.g., someMethod().chain()...):
+            // The root IS the first call in the chain, so no additional prefix.
             0
+        } else {
+            // Identifier/field_access root: keep first method inline only if root
+            // is short enough (≤ continuation indent width = 2 * indent_width).
+            // PJF keeps `sdk.tag1()` inline but wraps all for `someObject.method()`.
+            let continuation = 2 * indent_width;
+            if root_width <= continuation { 1 } else { 0 }
         };
 
         // Emit prefix segments inline, then wrap the rest
@@ -733,8 +715,7 @@ fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingConte
                                 .is_some_and(|ggp| ggp.kind() == "method_invocation");
                         if in_chain {
                             if let Some(name) = gp.child_by_field_name("name") {
-                                let name_text =
-                                    &context.source[name.start_byte()..name.end_byte()];
+                                let name_text = &context.source[name.start_byte()..name.end_byte()];
                                 return 1 + name_text.len() + 1; // ".name("
                             }
                         }
@@ -1384,8 +1365,7 @@ pub fn gen_assignment_expression<'a>(
 
     // Determine if we should wrap at '='
     let wrap_at_eq = if let (Some(lhs_node), Some(rhs_node)) = (lhs, rhs) {
-        let is_chain =
-            rhs_node.kind() == "method_invocation" && chain_depth(rhs_node) >= 1;
+        let is_chain = rhs_node.kind() == "method_invocation" && chain_depth(rhs_node) >= 1;
 
         if is_chain {
             let indent_unit = context.config.indent_width as usize;
@@ -1401,12 +1381,7 @@ pub fn gen_assignment_expression<'a>(
             if !chain_fits_current {
                 // Chain would wrap. Check if wrapping at '=' lets the chain stay inline.
                 let continuation_col = indent_col + 2 * indent_unit;
-                chain_fits_inline_at(
-                    rhs_node,
-                    continuation_col,
-                    context.source,
-                    context.config,
-                )
+                chain_fits_inline_at(rhs_node, continuation_col, context.source, context.config)
             } else {
                 false
             }

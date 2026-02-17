@@ -424,9 +424,7 @@ pub fn gen_method_declaration<'a>(
         let mut cursor_pre = node.walk();
         let children_pre: Vec<_> = node.children(&mut cursor_pre).collect();
         // Find the method name (identifier) position
-        let name_idx = children_pre
-            .iter()
-            .position(|c| c.kind() == "identifier");
+        let name_idx = children_pre.iter().position(|c| c.kind() == "identifier");
         if let Some(idx) = name_idx {
             // Width of everything up to and including the return type
             let mut return_type_width = 0;
@@ -439,18 +437,21 @@ pub fn gen_method_declaration<'a>(
                 return_type_width += last_line.trim().len();
             }
             // Width of identifier + remaining sig (params, throws)
-            let name_text = &context.source[children_pre[idx].start_byte()
-                ..children_pre[idx].end_byte()];
+            let name_text =
+                &context.source[children_pre[idx].start_byte()..children_pre[idx].end_byte()];
             let name_width = name_text.len();
             // Estimate params width
-            let params_width: usize = children_pre.iter().find_map(|c| {
-                if c.kind() == "formal_parameters" {
-                    let text = &context.source[c.start_byte()..c.end_byte()];
-                    Some(expressions::collapse_whitespace(text).len())
-                } else {
-                    None
-                }
-            }).unwrap_or(2); // "()" minimum
+            let params_width: usize = children_pre
+                .iter()
+                .find_map(|c| {
+                    if c.kind() == "formal_parameters" {
+                        let text = &context.source[c.start_byte()..c.end_byte()];
+                        Some(expressions::collapse_whitespace(text).len())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(2); // "()" minimum
             // PJF wraps before method name only when return_type + name + "(" alone
             // doesn't fit (not just when the full sig with params is too long).
             // If wrapping params alone can fix it, we don't wrap the name.
@@ -503,8 +504,7 @@ pub fn gen_method_declaration<'a>(
                     items.push_signal(Signal::NewLine);
                     did_wrap_name = true;
                     // Tell formal_parameters the effective prefix is just the method name
-                    let name_text =
-                        &context.source[child.start_byte()..child.end_byte()];
+                    let name_text = &context.source[child.start_byte()..child.end_byte()];
                     context.set_override_prefix_width(Some(name_text.len()));
                 } else if need_space {
                     items.extend(helpers::gen_space());
@@ -610,11 +610,7 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
 ///
 /// Uses the parent-to-node text as the base measurement, then walks up
 /// ancestors to account for keywords/LHS that share the same line.
-fn estimate_prefix_width(
-    node: tree_sitter::Node,
-    source: &str,
-    assignment_wrapped: bool,
-) -> usize {
+fn estimate_prefix_width(node: tree_sitter::Node, source: &str, assignment_wrapped: bool) -> usize {
     let parent = match node.parent() {
         Some(p) => p,
         None => return 0,
@@ -1255,9 +1251,9 @@ pub fn gen_formal_parameters<'a>(
 
     // Account for the prefix width (method name, return type, etc.) on the same line.
     // If the method name was wrapped to a continuation line, use the override prefix width.
-    let prefix_width = context
-        .take_override_prefix_width()
-        .unwrap_or_else(|| estimate_prefix_width(node, context.source, context.is_assignment_wrapped()));
+    let prefix_width = context.take_override_prefix_width().unwrap_or_else(|| {
+        estimate_prefix_width(node, context.source, context.is_assignment_wrapped())
+    });
 
     // Suffix after closing paren: ") {" for methods/constructors with body (+4 for "(" + ") {"),
     // ");" for abstract methods (+3 for "(" + ");"), default +4 for safety.
@@ -1273,9 +1269,8 @@ pub fn gen_formal_parameters<'a>(
         _ => 2, // Just "()" for other contexts
     };
 
-    let should_wrap =
-        indent_width + prefix_width + param_text_width + suffix_width
-            > context.config.line_width as usize;
+    let should_wrap = indent_width + prefix_width + param_text_width + suffix_width
+        > context.config.line_width as usize;
 
     items.push_string("(".to_string());
 
@@ -1393,150 +1388,144 @@ pub fn gen_variable_declarator<'a>(
     //
     // If the RHS is a single expression that fits on one line (even if the total line
     // with LHS exceeds line_width), we do NOT wrap at `=`.
-    let wrap_value = has_value
-        && !value_is_array_with_comments
-        && {
-            // Find the RHS value expression (the named child after `=`)
-            let mut found_eq = false;
-            let value_node = children.iter().find(|c| {
-                if c.kind() == "=" {
-                    found_eq = true;
-                    return false;
-                }
-                found_eq && c.is_named()
-            });
+    let wrap_value = has_value && !value_is_array_with_comments && {
+        // Find the RHS value expression (the named child after `=`)
+        let mut found_eq = false;
+        let value_node = children.iter().find(|c| {
+            if c.kind() == "=" {
+                found_eq = true;
+                return false;
+            }
+            found_eq && c.is_named()
+        });
 
-            if let Some(val) = value_node {
-                // Compute the flat width of just the RHS expression (collapse whitespace
-                // to get the "on one line" width)
-                let val_text = &context.source[val.start_byte()..val.end_byte()];
-                let rhs_flat_width = expressions::collapse_whitespace(val_text).len();
+        if let Some(val) = value_node {
+            // Compute the flat width of just the RHS expression (collapse whitespace
+            // to get the "on one line" width)
+            let val_text = &context.source[val.start_byte()..val.end_byte()];
+            let rhs_flat_width = expressions::collapse_whitespace(val_text).len();
 
-                let indent_unit = context.config.indent_width as usize;
-                let indent_col = context.indent_level() * indent_unit;
-                // Continuation indent: current indent + 2 indent units (double indent for wrapping)
-                let continuation_indent = indent_col + indent_unit * 2;
-                let line_width = context.config.line_width as usize;
+            let indent_unit = context.config.indent_width as usize;
+            let indent_col = context.indent_level() * indent_unit;
+            // Continuation indent: current indent + 2 indent units (double indent for wrapping)
+            let continuation_indent = indent_col + indent_unit * 2;
+            let line_width = context.config.line_width as usize;
 
-                // Compute LHS width: type + variable name (everything before the `=` sign).
-                // We need to look at the parent node to get the type information.
-                let lhs_width = if let Some(parent) = node.parent() {
-                    let mut w = 0;
-                    let mut cursor = parent.walk();
+            // Compute LHS width: type + variable name (everything before the `=` sign).
+            // We need to look at the parent node to get the type information.
+            let lhs_width = if let Some(parent) = node.parent() {
+                let mut w = 0;
+                let mut cursor = parent.walk();
 
-                    for c in parent.children(&mut cursor) {
-                        // Skip until we find our variable_declarator
-                        if c == node {
-                            // Now add the variable_declarator's children up to the `=`
-                            for vc in children.iter() {
-                                if vc.kind() == "=" {
-                                    break;
-                                }
-                                let text = &context.source[vc.start_byte()..vc.end_byte()];
-                                if w > 0 {
-                                    w += 1;
-                                } // space between tokens
-                                w += expressions::collapse_whitespace(text).len();
+                for c in parent.children(&mut cursor) {
+                    // Skip until we find our variable_declarator
+                    if c == node {
+                        // Now add the variable_declarator's children up to the `=`
+                        for vc in children.iter() {
+                            if vc.kind() == "=" {
+                                break;
                             }
-                            break;
-                        }
-
-                        // Accumulate width from type, modifiers, etc. before variable_declarator
-                        if c.is_named() {
-                            let text = &context.source[c.start_byte()..c.end_byte()];
+                            let text = &context.source[vc.start_byte()..vc.end_byte()];
                             if w > 0 {
                                 w += 1;
                             } // space between tokens
                             w += expressions::collapse_whitespace(text).len();
                         }
+                        break;
                     }
-                    w
-                } else {
-                    // Fallback: just the variable_declarator's LHS parts
-                    let mut w = 0;
-                    for c in children.iter() {
-                        if c.kind() == "=" {
-                            break;
-                        }
+
+                    // Accumulate width from type, modifiers, etc. before variable_declarator
+                    if c.is_named() {
                         let text = &context.source[c.start_byte()..c.end_byte()];
                         if w > 0 {
                             w += 1;
-                        }
+                        } // space between tokens
                         w += expressions::collapse_whitespace(text).len();
                     }
-                    w
-                };
+                }
+                w
+            } else {
+                // Fallback: just the variable_declarator's LHS parts
+                let mut w = 0;
+                for c in children.iter() {
+                    if c.kind() == "=" {
+                        break;
+                    }
+                    let text = &context.source[c.start_byte()..c.end_byte()];
+                    if w > 0 {
+                        w += 1;
+                    }
+                    w += expressions::collapse_whitespace(text).len();
+                }
+                w
+            };
 
-                // PJF-style chain assignment: prefer wrapping at '=' over wrapping the chain.
-                // Use flatten_chain to get the TRUE chain root and first segment.
-                let is_chain =
-                    val.kind() == "method_invocation" && expressions::chain_depth(*val) >= 1;
+            // PJF-style chain assignment: prefer wrapping at '=' over wrapping the chain.
+            // Use flatten_chain to get the TRUE chain root and first segment.
+            let is_chain = val.kind() == "method_invocation" && expressions::chain_depth(*val) >= 1;
 
-                if is_chain {
-                    let (root_width, first_seg_width) =
-                        expressions::chain_root_first_seg_width(*val, context.source);
+            if is_chain {
+                let (root_width, first_seg_width) =
+                    expressions::chain_root_first_seg_width(*val, context.source);
 
-                    // Check if `LHS = root.firstMethod()` fits on one line
-                    let lhs_plus_first_seg =
-                        indent_col + lhs_width + 3 + root_width + first_seg_width;
+                // Check if `LHS = root.firstMethod()` fits on one line
+                let lhs_plus_first_seg = indent_col + lhs_width + 3 + root_width + first_seg_width;
 
-                    if lhs_plus_first_seg > line_width {
-                        // First segment doesn't fit -> must wrap at =
-                        true
-                    } else {
-                        // PJF preference: if chain WOULD wrap at current position,
-                        // check if wrapping at '=' allows the chain to stay inline.
-                        let current_col = indent_col + lhs_width + 3; // after "LHS = "
-                        let chain_fits_current = expressions::chain_fits_inline_at(
+                if lhs_plus_first_seg > line_width {
+                    // First segment doesn't fit -> must wrap at =
+                    true
+                } else {
+                    // PJF preference: if chain WOULD wrap at current position,
+                    // check if wrapping at '=' allows the chain to stay inline.
+                    let current_col = indent_col + lhs_width + 3; // after "LHS = "
+                    let chain_fits_current = expressions::chain_fits_inline_at(
+                        *val,
+                        current_col,
+                        context.source,
+                        context.config,
+                    );
+                    if !chain_fits_current {
+                        // Chain would wrap at current position. Check if it fits
+                        // inline at continuation indent — if so, wrap at '='.
+                        let continuation_col =
+                            indent_col + 2 * (context.config.indent_width as usize);
+                        expressions::chain_fits_inline_at(
                             *val,
-                            current_col,
+                            continuation_col,
                             context.source,
                             context.config,
-                        );
-                        if !chain_fits_current {
-                            // Chain would wrap at current position. Check if it fits
-                            // inline at continuation indent — if so, wrap at '='.
-                            let continuation_col =
-                                indent_col + 2 * (context.config.indent_width as usize);
-                            expressions::chain_fits_inline_at(
-                                *val,
-                                continuation_col,
-                                context.source,
-                                context.config,
-                            )
-                        } else {
-                            false // Chain fits at current position, no wrapping needed
-                        }
-                    }
-                } else {
-                    // Anonymous class bodies always wrap at `=` (they're inherently multi-line)
-                    let is_anonymous_class = val.kind() == "object_creation_expression" && {
-                        let mut vc = val.walk();
-                        val.children(&mut vc).any(|c| c.kind() == "class_body")
-                    };
-                    if is_anonymous_class {
-                        let total_line_width =
-                            indent_col + lhs_width + 3 + rhs_flat_width + 1;
-                        total_line_width > line_width
+                        )
                     } else {
-                        // PJF-style: only break at `=` when the RHS fits on one continuation
-                        // line (breakOnlyIfInnerLevelsThenFitOnOneLine). If the RHS itself
-                        // is too wide, don't break at `=` — keep `= expr(` inline and let
-                        // the expression's internal wrapping (arg list, etc.) handle it.
-                        let rhs_fits_at_continuation =
-                            continuation_indent + rhs_flat_width <= line_width;
-
-                        let total_line_width =
-                            indent_col + lhs_width + 3 + rhs_flat_width + 1;
-                        let total_too_wide = total_line_width > line_width;
-
-                        rhs_fits_at_continuation && total_too_wide
+                        false // Chain fits at current position, no wrapping needed
                     }
                 }
             } else {
-                false
+                // Anonymous class bodies always wrap at `=` (they're inherently multi-line)
+                let is_anonymous_class = val.kind() == "object_creation_expression" && {
+                    let mut vc = val.walk();
+                    val.children(&mut vc).any(|c| c.kind() == "class_body")
+                };
+                if is_anonymous_class {
+                    let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
+                    total_line_width > line_width
+                } else {
+                    // PJF-style: only break at `=` when the RHS fits on one continuation
+                    // line (breakOnlyIfInnerLevelsThenFitOnOneLine). If the RHS itself
+                    // is too wide, don't break at `=` — keep `= expr(` inline and let
+                    // the expression's internal wrapping (arg list, etc.) handle it.
+                    let rhs_fits_at_continuation =
+                        continuation_indent + rhs_flat_width <= line_width;
+
+                    let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
+                    let total_too_wide = total_line_width > line_width;
+
+                    rhs_fits_at_continuation && total_too_wide
+                }
             }
-        };
+        } else {
+            false
+        }
+    };
 
     let mut saw_eq = false;
     let mut cursor2 = node.walk();
@@ -1612,9 +1601,7 @@ pub fn gen_argument_list<'a>(
             let width = if a.kind() == "lambda_expression" {
                 // Find the block body child — if present, only measure up to "{"
                 let mut cursor = a.walk();
-                let has_block = a
-                    .children(&mut cursor)
-                    .any(|c| c.kind() == "block");
+                let has_block = a.children(&mut cursor).any(|c| c.kind() == "block");
                 if has_block {
                     // Lambda header: params + " -> {"
                     let mut cursor2 = a.walk();
@@ -1650,7 +1637,8 @@ pub fn gen_argument_list<'a>(
     // (parent MI's parent is also a MI).
     let is_in_chain = node.parent().is_some_and(|p| {
         p.kind() == "method_invocation"
-            && (p.child_by_field_name("object")
+            && (p
+                .child_by_field_name("object")
                 .is_some_and(|obj| obj.kind() == "method_invocation")
                 || p.parent()
                     .is_some_and(|gp| gp.kind() == "method_invocation"))
@@ -1688,6 +1676,15 @@ pub fn gen_argument_list<'a>(
         true
     } else if args.len() == 1 && is_in_chain {
         // For single-arg calls in chains, keep inline — the chain handles layout.
+        true
+    } else if args.len() == 1
+        && matches!(
+            args[0].kind(),
+            "method_invocation" | "object_creation_expression"
+        )
+    {
+        // Single-arg method/constructor calls: keep inline so the inner call
+        // can handle its own arg wrapping. PJF keeps `outer(inner(` on one line.
         true
     } else if args.len() == 1 && args[0].kind() == "binary_expression" {
         // Single-arg binary expressions (string concat, arithmetic, etc.) always
@@ -1817,7 +1814,6 @@ fn gen_body_with_members<'a>(
                 items.extend(helpers::gen_space());
                 items.extend(gen_node(**member, context));
                 prev_was_line_comment = member.kind() == "line_comment";
-
             } else {
                 // Leading/standalone comment within body
                 if !prev_was_line_comment {
