@@ -1255,7 +1255,7 @@ pub fn gen_formal_parameters<'a>(
 
     let should_wrap =
         indent_width + prefix_width + param_text_width + suffix_width
-            >= context.config.line_width as usize;
+            > context.config.line_width as usize;
 
     items.push_string("(".to_string());
 
@@ -1264,9 +1264,9 @@ pub fn gen_formal_parameters<'a>(
         // If they fit, use single-line continuation. If not, fall back to one-per-line.
         let continuation_col = indent_width + 2 * (context.config.indent_width as usize);
         // Account for suffix after ): typically " {" for methods/constructors = 3 chars (") {")
-        // Use +3 instead of +1 and strict < to match PJF behavior
+        // PJF allows lines up to exactly line_width (120), so use <= not <
         let all_fit_continuation =
-            continuation_col + param_text_width + 3 < context.config.line_width as usize;
+            continuation_col + param_text_width + 3 <= context.config.line_width as usize;
 
         // 2x StartIndent for 8-space continuation indent
         items.push_signal(Signal::StartIndent);
