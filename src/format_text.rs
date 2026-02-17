@@ -8,6 +8,10 @@ use crate::configuration::Configuration;
 use crate::generation::generate;
 
 /// Format a Java source file. Returns `Ok(None)` if no changes were made.
+///
+/// # Errors
+///
+/// Returns an error if the source cannot be parsed or formatted.
 pub fn format_text(
     _file_path: &Path,
     file_text: &str,
@@ -25,7 +29,7 @@ fn format_text_inner(file_text: &str, config: &Configuration) -> Result<String> 
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter_java::LANGUAGE.into())
-        .map_err(|e| anyhow::anyhow!("Failed to load Java grammar: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to load Java grammar: {e}"))?;
 
     let tree = parser
         .parse(file_text, None)

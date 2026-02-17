@@ -1,32 +1,23 @@
 use dprint_core::formatting::PrintItems;
-use dprint_core::formatting::Signal;
 
 use super::context::FormattingContext;
 use super::declarations;
 use super::generate::gen_node;
-use super::helpers;
+use super::helpers::{PrintItemsExt, collapse_whitespace_len, gen_node_text};
+use super::comments::{gen_line_comment, gen_block_comment};
 
-/// Collapse whitespace in a string: replace newlines and multiple spaces with single spaces.
-/// This helps estimate the "flat" width of a code fragment as if formatted on one line.
-pub(super) fn collapse_whitespace(s: &str) -> String {
-    let mut result = String::new();
-    let mut prev_was_space = false;
-    for c in s.chars() {
-        if c.is_whitespace() {
-            if !prev_was_space {
-                result.push(' ');
-                prev_was_space = true;
-            }
-        } else {
-            result.push(c);
-            prev_was_space = false;
-        }
-    }
-    result.trim().to_string()
+/// A segment of a flattened method invocation chain.
+///
+/// Represents one `.method(args)` call in a chain like `a.b().c().d()`.
+pub(super) struct ChainSegment<'a> {
+    pub name: tree_sitter::Node<'a>,
+    pub type_args: Option<tree_sitter::Node<'a>>,
+    pub arg_list: Option<tree_sitter::Node<'a>>,
+    pub trailing_comment: Option<tree_sitter::Node<'a>>,
 }
 
 /// Check if a binary expression's `+` operator is being used for string concatenation.
-/// Returns true if at least one operand is a string_literal or is itself a string concatenation.
+/// Returns true if at least one operand is a `string_literal` or is itself a string concatenation.
 fn is_string_concat(node: tree_sitter::Node, source: &str) -> bool {
     if node.kind() != "binary_expression" {
         return false;
@@ -50,7 +41,7 @@ fn is_string_concat(node: tree_sitter::Node, source: &str) -> bool {
 /// This includes logical operators (&&, ||) and string concatenation (+).
 fn is_wrappable_op(op: Option<&str>, node: tree_sitter::Node, source: &str) -> bool {
     match op {
-        Some("&&") | Some("||") => true,
+        Some("&&" | "||") => true,
         Some("+") => is_string_concat(node, source),
         _ => false,
     }
@@ -128,13 +119,12 @@ pub fn gen_binary_expression<'a>(
                             None
                         }
                     })
-                    .map(|gp| {
+                    .is_some_and(|gp| {
                         matches!(
                             gp.kind(),
                             "if_statement" | "while_statement" | "for_statement"
                         )
-                    })
-                    .unwrap_or(false);
+                    });
 
                 let suffix_width = if is_condition { 3 } else { 0 }; // `) {`
 
@@ -145,18 +135,18 @@ pub fn gen_binary_expression<'a>(
                 let mut items = PrintItems::new();
 
                 items.extend(gen_node(operands[0], context));
-                items.push_signal(Signal::StartIndent);
-                items.push_signal(Signal::StartIndent);
+                items.start_indent();
+                items.start_indent();
 
                 for (i, op) in operators.iter().enumerate() {
-                    items.push_signal(Signal::NewLine);
-                    items.push_string(op.to_string());
-                    items.extend(helpers::gen_space());
+                    items.newline();
+                    items.push_str(op);
+                    items.space();
                     items.extend(gen_node(operands[i + 1], context));
                 }
 
-                items.push_signal(Signal::FinishIndent);
-                items.push_signal(Signal::FinishIndent);
+                items.finish_indent();
+                items.finish_indent();
 
                 return items;
             }
@@ -172,9 +162,9 @@ pub fn gen_binary_expression<'a>(
             items.extend(gen_node(child, context));
         } else {
             let op = &context.source[child.start_byte()..child.end_byte()];
-            items.extend(helpers::gen_space());
-            items.push_string(op.to_string());
-            items.extend(helpers::gen_space());
+            items.space();
+            items.push_str(op);
+            items.space();
         }
     }
 
@@ -190,6 +180,7 @@ fn flatten_wrappable_chain<'a>(
     let mut operands = Vec::new();
     let mut operators = Vec::new();
 
+    #[allow(clippy::items_after_statements)]
     fn collect<'a>(
         node: tree_sitter::Node<'a>,
         source: &str,
@@ -211,7 +202,7 @@ fn flatten_wrappable_chain<'a>(
 
         let op_str = op.as_deref();
         let is_wrappable = match op_str {
-            Some("&&") | Some("||") => true,
+            Some("&&" | "||") => true,
             Some("+") => is_string_concat(node, source),
             _ => false,
         };
@@ -244,7 +235,7 @@ pub fn gen_unary_expression<'a>(
         if child.is_named() {
             items.extend(gen_node(child, context));
         } else {
-            items.extend(helpers::gen_node_text(child, context.source));
+            items.extend(gen_node_text(child, context.source));
         }
     }
 
@@ -263,7 +254,7 @@ pub fn gen_update_expression<'a>(
         if child.is_named() {
             items.extend(gen_node(child, context));
         } else {
-            items.extend(helpers::gen_node_text(child, context.source));
+            items.extend(gen_node_text(child, context.source));
         }
     }
 
@@ -276,6 +267,7 @@ pub fn gen_update_expression<'a>(
 /// chain and uses PJF-style column-position wrapping: if the column where the
 /// first `.` would appear exceeds `method_chain_threshold` (default 80), ALL
 /// segments wrap onto new lines with 8-space continuation indent.
+#[allow(clippy::too_many_lines, clippy::bool_to_int_with_if, clippy::comparison_chain)]
 pub fn gen_method_invocation<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -285,22 +277,15 @@ pub fn gen_method_invocation<'a>(
         return gen_method_invocation_simple(node, context);
     }
 
-    // Flatten the chain into (root, [(method_invocation_node, method_name_node, type_args, arg_list, trailing_comment), ...])
-    #[allow(clippy::type_complexity)]
-    let mut segments: Vec<(
-        tree_sitter::Node<'a>,
-        tree_sitter::Node<'a>,
-        Option<tree_sitter::Node<'a>>,
-        Option<tree_sitter::Node<'a>>,
-        Option<tree_sitter::Node<'a>>,
-    )> = Vec::new();
+    // Flatten the chain into (root, [ChainSegment, ...])
+    let mut segments: Vec<ChainSegment<'a>> = Vec::new();
     let root = flatten_chain(node, &mut segments);
 
     // PJF-style chain wrapping: compute chain "prefix width" — the width of the chain
     // up to (but excluding) lambda block bodies. PJF measures where the chain DOTs fall,
     // not the total content including multi-line lambda bodies.
     let root_text = &context.source[root.start_byte()..root.end_byte()];
-    let root_width = collapse_whitespace(root_text).len();
+    let root_width = collapse_whitespace_len(root_text);
 
     // When the assignment/variable_declarator has already wrapped at '=',
     // the chain starts at continuation indent with NO prefix on the same line.
@@ -321,24 +306,24 @@ pub fn gen_method_invocation<'a>(
 
     // Sum up each segment: . + name + type_args + arg_list (with lambda body excluded)
     let mut segments_width = 0;
-    for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
+    for seg in &segments {
         segments_width += 1; // for the '.'
-        let name_text = &context.source[name_node.start_byte()..name_node.end_byte()];
+        let name_text = &context.source[seg.name.start_byte()..seg.name.end_byte()];
         segments_width += name_text.len();
 
-        if let Some(ta) = type_args {
+        if let Some(ta) = seg.type_args {
             let ta_text = &context.source[ta.start_byte()..ta.end_byte()];
-            segments_width += collapse_whitespace(ta_text).len();
+            segments_width += collapse_whitespace_len(ta_text);
         }
 
-        if let Some(al) = arg_list {
+        if let Some(al) = seg.arg_list {
             // If the argument list contains a lambda with a block body, only count
             // the "header" width up to the opening '{', not the full body content.
             // This matches PJF which measures chain prefix position, not total content.
-            segments_width += estimate_arg_list_width(*al, context.source);
+            segments_width += estimate_arg_list_width(al, context.source);
         }
 
-        if let Some(tc) = trailing_comment {
+        if let Some(tc) = seg.trailing_comment {
             let tc_text = &context.source[tc.start_byte()..tc.end_byte()];
             segments_width += 1 + tc_text.len(); // space + comment
         }
@@ -361,7 +346,7 @@ pub fn gen_method_invocation<'a>(
     let mut any_dot_exceeds = false;
     let mut first_exceeding_segment: Option<usize> = None;
     let mut cumulative = root_width;
-    for (i, (_, name_node, type_args, arg_list, trailing_comment)) in segments.iter().enumerate() {
+    for (i, seg) in segments.iter().enumerate() {
         // The dot for this segment appears at cumulative position
         let dot_position = indent_col + prefix_width + cumulative;
         if dot_position > effective_chain_threshold {
@@ -372,16 +357,16 @@ pub fn gen_method_invocation<'a>(
         }
         // Add this segment's width to cumulative
         cumulative += 1; // '.'
-        let name_text = &context.source[name_node.start_byte()..name_node.end_byte()];
+        let name_text = &context.source[seg.name.start_byte()..seg.name.end_byte()];
         cumulative += name_text.len();
-        if let Some(ta) = type_args {
+        if let Some(ta) = seg.type_args {
             let ta_text = &context.source[ta.start_byte()..ta.end_byte()];
-            cumulative += collapse_whitespace(ta_text).len();
+            cumulative += collapse_whitespace_len(ta_text);
         }
-        if let Some(al) = arg_list {
-            cumulative += estimate_arg_list_width(*al, context.source);
+        if let Some(al) = seg.arg_list {
+            cumulative += estimate_arg_list_width(al, context.source);
         }
-        if let Some(tc) = trailing_comment {
+        if let Some(tc) = seg.trailing_comment {
             let tc_text = &context.source[tc.start_byte()..tc.end_byte()];
             cumulative += 1 + tc_text.len();
         }
@@ -415,15 +400,8 @@ pub fn gen_method_invocation<'a>(
         };
 
         // Helper: check if a segment is zero-arg (no args or empty parens)
-        let is_seg_zero_arg = |seg: &(
-            tree_sitter::Node,
-            tree_sitter::Node,
-            Option<tree_sitter::Node>,
-            Option<tree_sitter::Node>,
-            Option<tree_sitter::Node>,
-        )|
-         -> bool {
-            match seg.3 {
+        let is_seg_zero_arg = |seg: &ChainSegment| -> bool {
+            match seg.arg_list {
                 None => true,
                 Some(al) => {
                     let al_text = &context.source[al.start_byte()..al.end_byte()];
@@ -461,7 +439,7 @@ pub fn gen_method_invocation<'a>(
             if !is_seg_zero_arg(seg) {
                 break;
             }
-            let name = &context.source[seg.1.start_byte()..seg.1.end_byte()];
+            let name = &context.source[seg.name.start_byte()..seg.name.end_byte()];
             if name == "stream" || name == "parallelStream" {
                 prefix_count += 1;
                 break;
@@ -471,7 +449,7 @@ pub fn gen_method_invocation<'a>(
                 if !is_seg_zero_arg(s) {
                     return false;
                 }
-                let n = &context.source[s.1.start_byte()..s.1.end_byte()];
+                let n = &context.source[s.name.start_byte()..s.name.end_byte()];
                 n == "stream" || n == "parallelStream"
             });
             if has_stream_ahead {
@@ -482,89 +460,87 @@ pub fn gen_method_invocation<'a>(
         }
 
         // Emit prefix segments inline, then wrap the rest
-        for (i, (_, name_node, type_args, arg_list, trailing_comment)) in
-            segments.iter().enumerate()
-        {
+        for (i, seg) in segments.iter().enumerate() {
             if i < prefix_count {
                 // Inline with root (prefix)
-                items.push_string(".".to_string());
-                if let Some(ta) = type_args {
-                    items.extend(gen_node(*ta, context));
+                items.push_str(".");
+                if let Some(ta) = seg.type_args {
+                    items.extend(gen_node(ta, context));
                 }
-                items.extend(helpers::gen_node_text(*name_node, context.source));
-                if let Some(al) = arg_list {
-                    items.extend(gen_node(*al, context));
+                items.extend(gen_node_text(seg.name, context.source));
+                if let Some(al) = seg.arg_list {
+                    items.extend(gen_node(al, context));
                 }
-                if let Some(tc) = trailing_comment {
-                    items.extend(helpers::gen_space());
-                    items.extend(gen_node(*tc, context));
+                if let Some(tc) = seg.trailing_comment {
+                    items.space();
+                    items.extend(gen_node(tc, context));
                 }
             } else if i == prefix_count {
                 // First wrapping segment — start indent block
-                items.push_signal(Signal::StartIndent);
-                items.push_signal(Signal::StartIndent);
+                items.start_indent();
+                items.start_indent();
                 context.add_continuation_indent(2);
                 // Check if previous prefix segment had a trailing comment
                 let prev_had_comment = if i > 0 {
-                    segments[i - 1].4.is_some()
+                    segments[i - 1].trailing_comment.is_some()
                 } else {
                     false
                 };
                 if !prev_had_comment {
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                 }
-                items.push_string(".".to_string());
-                if let Some(ta) = type_args {
-                    items.extend(gen_node(*ta, context));
+                items.push_str(".");
+                if let Some(ta) = seg.type_args {
+                    items.extend(gen_node(ta, context));
                 }
-                items.extend(helpers::gen_node_text(*name_node, context.source));
-                if let Some(al) = arg_list {
-                    items.extend(gen_node(*al, context));
+                items.extend(gen_node_text(seg.name, context.source));
+                if let Some(al) = seg.arg_list {
+                    items.extend(gen_node(al, context));
                 }
-                if let Some(tc) = trailing_comment {
-                    items.extend(helpers::gen_space());
-                    items.extend(gen_node(*tc, context));
+                if let Some(tc) = seg.trailing_comment {
+                    items.space();
+                    items.extend(gen_node(tc, context));
                 }
             } else {
                 // Subsequent wrapping segments
-                let prev_had_comment = segments[i - 1].4.is_some();
+                let prev_had_comment = segments[i - 1].trailing_comment.is_some();
                 if !prev_had_comment {
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                 }
-                items.push_string(".".to_string());
-                if let Some(ta) = type_args {
-                    items.extend(gen_node(*ta, context));
+                items.push_str(".");
+                if let Some(ta) = seg.type_args {
+                    items.extend(gen_node(ta, context));
                 }
-                items.extend(helpers::gen_node_text(*name_node, context.source));
-                if let Some(al) = arg_list {
-                    items.extend(gen_node(*al, context));
+                items.extend(gen_node_text(seg.name, context.source));
+                if let Some(al) = seg.arg_list {
+                    items.extend(gen_node(al, context));
                 }
-                if let Some(tc) = trailing_comment {
-                    items.extend(helpers::gen_space());
-                    items.extend(gen_node(*tc, context));
+                if let Some(tc) = seg.trailing_comment {
+                    items.space();
+                    items.extend(gen_node(tc, context));
                 }
             }
         }
         // Close indent block if any segments were wrapped
         if prefix_count < segments.len() {
             context.remove_continuation_indent(2);
-            items.push_signal(Signal::FinishIndent);
-            items.push_signal(Signal::FinishIndent);
+            items.finish_indent();
+            items.finish_indent();
         }
     } else {
         // Keep on one line
-        for (_, name_node, type_args, arg_list, trailing_comment) in segments {
-            items.push_string(".".to_string());
-            if let Some(ta) = type_args {
+        for seg in segments {
+            items.push_str(".");
+            if let Some(ta) = seg.type_args {
                 items.extend(gen_node(ta, context));
             }
-            items.extend(helpers::gen_node_text(name_node, context.source));
-            if let Some(al) = arg_list {
+            items.extend(gen_node_text(seg.name, context.source));
+            if let Some(al) = seg.arg_list {
                 items.extend(gen_node(al, context));
             }
             // Emit trailing comment if present
-            if let Some(tc) = trailing_comment {
-                items.extend(helpers::gen_space());
+            if let Some(tc) = seg.trailing_comment {
+                items.space();
                 items.extend(gen_node(tc, context));
             }
         }
@@ -584,27 +560,24 @@ fn gen_method_invocation_simple<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "." => {
-                items.push_string(".".to_string());
+                items.push_str(".");
             }
             "identifier" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
             }
-            "argument_list" => {
-                items.extend(gen_node(child, context));
-            }
-            "type_arguments" => {
+            "argument_list" | "type_arguments" => {
                 items.extend(gen_node(child, context));
             }
             "line_comment" if child.is_extra() => {
                 // Line comment within the method invocation (e.g., after argument list)
                 // Add space before comment, then emit it (which will add newline)
-                items.extend(helpers::gen_space());
-                items.extend(super::comments::gen_line_comment(child, context));
+                items.space();
+                items.extend(gen_line_comment(child, context));
             }
             "block_comment" if child.is_extra() => {
                 // Block comment within the method invocation
-                items.extend(helpers::gen_space());
-                items.extend(super::comments::gen_block_comment(child, context));
+                items.space();
+                items.extend(gen_block_comment(child, context));
             }
             _ if child.is_named() => {
                 items.extend(gen_node(child, context));
@@ -619,7 +592,6 @@ fn gen_method_invocation_simple<'a>(
 /// Check if any argument list in a chain segment contains a lambda with a block body.
 /// This is used to force chain wrapping when lambdas with block bodies are present,
 /// since the multi-line block content would produce incorrect indentation on a single line.
-#[allow(clippy::type_complexity)]
 /// Estimate argument list width for chain wrapping decisions.
 /// If the arg list contains a lambda with a block body, only count the "header"
 /// width up to the opening '{', since PJF measures chain prefix position, not
@@ -648,59 +620,52 @@ fn estimate_arg_list_width(arg_list: tree_sitter::Node, source: &str) -> usize {
         let al_text = &source[arg_list.start_byte()..arg_list.end_byte()];
         if let Some(brace_pos) = al_text.find('{') {
             // Width is from '(' to '{' inclusive
-            let header = &al_text[..brace_pos + 1];
-            collapse_whitespace(header).len()
+            let header = &al_text[..=brace_pos];
+            collapse_whitespace_len(header)
         } else {
-            collapse_whitespace(al_text).len()
+            collapse_whitespace_len(al_text)
         }
     } else {
         let al_text = &source[arg_list.start_byte()..arg_list.end_byte()];
-        collapse_whitespace(al_text).len()
+        collapse_whitespace_len(al_text)
     }
 }
 
 /// Check if a method chain would fit inline (without wrapping) at a given column position.
-/// Used by gen_variable_declarator to determine if wrapping at '=' allows the chain to stay inline.
-#[allow(clippy::type_complexity)]
+/// Used by `gen_variable_declarator` to determine if wrapping at '=' allows the chain to stay inline.
 pub fn chain_fits_inline_at(
     node: tree_sitter::Node,
     col: usize,
     source: &str,
     config: &crate::configuration::Configuration,
 ) -> bool {
-    let mut segments: Vec<(
-        tree_sitter::Node,
-        tree_sitter::Node,
-        Option<tree_sitter::Node>,
-        Option<tree_sitter::Node>,
-        Option<tree_sitter::Node>,
-    )> = Vec::new();
+    let mut segments: Vec<ChainSegment> = Vec::new();
     let root = flatten_chain(node, &mut segments);
 
     let root_text = &source[root.start_byte()..root.end_byte()];
-    let root_width = collapse_whitespace(root_text).len();
+    let root_width = collapse_whitespace_len(root_text);
 
     let chain_threshold = config.method_chain_threshold as usize;
     let line_width = config.line_width as usize;
 
     // Check per-dot positions — if ANY dot exceeds chain threshold, chain needs wrapping
     let mut total_width = root_width;
-    for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
+    for seg in &segments {
         let dot_position = col + total_width;
         if dot_position > chain_threshold {
             return false;
         }
         total_width += 1; // '.'
-        let name_text = &source[name_node.start_byte()..name_node.end_byte()];
+        let name_text = &source[seg.name.start_byte()..seg.name.end_byte()];
         total_width += name_text.len();
-        if let Some(ta) = type_args {
+        if let Some(ta) = seg.type_args {
             let ta_text = &source[ta.start_byte()..ta.end_byte()];
-            total_width += collapse_whitespace(ta_text).len();
+            total_width += collapse_whitespace_len(ta_text);
         }
-        if let Some(al) = arg_list {
-            total_width += estimate_arg_list_width(*al, source);
+        if let Some(al) = seg.arg_list {
+            total_width += estimate_arg_list_width(al, source);
         }
-        if let Some(tc) = trailing_comment {
+        if let Some(tc) = seg.trailing_comment {
             let tc_text = &source[tc.start_byte()..tc.end_byte()];
             total_width += 1 + tc_text.len();
         }
@@ -723,7 +688,7 @@ fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingConte
                 && let Some(lhs) = p.child_by_field_name("left")
             {
                 let lhs_text = &context.source[lhs.start_byte()..lhs.end_byte()];
-                return collapse_whitespace(lhs_text).len() + 3; // " = "
+                return collapse_whitespace_len(lhs_text) + 3; // " = "
             }
             0
         }
@@ -744,7 +709,7 @@ fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingConte
                         if type_width > 0 {
                             type_width += 1; // space between tokens
                         }
-                        type_width += collapse_whitespace(text).len();
+                        type_width += collapse_whitespace_len(text);
                     }
                 }
                 // Add variable name width
@@ -782,7 +747,7 @@ fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingConte
     }
 }
 
-/// Count how deep a method invocation chain is (number of nested method_invocations).
+/// Count how deep a method invocation chain is (number of nested `method_invocations`).
 /// `a.b()` = 0, `a.b().c()` = 1, `a.b().c().d()` = 2, etc.
 pub(super) fn chain_depth(node: tree_sitter::Node) -> usize {
     let mut depth = 0;
@@ -815,15 +780,13 @@ pub(super) fn rightmost_chain_dot(node: tree_sitter::Node, source: &str, base_co
         // This is a chain. Find the last dot position.
         let name_w = node
             .child_by_field_name("name")
-            .map(|n| n.end_byte() - n.start_byte())
-            .unwrap_or(0);
+            .map_or(0, |n| n.end_byte() - n.start_byte());
         let args_w = node
             .child_by_field_name("arguments")
-            .map(|a| {
+            .map_or(0, |a| {
                 let t = &source[a.start_byte()..a.end_byte()];
                 t.lines().map(|l| l.trim().len()).sum::<usize>()
-            })
-            .unwrap_or(0);
+            });
         let last_seg_width = 1 + name_w + args_w; // ".name(args)"
         base_col + flat_width.saturating_sub(last_seg_width)
     } else if node.kind() == "method_invocation" {
@@ -871,26 +834,26 @@ pub(super) fn rightmost_chain_dot(node: tree_sitter::Node, source: &str, base_co
 
 /// Compute the width of the chain root + first segment for assignment wrapping decisions.
 /// For a chain like `AuthResponse.builder().contentType().statusCode()`, this returns
-/// (root_width="AuthResponse", first_seg_width=".builder()") so the caller can check
+/// (`root_width="AuthResponse`", `first_seg_width=".builder()`") so the caller can check
 /// if `LHS = AuthResponse.builder()` fits on one line.
 pub fn chain_root_first_seg_width(node: tree_sitter::Node, source: &str) -> (usize, usize) {
     let mut segments = Vec::new();
     let root = flatten_chain(node, &mut segments);
 
     let root_text = &source[root.start_byte()..root.end_byte()];
-    let root_width = collapse_whitespace(root_text).len();
+    let root_width = collapse_whitespace_len(root_text);
 
-    let first_seg_width = if let Some((_, name_node, type_args, arg_list, _)) = segments.first() {
+    let first_seg_width = if let Some(seg) = segments.first() {
         let mut w = 1; // '.'
-        let name_text = &source[name_node.start_byte()..name_node.end_byte()];
+        let name_text = &source[seg.name.start_byte()..seg.name.end_byte()];
         w += name_text.len();
-        if let Some(ta) = type_args {
+        if let Some(ta) = seg.type_args {
             let ta_text = &source[ta.start_byte()..ta.end_byte()];
-            w += collapse_whitespace(ta_text).len();
+            w += collapse_whitespace_len(ta_text);
         }
-        if let Some(al) = arg_list {
+        if let Some(al) = seg.arg_list {
             let al_text = &source[al.start_byte()..al.end_byte()];
-            w += collapse_whitespace(al_text).len();
+            w += collapse_whitespace_len(al_text);
         }
         w
     } else {
@@ -900,12 +863,12 @@ pub fn chain_root_first_seg_width(node: tree_sitter::Node, source: &str) -> (usi
     (root_width, first_seg_width)
 }
 
-/// Flatten a nested method_invocation chain into segments.
+/// Flatten a nested `method_invocation` chain into segments.
 /// Returns the root object node (the non-method-invocation at the bottom).
 /// Segments are collected in call order (first call first).
-/// Each segment is (invocation_node, name_node, type_args, arg_list).
+/// Each segment is (`invocation_node`, `name_node`, `type_args`, `arg_list`).
 /// Extract trailing line comment that appears on the same line as the given node
-fn extract_trailing_line_comment<'a>(node: tree_sitter::Node<'a>) -> Option<tree_sitter::Node<'a>> {
+fn extract_trailing_line_comment(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
     let node_end_row = node.end_position().row;
 
     // Look for a line_comment sibling that starts on the same row
@@ -925,16 +888,9 @@ fn extract_trailing_line_comment<'a>(node: tree_sitter::Node<'a>) -> Option<tree
     None
 }
 
-#[allow(clippy::type_complexity)]
 fn flatten_chain<'a>(
     node: tree_sitter::Node<'a>,
-    segments: &mut Vec<(
-        tree_sitter::Node<'a>,
-        tree_sitter::Node<'a>,
-        Option<tree_sitter::Node<'a>>,
-        Option<tree_sitter::Node<'a>>,
-        Option<tree_sitter::Node<'a>>,
-    )>,
+    segments: &mut Vec<ChainSegment<'a>>,
 ) -> tree_sitter::Node<'a> {
     // Collect the chain in reverse (innermost first), then reverse at the end.
     let mut chain = Vec::new();
@@ -956,7 +912,7 @@ fn flatten_chain<'a>(
         let trailing_comment = extract_trailing_line_comment(current);
 
         if let Some(name_node) = name {
-            chain.push((current, name_node, type_args, arg_list, trailing_comment));
+            chain.push(ChainSegment { name: name_node, type_args, arg_list, trailing_comment });
         }
 
         match object {
@@ -993,13 +949,10 @@ pub fn gen_field_access<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "." => {
-                items.push_string(".".to_string());
+                items.push_str(".");
             }
-            "identifier" => {
-                items.extend(helpers::gen_node_text(child, context.source));
-            }
-            "this" | "super" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+            "identifier" | "this" | "super" => {
+                items.extend(gen_node_text(child, context.source));
             }
             _ if child.is_named() => {
                 items.extend(gen_node(child, context));
@@ -1021,19 +974,16 @@ pub fn gen_lambda_expression<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "identifier" | "inferred_parameters" => {
+            "identifier" | "inferred_parameters" | "block" => {
                 items.extend(gen_node(child, context));
             }
             "formal_parameters" => {
                 items.extend(declarations::gen_formal_parameters(child, context));
             }
             "->" => {
-                items.extend(helpers::gen_space());
-                items.push_string("->".to_string());
-                items.extend(helpers::gen_space());
-            }
-            "block" => {
-                items.extend(gen_node(child, context));
+                items.space();
+                items.push_str("->");
+                items.space();
             }
             _ if child.is_named() => {
                 items.extend(gen_node(child, context));
@@ -1080,18 +1030,18 @@ pub fn gen_ternary_expression<'a>(
             match child.kind() {
                 "?" => {
                     if !started_indent {
-                        items.push_signal(Signal::StartIndent);
-                        items.push_signal(Signal::StartIndent);
+                        items.start_indent();
+                        items.start_indent();
                         started_indent = true;
                     }
-                    items.push_signal(Signal::NewLine);
-                    items.push_string("?".to_string());
-                    items.extend(helpers::gen_space());
+                    items.newline();
+                    items.push_str("?");
+                    items.space();
                 }
                 ":" => {
-                    items.push_signal(Signal::NewLine);
-                    items.push_string(":".to_string());
-                    items.extend(helpers::gen_space());
+                    items.newline();
+                    items.push_str(":");
+                    items.space();
                 }
                 _ if child.is_named() => {
                     items.extend(gen_node(child, context));
@@ -1100,22 +1050,22 @@ pub fn gen_ternary_expression<'a>(
             }
         }
         if started_indent {
-            items.push_signal(Signal::FinishIndent);
-            items.push_signal(Signal::FinishIndent);
+            items.finish_indent();
+            items.finish_indent();
         }
     } else {
         // Inline: keep everything on one line
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "?" => {
-                    items.extend(helpers::gen_space());
-                    items.push_string("?".to_string());
-                    items.extend(helpers::gen_space());
+                    items.space();
+                    items.push_str("?");
+                    items.space();
                 }
                 ":" => {
-                    items.extend(helpers::gen_space());
-                    items.push_string(":".to_string());
-                    items.extend(helpers::gen_space());
+                    items.space();
+                    items.push_str(":");
+                    items.space();
                 }
                 _ if child.is_named() => {
                     items.extend(gen_node(child, context));
@@ -1139,20 +1089,14 @@ pub fn gen_object_creation_expression<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "new" => {
-                items.push_string("new".to_string());
-                items.extend(helpers::gen_space());
+                items.push_str("new");
+                items.space();
             }
-            "type_arguments" => {
-                items.extend(gen_node(child, context));
-            }
-            "type_identifier" | "scoped_type_identifier" | "generic_type" => {
-                items.extend(gen_node(child, context));
-            }
-            "argument_list" => {
+            "type_arguments" | "type_identifier" | "scoped_type_identifier" | "generic_type" | "argument_list" => {
                 items.extend(gen_node(child, context));
             }
             "class_body" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_node(child, context));
             }
             _ if child.is_named() => {
@@ -1179,17 +1123,17 @@ pub fn gen_array_creation_expression<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "new" => {
-                items.push_string("new".to_string());
-                items.extend(helpers::gen_space());
+                items.push_str("new");
+                items.space();
             }
             "dimensions_expr" => {
                 items.extend(gen_node(child, context));
             }
             "dimensions" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
                 // Add space after dimensions if array_initializer follows
                 if has_initializer {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
             }
             "array_initializer" => {
@@ -1207,12 +1151,13 @@ pub fn gen_array_creation_expression<'a>(
 
 /// Format an array initializer: `{1, 2, 3}`
 ///
-/// When the initializer contains comments (is_extra() children), expands to
+/// When the initializer contains comments (`is_extra()` children), expands to
 /// one element per line to match PJF behavior.
 ///
-/// When the parent is an annotation context (element_value_pair or
-/// annotation_argument_list) and there are multiple elements, forces
+/// When the parent is an annotation context (`element_value_pair` or
+/// `annotation_argument_list`) and there are multiple elements, forces
 /// one-element-per-line format with trailing comma, matching PJF behavior.
+#[allow(clippy::too_many_lines)]
 pub fn gen_array_initializer<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -1226,18 +1171,17 @@ pub fn gen_array_initializer<'a>(
     // Check if this is inside an annotation context
     let in_annotation = node
         .parent()
-        .map(|p| {
+        .is_some_and(|p| {
             p.kind() == "annotation_argument_list"
                 || p.kind() == "element_value_pair"
                 || (p.kind() == "annotation_argument_list"
                     && p.parent()
                         .is_some_and(|gp| gp.kind().contains("annotation")))
-        })
-        .unwrap_or(false);
+        });
 
     // Count named (element) children
     cursor = node.walk();
-    let element_count = node.children(&mut cursor).filter(|c| c.is_named()).count();
+    let element_count = node.children(&mut cursor).filter(tree_sitter::Node::is_named).count();
 
     // Force expanded format in annotation context with multiple elements,
     // but only if the annotation wouldn't fit on one line
@@ -1252,7 +1196,7 @@ pub fn gen_array_initializer<'a>(
             {
                 // Compute flat width of the entire annotation
                 let ann_text = &context.source[parent.start_byte()..parent.end_byte()];
-                let flat_width = collapse_whitespace(ann_text).len();
+                let flat_width = collapse_whitespace_len(ann_text);
                 let indent_col =
                     context.effective_indent_level() * context.config.indent_width as usize;
                 should_expand = indent_col + flat_width > context.config.line_width as usize;
@@ -1268,11 +1212,11 @@ pub fn gen_array_initializer<'a>(
     // Reset cursor for iteration
     cursor = node.walk();
 
-    items.push_string("{".to_string());
+    items.push_str("{");
 
     if has_comments || force_expand {
         // Expanded format: one element per line
-        items.push_signal(Signal::StartIndent);
+        items.start_indent();
         let mut prev_was_line_comment = false;
 
         let all_children: Vec<_> = node.children(&mut cursor).collect();
@@ -1288,16 +1232,16 @@ pub fn gen_array_initializer<'a>(
                             .iter()
                             .any(|c| c.is_named() && !c.is_extra());
                         if has_more_elements {
-                            items.push_string(",".to_string());
+                            items.push_str(",");
                         }
                     } else {
-                        items.push_string(",".to_string());
+                        items.push_str(",");
                     }
                 }
                 _ if child.is_extra() => {
                     // Comment node
                     if !prev_was_line_comment {
-                        items.push_signal(Signal::NewLine);
+                        items.newline();
                     }
                     items.extend(gen_node(*child, context));
                     prev_was_line_comment = child.kind() == "line_comment";
@@ -1305,7 +1249,7 @@ pub fn gen_array_initializer<'a>(
                 _ if child.is_named() => {
                     // Element node
                     if !prev_was_line_comment {
-                        items.push_signal(Signal::NewLine);
+                        items.newline();
                     }
                     items.extend(gen_node(*child, context));
                     prev_was_line_comment = false;
@@ -1315,9 +1259,9 @@ pub fn gen_array_initializer<'a>(
         }
 
         if !prev_was_line_comment {
-            items.push_signal(Signal::NewLine);
+            items.newline();
         }
-        items.push_signal(Signal::FinishIndent);
+        items.finish_indent();
     } else {
         // Compact format: inline
         let compact_children: Vec<_> = node.children(&mut cursor).collect();
@@ -1332,8 +1276,8 @@ pub fn gen_array_initializer<'a>(
                         .iter()
                         .any(|c| c.is_named() && !c.is_extra());
                     if has_more_elements {
-                        items.push_string(",".to_string());
-                        items.extend(helpers::gen_space());
+                        items.push_str(",");
+                        items.space();
                     }
                 }
                 _ if child.is_named() => {
@@ -1348,7 +1292,7 @@ pub fn gen_array_initializer<'a>(
         }
     }
 
-    items.push_string("}".to_string());
+    items.push_str("}");
     items
 }
 
@@ -1362,8 +1306,8 @@ pub fn gen_array_access<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "[" => items.push_string("[".to_string()),
-            "]" => items.push_string("]".to_string()),
+            "[" => items.push_str("["),
+            "]" => items.push_str("]"),
             _ if child.is_named() => items.extend(gen_node(child, context)),
             _ => {}
         }
@@ -1383,10 +1327,10 @@ pub fn gen_cast_expression<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "(" => items.push_string("(".to_string()),
+            "(" => items.push_str("("),
             ")" => {
-                items.push_string(")".to_string());
-                items.extend(helpers::gen_space());
+                items.push_str(")");
+                items.space();
                 after_type = true;
             }
             _ if child.is_named() && !after_type => {
@@ -1415,9 +1359,9 @@ pub fn gen_instanceof_expression<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "instanceof" => {
-                items.extend(helpers::gen_space());
-                items.push_string("instanceof".to_string());
-                items.extend(helpers::gen_space());
+                items.space();
+                items.push_str("instanceof");
+                items.space();
             }
             _ if child.is_named() => {
                 items.extend(gen_node(child, context));
@@ -1439,8 +1383,8 @@ pub fn gen_parenthesized_expression<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "(" => items.push_string("(".to_string()),
-            ")" => items.push_string(")".to_string()),
+            "(" => items.push_str("("),
+            ")" => items.push_str(")"),
             _ if child.is_named() => items.extend(gen_node(child, context)),
             _ => {}
         }
@@ -1459,9 +1403,9 @@ pub fn gen_method_reference<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "::" => items.push_string("::".to_string()),
-            "new" => items.push_string("new".to_string()),
-            "identifier" => items.extend(helpers::gen_node_text(child, context.source)),
+            "::" => items.push_str("::"),
+            "new" => items.push_str("new"),
+            "identifier" => items.extend(gen_node_text(child, context.source)),
             _ if child.is_named() => items.extend(gen_node(child, context)),
             _ => {}
         }
@@ -1495,19 +1439,19 @@ pub fn gen_assignment_expression<'a>(
             let indent_unit = context.config.indent_width as usize;
             let indent_col = context.effective_indent_level() * indent_unit;
             let lhs_text = &context.source[lhs_node.start_byte()..lhs_node.end_byte()];
-            let lhs_width = collapse_whitespace(lhs_text).len();
+            let lhs_width = collapse_whitespace_len(lhs_text);
 
             // Check if chain fits inline at current position (after "LHS = ")
             let current_col = indent_col + lhs_width + 3;
             let chain_fits_current =
                 chain_fits_inline_at(rhs_node, current_col, context.source, context.config);
 
-            if !chain_fits_current {
+            if chain_fits_current {
+                false
+            } else {
                 // Chain would wrap. Check if wrapping at '=' lets the chain stay inline.
                 let continuation_col = indent_col + 2 * indent_unit;
                 chain_fits_inline_at(rhs_node, continuation_col, context.source, context.config)
-            } else {
-                false
             }
         } else {
             false
@@ -1530,22 +1474,22 @@ pub fn gen_assignment_expression<'a>(
             }
         } else {
             let op = &context.source[child.start_byte()..child.end_byte()];
-            items.extend(helpers::gen_space());
-            items.push_string(op.to_string());
+            items.space();
+            items.push_str(op);
             saw_eq = true;
             if wrap_at_eq {
-                items.push_signal(Signal::StartIndent);
-                items.push_signal(Signal::StartIndent);
-                items.push_signal(Signal::NewLine);
+                items.start_indent();
+                items.start_indent();
+                items.newline();
             } else {
-                items.extend(helpers::gen_space());
+                items.space();
             }
         }
     }
 
     if wrap_at_eq {
-        items.push_signal(Signal::FinishIndent);
-        items.push_signal(Signal::FinishIndent);
+        items.finish_indent();
+        items.finish_indent();
     }
 
     items
@@ -1561,14 +1505,14 @@ pub fn gen_inferred_parameters<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "(" => items.push_string("(".to_string()),
-            ")" => items.push_string(")".to_string()),
+            "(" => items.push_str("("),
+            ")" => items.push_str(")"),
             "," => {
-                items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
+                items.push_str(",");
+                items.space();
             }
             "identifier" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
             }
             _ => {}
         }
@@ -1587,11 +1531,10 @@ pub fn gen_explicit_constructor_invocation<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "this" => items.push_string("this".to_string()),
-            "super" => items.push_string("super".to_string()),
-            "argument_list" => items.extend(gen_node(child, context)),
-            ";" => items.push_string(";".to_string()),
-            "type_arguments" => items.extend(gen_node(child, context)),
+            "this" => items.push_str("this"),
+            "super" => items.push_str("super"),
+            "argument_list" | "type_arguments" => items.extend(gen_node(child, context)),
+            ";" => items.push_str(";"),
             _ if child.is_named() => items.extend(gen_node(child, context)),
             _ => {}
         }

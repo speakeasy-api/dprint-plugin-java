@@ -21,23 +21,24 @@ pub struct FormattingContext<'a> {
 
     /// Additional continuation indent levels (for chain wrapping).
     /// When a method chain wraps, we add +2 levels of continuation indent
-    /// that don't affect the base indent_level but need to be accounted for
+    /// that don't affect the base `indent_level` but need to be accounted for
     /// in width calculations for nested argument lists.
     continuation_indent_levels: usize,
 
-    /// Set when a variable_declarator or assignment_expression has wrapped at '='.
+    /// Set when a `variable_declarator` or `assignment_expression` has wrapped at '='.
     /// When true, the chain wrapper knows the LHS prefix is on the previous line
-    /// and should use prefix_width=0 with continuation indent.
+    /// and should use `prefix_width=0` with continuation indent.
     assignment_wrapped: bool,
 
-    /// Override prefix width for the next formal_parameters call.
+    /// Override prefix width for the next `formal_parameters` call.
     /// Used when method name wraps to continuation line, making the effective
-    /// prefix shorter than what estimate_prefix_width computes from source.
+    /// prefix shorter than what `estimate_prefix_width` computes from source.
     override_prefix_width: Option<usize>,
 }
 
 impl<'a> FormattingContext<'a> {
     /// Create a new formatting context.
+    #[must_use] 
     pub fn new(source: &'a str, config: &'a Configuration) -> Self {
         Self {
             source,
@@ -51,6 +52,7 @@ impl<'a> FormattingContext<'a> {
     }
 
     /// Get the current indentation level.
+    #[must_use] 
     pub fn indent_level(&self) -> usize {
         self.indent_level
     }
@@ -78,11 +80,13 @@ impl<'a> FormattingContext<'a> {
     }
 
     /// Get the immediate parent node kind, if any.
+    #[must_use] 
     pub fn parent(&self) -> Option<&'static str> {
         self.parent_stack.last().copied()
     }
 
     /// Check if the given node kind is in the parent stack.
+    #[must_use] 
     pub fn has_ancestor(&self, kind: &'static str) -> bool {
         self.parent_stack.contains(&kind)
     }
@@ -100,21 +104,23 @@ impl<'a> FormattingContext<'a> {
     }
 
     /// Get the effective indent level including continuation indent.
+    #[must_use] 
     pub fn effective_indent_level(&self) -> usize {
         self.indent_level + self.continuation_indent_levels
     }
 
-    /// Set the assignment_wrapped flag.
+    /// Set the `assignment_wrapped` flag.
     pub fn set_assignment_wrapped(&mut self, wrapped: bool) {
         self.assignment_wrapped = wrapped;
     }
 
     /// Check if the current chain is inside an assignment that already wrapped at '='.
+    #[must_use] 
     pub fn is_assignment_wrapped(&self) -> bool {
         self.assignment_wrapped
     }
 
-    /// Set override prefix width for the next formal_parameters call.
+    /// Set override prefix width for the next `formal_parameters` call.
     pub fn set_override_prefix_width(&mut self, width: Option<usize>) {
         self.override_prefix_width = width;
     }
