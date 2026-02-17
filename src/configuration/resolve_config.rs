@@ -9,6 +9,7 @@ use super::Configuration;
 use super::JavaStyle;
 
 /// Resolve raw configuration key-value pairs into a typed `Configuration`.
+#[must_use] 
 pub fn resolve_config(
     config: ConfigKeyMap,
     global_config: &GlobalConfiguration,

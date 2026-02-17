@@ -1,5 +1,4 @@
 use dprint_core::formatting::PrintItems;
-use dprint_core::formatting::Signal;
 
 use crate::configuration::Configuration;
 
@@ -7,17 +6,18 @@ use super::comments;
 use super::context::FormattingContext;
 use super::declarations;
 use super::expressions;
-use super::helpers;
+use super::helpers::{PrintItemsExt, collapse_whitespace_len, gen_node_text, is_type_node};
 use super::statements;
 
-/// Generate dprint PrintItems IR from a tree-sitter parse tree.
+/// Generate dprint `PrintItems` IR from a tree-sitter parse tree.
+#[must_use] 
 pub fn generate(source: &str, tree: &tree_sitter::Tree, config: &Configuration) -> PrintItems {
     let mut context = FormattingContext::new(source, config);
     let root = tree.root_node();
     gen_node(root, &mut context)
 }
 
-/// Generate PrintItems for a tree-sitter node.
+/// Generate `PrintItems` for a tree-sitter node.
 ///
 /// This is the main dispatcher that routes nodes to specific handlers
 /// based on their kind. Unhandled nodes fall back to emitting their
@@ -72,15 +72,10 @@ pub fn gen_node<'a>(
         "assert_statement" => statements::gen_assert_statement(node, context),
         "labeled_statement" => statements::gen_labeled_statement(node, context),
 
-        // --- Types (pass-through for now, formatted as text) ---
-        "type_identifier"
-        | "void_type"
-        | "integral_type"
-        | "floating_point_type"
-        | "boolean_type"
-        | "scoped_type_identifier" => helpers::gen_node_text(node, context.source),
+        // --- Types ---
         "generic_type" => gen_generic_type(node, context),
         "array_type" => gen_array_type(node, context),
+        kind if is_type_node(kind) => gen_node_text(node, context.source),
         "type_parameter" => gen_type_parameter(node, context),
         "wildcard" => gen_wildcard(node, context),
 
@@ -125,10 +120,10 @@ pub fn gen_node<'a>(
         // Static initializer: `static { ... }`
         "static_initializer" => {
             let mut items = PrintItems::new();
-            items.push_string("static".to_string());
+            items.push_str("static");
             for child in node.children(&mut node.walk()) {
                 if child.kind() == "block" {
-                    items.extend(helpers::gen_space());
+                    items.space();
                     items.extend(statements::gen_block(child, context));
                 }
             }
@@ -136,13 +131,14 @@ pub fn gen_node<'a>(
         }
 
         // --- Fallback: emit source text unchanged ---
-        _ => helpers::gen_node_text(node, context.source),
+        _ => gen_node_text(node, context.source),
     };
     context.pop_parent();
     items
 }
 
 /// Generate a program node (the root of the parse tree).
+#[allow(clippy::too_many_lines)]
 fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
     let mut items = PrintItems::new();
 
@@ -154,7 +150,7 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
     let mut regular_imports: Vec<tree_sitter::Node> = vec![];
     let mut non_import_children: Vec<tree_sitter::Node> = vec![];
 
-    for child in children.iter() {
+    for child in &children {
         if child.kind() == "import_declaration" {
             let is_static = {
                 let mut c = child.walk();
@@ -207,24 +203,24 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
         if should_emit_imports {
             // Add blank line after package declaration
             if prev_kind == Some("package_declaration") {
-                items.push_signal(Signal::NewLine);
+                items.newline();
             }
 
             // Emit static imports
-            for import_node in static_imports.iter() {
+            for import_node in &static_imports {
                 items.extend(gen_node(*import_node, context));
-                items.push_signal(Signal::NewLine);
+                items.newline();
             }
 
             // Blank line between static and regular imports
             if !static_imports.is_empty() && !regular_imports.is_empty() {
-                items.push_signal(Signal::NewLine);
+                items.newline();
             }
 
             // Emit regular imports
-            for import_node in regular_imports.iter() {
+            for import_node in &regular_imports {
                 items.extend(gen_node(*import_node, context));
-                items.push_signal(Signal::NewLine);
+                items.newline();
             }
 
             prev_kind = Some("import_declaration");
@@ -238,7 +234,7 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
 
             if is_trailing {
                 // Trailing comment: append on same line
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_node(*child, context));
             } else {
                 // Leading/standalone comment: emit on its own line
@@ -256,17 +252,17 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                             && is_block_comment
                         {
                             // Add one newline to create the blank line (import already has its newline)
-                            items.push_signal(Signal::NewLine);
+                            items.newline();
                         } else {
-                            items.push_signal(Signal::NewLine);
+                            items.newline();
                             // For block comments (not line comments), add an extra newline
                             if is_block_comment {
-                                items.push_signal(Signal::NewLine);
+                                items.newline();
                             }
                         }
                     } else if prev_was_comment {
                         // Separate consecutive comments
-                        items.push_signal(Signal::NewLine);
+                        items.newline();
                     }
                     // Don't add newline here - the previous statement already ended with one
                 }
@@ -285,7 +281,7 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                 let package_start_line = child.start_position().row;
                 if package_start_line > prev_end_line + 1 {
                     // There was a blank line in the source — preserve it
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                 }
             }
         }
@@ -304,7 +300,7 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                 || child.kind() != "import_declaration";
 
             if needs_double_newline {
-                items.push_signal(Signal::NewLine);
+                items.newline();
             }
         }
         // Note: if prev_was_comment, the comment already includes a trailing newline,
@@ -318,17 +314,17 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
         if i < non_import_children.len() - 1
             && non_import_children[i + 1..].iter().any(|c| !c.is_extra())
         {
-            items.push_signal(Signal::NewLine);
+            items.newline();
         }
     }
 
     // Ensure file ends with a newline
-    items.push_signal(Signal::NewLine);
+    items.newline();
 
     items
 }
 
-/// Extract the import path from an import_declaration node.
+/// Extract the import path from an `import_declaration` node.
 fn extract_import_path(node: tree_sitter::Node, source: &str) -> String {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -340,7 +336,7 @@ fn extract_import_path(node: tree_sitter::Node, source: &str) -> String {
                 .children(&mut next_cursor)
                 .any(|c| c.kind() == "asterisk");
             if has_asterisk {
-                return format!("{}.*", path);
+                return format!("{path}.*");
             }
             return path.to_string();
         }
@@ -397,7 +393,7 @@ fn gen_type_arguments<'a>(
         .enumerate()
         .map(|(i, a)| {
             let text = &context.source[a.start_byte()..a.end_byte()];
-            let flat = expressions::collapse_whitespace(text).len();
+            let flat = collapse_whitespace_len(text);
             flat + if i < type_args.len() - 1 { 2 } else { 0 } // ", " between args
         })
         .sum();
@@ -452,43 +448,43 @@ fn gen_type_arguments<'a>(
         let continuation_col = indent_width + indent_levels * context.config.indent_width as usize;
         let all_fit_continuation = continuation_col + args_flat_width + 1 + trailing <= line_width; // args + ">" [+ " {"]
 
-        items.push_string("<".to_string());
+        items.push_str("<");
         for _ in 0..indent_levels {
-            items.push_signal(Signal::StartIndent);
+            items.start_indent();
         }
 
         if all_fit_continuation {
             // All type args on one continuation line
-            items.push_signal(Signal::NewLine);
+            items.newline();
             for (i, arg) in type_args.iter().enumerate() {
                 items.extend(gen_node(**arg, context));
                 if i < type_args.len() - 1 {
-                    items.push_string(",".to_string());
-                    items.extend(helpers::gen_space());
+                    items.push_str(",");
+                    items.space();
                 }
             }
         } else {
             // One per line
             for (i, arg) in type_args.iter().enumerate() {
-                items.push_signal(Signal::NewLine);
+                items.newline();
                 items.extend(gen_node(**arg, context));
                 if i < type_args.len() - 1 {
-                    items.push_string(",".to_string());
+                    items.push_str(",");
                 }
             }
         }
-        items.push_string(">".to_string());
+        items.push_str(">");
         for _ in 0..indent_levels {
-            items.push_signal(Signal::FinishIndent);
+            items.finish_indent();
         }
     } else {
         for child in &children {
             match child.kind() {
-                "<" => items.push_string("<".to_string()),
-                ">" => items.push_string(">".to_string()),
+                "<" => items.push_str("<"),
+                ">" => items.push_str(">"),
                 "," => {
-                    items.push_string(",".to_string());
-                    items.extend(helpers::gen_space());
+                    items.push_str(",");
+                    items.space();
                 }
                 _ if child.is_named() => {
                     items.extend(gen_node(*child, context));
@@ -511,7 +507,7 @@ fn gen_array_type<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "dimensions" => items.extend(helpers::gen_node_text(child, context.source)),
+            "dimensions" => items.extend(gen_node_text(child, context.source)),
             _ if child.is_named() => items.extend(gen_node(child, context)),
             _ => {}
         }
@@ -531,15 +527,15 @@ fn gen_type_parameter<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "identifier" | "type_identifier" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
             }
             "type_bound" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_type_bound(child, context));
             }
             "extends" => {
-                items.extend(helpers::gen_space());
-                items.push_string("extends".to_string());
+                items.space();
+                items.push_str("extends");
             }
             _ => {}
         }
@@ -560,18 +556,18 @@ fn gen_type_bound<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "extends" => {
-                items.push_string("extends".to_string());
+                items.push_str("extends");
             }
             "&" => {
-                items.extend(helpers::gen_space());
-                items.push_string("&".to_string());
-                items.extend(helpers::gen_space());
+                items.space();
+                items.push_str("&");
+                items.space();
             }
             _ if child.is_named() => {
-                if !first {
-                    // Space already added after &
+                if first {
+                    items.space();
                 } else {
-                    items.extend(helpers::gen_space());
+                    // Space already added after &
                 }
                 items.extend(gen_node(child, context));
                 first = false;
@@ -593,17 +589,17 @@ fn gen_wildcard<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "?" => items.push_string("?".to_string()),
+            "?" => items.push_str("?"),
             "extends" => {
-                items.extend(helpers::gen_space());
-                items.push_string("extends".to_string());
+                items.space();
+                items.push_str("extends");
             }
             "super" => {
-                items.extend(helpers::gen_space());
-                items.push_string("super".to_string());
+                items.space();
+                items.push_str("super");
             }
             _ if child.is_named() => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_node(child, context));
             }
             _ => {}
@@ -638,24 +634,24 @@ fn gen_formal_parameter<'a>(
             | "generic_type"
             | "array_type" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
                 items.extend(gen_node(child, context));
                 need_space = true;
             }
             "..." => {
-                items.push_string("...".to_string());
+                items.push_str("...");
                 need_space = true;
             }
             "identifier" | "variable_declarator" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
                 items.extend(gen_node(child, context));
                 need_space = false;
             }
             "dimensions" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
             }
             _ => {}
         }
@@ -670,10 +666,10 @@ fn gen_marker_annotation<'a>(
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
     let mut items = PrintItems::new();
-    items.push_string("@".to_string());
+    items.push_str("@");
 
     if let Some(name) = node.child_by_field_name("name") {
-        items.extend(helpers::gen_node_text(name, context.source));
+        items.extend(gen_node_text(name, context.source));
     }
 
     items
@@ -685,18 +681,18 @@ fn gen_annotation<'a>(
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
     let mut items = PrintItems::new();
-    items.push_string("@".to_string());
+    items.push_str("@");
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "@" => {} // Already emitted
             "identifier" | "scoped_identifier" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
             }
             "annotation_argument_list" => {
                 items.extend(gen_node(child, context));
             }
+            // "@" already emitted above
             _ => {}
         }
     }
@@ -732,7 +728,7 @@ fn gen_annotation_argument_list<'a>(
         };
         if let Some(arr) = arr_node {
             let mut ac = arr.walk();
-            let element_count = arr.children(&mut ac).filter(|c| c.is_named()).count();
+            let element_count = arr.children(&mut ac).filter(tree_sitter::Node::is_named).count();
             element_count > 1
         } else {
             false
@@ -744,7 +740,7 @@ fn gen_annotation_argument_list<'a>(
 
     // Compute flat width of the entire annotation argument list
     let text = &context.source[node.start_byte()..node.end_byte()];
-    let flat_width = super::expressions::collapse_whitespace(text).len();
+    let flat_width = collapse_whitespace_len(text);
 
     // Also need the annotation name width (go up to parent annotation node)
     let annotation_prefix_width = if let Some(parent) = node.parent() {
@@ -764,45 +760,45 @@ fn gen_annotation_argument_list<'a>(
     // But only if there are multiple arguments (single-arg annotations stay inline)
     let named_arg_count = {
         let mut c = node.walk();
-        node.children(&mut c).filter(|ch| ch.is_named()).count()
+        node.children(&mut c).filter(tree_sitter::Node::is_named).count()
     };
     let force_multiline = (named_arg_count > 1 || has_multi_element_array) && exceeds_line_width;
 
     if force_multiline {
         // Multi-line format: force all args to separate lines with continuation indent (+8)
-        items.push_string("(".to_string());
+        items.push_str("(");
         // Double indent = +8 (continuation indent)
-        items.push_signal(Signal::StartIndent);
-        items.push_signal(Signal::StartIndent);
+        items.start_indent();
+        items.start_indent();
 
         let named_children: Vec<_> = node
             .children(&mut cursor)
-            .filter(|c| c.is_named())
+            .filter(tree_sitter::Node::is_named)
             .collect();
         let count = named_children.len();
 
         for (i, child) in named_children.iter().enumerate() {
-            items.push_signal(Signal::NewLine);
+            items.newline();
             items.extend(gen_node(*child, context));
             if i < count - 1 {
-                items.push_string(",".to_string());
+                items.push_str(",");
             }
         }
 
-        items.push_string(")".to_string());
-        items.push_signal(Signal::FinishIndent);
-        items.push_signal(Signal::FinishIndent);
+        items.push_str(")");
+        items.finish_indent();
+        items.finish_indent();
     } else {
         // Inline format
-        items.push_string("(".to_string());
+        items.push_str("(");
         let mut first = true;
 
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "(" | ")" => {}
                 "," => {
-                    items.push_string(",".to_string());
-                    items.extend(helpers::gen_space());
+                    items.push_str(",");
+                    items.space();
                 }
                 _ if child.is_named() => {
                     if !first {
@@ -815,7 +811,7 @@ fn gen_annotation_argument_list<'a>(
             }
         }
 
-        items.push_string(")".to_string());
+        items.push_str(")");
     }
 
     items
@@ -832,12 +828,12 @@ fn gen_element_value_pair<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "identifier" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
             }
             "=" => {
-                items.extend(helpers::gen_space());
-                items.push_string("=".to_string());
-                items.extend(helpers::gen_space());
+                items.space();
+                items.push_str("=");
+                items.space();
             }
             _ if child.is_named() => {
                 items.extend(gen_node(child, context));
@@ -859,8 +855,8 @@ fn gen_dimensions_expr<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "[" => items.push_string("[".to_string()),
-            "]" => items.push_string("]".to_string()),
+            "[" => items.push_str("["),
+            "]" => items.push_str("]"),
             _ if child.is_named() => items.extend(gen_node(child, context)),
             _ => {}
         }

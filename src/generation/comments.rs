@@ -1,9 +1,9 @@
 use dprint_core::formatting::PrintItems;
-use dprint_core::formatting::Signal;
 
 use crate::configuration::Configuration;
 
 use super::context::FormattingContext;
+use super::helpers::PrintItemsExt;
 
 /// Format a line comment: `// ...`
 ///
@@ -17,27 +17,27 @@ pub fn gen_line_comment(node: tree_sitter::Node, context: &FormattingContext) ->
 
     // Normalize: ensure single space after // (but preserve /// and //! style)
     if let Some(rest) = text.strip_prefix("//") {
-        items.push_string("//".to_string());
+        items.push_str("//");
         if rest.is_empty() {
             // Empty comment: just "//"
         } else if rest.starts_with('/') || rest.starts_with('!') {
             // Triple-slash or //! — preserve as-is, strip trailing whitespace
-            items.push_string(rest.trim_end().to_string());
+            items.push_str(rest.trim_end());
         } else if rest.starts_with(' ') {
             // Already has a space — preserve content, strip trailing whitespace
-            items.push_string(rest.trim_end().to_string());
+            items.push_str(rest.trim_end());
         } else {
             // No space after // — add one, strip trailing whitespace
-            items.push_string(format!(" {}", rest.trim_end()));
+            items.push_str(&format!(" {}", rest.trim_end()));
         }
     } else {
         // Fallback: emit as-is
-        items.push_string(text.to_string());
+        items.push_str(text);
     }
 
     // CRITICAL: Line comments MUST be followed by a newline, otherwise they
     // will comment out whatever code follows on the same line
-    items.push_signal(Signal::NewLine);
+    items.newline();
 
     items
 }
@@ -69,7 +69,7 @@ fn gen_block_comment_preserved(text: &str) -> PrintItems {
 
     for (i, line) in lines.iter().enumerate() {
         if i > 0 {
-            items.push_signal(Signal::NewLine);
+            items.newline();
         }
 
         // Strip trailing \r for CRLF files
@@ -81,7 +81,7 @@ fn gen_block_comment_preserved(text: &str) -> PrintItems {
 
         if i == 0 {
             // First line: emit as-is (already trimmed)
-            items.push_string(line.clone());
+            items.push_str(&line);
         } else {
             // Continuation lines: trim leading whitespace and add a single
             // space indent so `*` aligns under `/*`
@@ -89,13 +89,13 @@ fn gen_block_comment_preserved(text: &str) -> PrintItems {
             if trimmed.is_empty() {
                 // Blank continuation line within a block comment — emit
                 // just the " *" prefix
-                items.push_string(" *".to_string());
+                items.push_str(" *");
             } else if trimmed.starts_with('*') {
                 // Line starts with `*` — prefix with single space for alignment
-                items.push_string(format!(" {}", trimmed));
+                items.push_str(&format!(" {trimmed}"));
             } else {
                 // Line doesn't start with * — prefix with " * " to maintain format
-                items.push_string(format!(" * {}", trimmed));
+                items.push_str(&format!(" * {trimmed}"));
             }
         }
     }
@@ -116,9 +116,9 @@ fn strip_comment_line_trailing_ws(line: &str) -> String {
         let rest_trimmed = rest.trim_end();
         // If there's content before the */, preserve a single space
         if !rest_trimmed.is_empty() && !rest_trimmed.ends_with(char::is_whitespace) {
-            return format!("{} */", rest_trimmed);
+            return format!("{rest_trimmed} */");
         }
-        return format!("{}*/", rest_trimmed);
+        return format!("{rest_trimmed}*/");
     }
 
     line.to_string()
@@ -132,6 +132,7 @@ fn strip_comment_line_trailing_ws(line: &str) -> String {
 /// - Reflows `@param`, `@return`, `@throws`/`@exception` tag descriptions
 /// - Preserves `{@code ...}` and `<pre>...</pre>` blocks verbatim
 /// - Wraps lines to fit within `config.line_width`
+#[allow(clippy::similar_names)]
 fn gen_javadoc(
     node: tree_sitter::Node,
     context: &FormattingContext,
@@ -157,61 +158,61 @@ fn gen_javadoc(
     let mut items = PrintItems::new();
 
     // Opening
-    items.push_string("/**".to_string());
+    items.push_str("/**");
 
     for segment in &segments {
         match segment {
             JavadocSegment::Text(text) => {
                 let wrapped = wrap_text(text, max_content_width);
                 for line in &wrapped {
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                     if line.is_empty() {
-                        items.push_string(" *".to_string());
+                        items.push_str(" *");
                     } else {
-                        items.push_string(format!(" * {}", line));
+                        items.push_str(&format!(" * {line}"));
                     }
                 }
             }
             JavadocSegment::Tag { name, args, desc } => {
-                items.push_signal(Signal::NewLine);
-                let tag_line = format_tag_line(name, args, desc);
+                items.newline();
+                let tag_line = format_tag_line(name, args.as_ref(), desc);
                 let wrapped = wrap_text(&tag_line, max_content_width);
                 for (i, line) in wrapped.iter().enumerate() {
                     if i > 0 {
-                        items.push_signal(Signal::NewLine);
+                        items.newline();
                     }
                     if line.is_empty() {
-                        items.push_string(" *".to_string());
+                        items.push_str(" *");
                     } else {
-                        items.push_string(format!(" * {}", line));
+                        items.push_str(&format!(" * {line}"));
                     }
                 }
             }
             JavadocSegment::PreBlock(content) => {
-                items.push_signal(Signal::NewLine);
-                items.push_string(" * <pre>".to_string());
+                items.newline();
+                items.push_str(" * <pre>");
                 for line in content.split('\n') {
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                     let line = line.strip_suffix('\r').unwrap_or(line);
                     if line.is_empty() {
-                        items.push_string(" *".to_string());
+                        items.push_str(" *");
                     } else {
-                        items.push_string(format!(" * {}", line));
+                        items.push_str(&format!(" * {line}"));
                     }
                 }
-                items.push_signal(Signal::NewLine);
-                items.push_string(" * </pre>".to_string());
+                items.newline();
+                items.push_str(" * </pre>");
             }
             JavadocSegment::BlankLine => {
-                items.push_signal(Signal::NewLine);
-                items.push_string(" *".to_string());
+                items.newline();
+                items.push_str(" *");
             }
         }
     }
 
     // Closing
-    items.push_signal(Signal::NewLine);
-    items.push_string(" */".to_string());
+    items.newline();
+    items.push_str(" */");
 
     items
 }
@@ -366,7 +367,7 @@ fn parse_javadoc_segments(content: &str) -> Vec<JavadocSegment> {
     segments
 }
 
-/// Parse a single Javadoc tag line into (name, optional_arg, description).
+/// Parse a single Javadoc tag line into (name, `optional_arg`, description).
 ///
 /// Examples:
 /// - `@param name the name of the thing` -> ("@param", Some("name"), "the name of the thing")
@@ -394,7 +395,7 @@ fn parse_tag_line(line: &str) -> (String, Option<String>, String) {
 }
 
 /// Format a tag line for output.
-fn format_tag_line(name: &str, args: &Option<String>, desc: &str) -> String {
+fn format_tag_line(name: &str, args: Option<&String>, desc: &str) -> String {
     let mut result = name.to_string();
     if let Some(arg) = args {
         result.push(' ');
@@ -422,13 +423,13 @@ fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
 
     for word in &words {
         if current_line.is_empty() {
-            current_line = word.to_string();
+            current_line.clone_from(word);
         } else if current_line.len() + 1 + word.len() <= max_width {
             current_line.push(' ');
             current_line.push_str(word);
         } else {
-            lines.push(current_line);
-            current_line = word.to_string();
+            lines.push(std::mem::take(&mut current_line));
+            current_line.clone_from(word);
         }
     }
 

@@ -1,11 +1,10 @@
 use dprint_core::formatting::PrintItems;
-use dprint_core::formatting::Signal;
 
 use super::comments;
 use super::context::FormattingContext;
 use super::expressions;
 use super::generate::gen_node;
-use super::helpers;
+use super::helpers::{PrintItemsExt, collapse_whitespace_len, gen_node_text, is_type_node};
 
 /// Format a package declaration: `package com.example;`
 pub fn gen_package_declaration<'a>(
@@ -17,12 +16,12 @@ pub fn gen_package_declaration<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "package" => items.push_string("package".to_string()),
+            "package" => items.push_str("package"),
             "scoped_identifier" | "identifier" => {
-                items.extend(helpers::gen_space());
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.space();
+                items.extend(gen_node_text(child, context.source));
             }
-            ";" => items.push_string(";".to_string()),
+            ";" => items.push_str(";"),
             _ => {}
         }
     }
@@ -40,19 +39,19 @@ pub fn gen_import_declaration<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "import" => items.push_string("import".to_string()),
+            "import" => items.push_str("import"),
             "static" => {
-                items.extend(helpers::gen_space());
-                items.push_string("static".to_string());
+                items.space();
+                items.push_str("static");
             }
             "scoped_identifier" | "identifier" => {
-                items.extend(helpers::gen_space());
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.space();
+                items.extend(gen_node_text(child, context.source));
             }
             "asterisk" => {
-                items.push_string(".*".to_string());
+                items.push_str(".*");
             }
-            ";" => items.push_string(";".to_string()),
+            ";" => items.push_str(";"),
             _ => {}
         }
     }
@@ -98,16 +97,16 @@ pub fn gen_class_declaration<'a>(
             }
             "class" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.push_string("class".to_string());
+                items.push_str("class");
                 need_space = true;
             }
             "identifier" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
                 need_space = true;
             }
             "type_parameters" => {
@@ -116,38 +115,38 @@ pub fn gen_class_declaration<'a>(
             }
             "superclass" => {
                 if wrap_extends {
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::NewLine);
+                    items.start_indent();
+                    items.start_indent();
+                    items.newline();
                     context.add_continuation_indent(2);
                     items.extend(gen_superclass(child, context));
                     context.remove_continuation_indent(2);
-                    items.push_signal(Signal::FinishIndent);
-                    items.push_signal(Signal::FinishIndent);
+                    items.finish_indent();
+                    items.finish_indent();
                 } else {
-                    items.extend(helpers::gen_space());
+                    items.space();
                     items.extend(gen_superclass(child, context));
                 }
                 need_space = true;
             }
             "super_interfaces" => {
                 if wrap_implements {
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::NewLine);
+                    items.start_indent();
+                    items.start_indent();
+                    items.newline();
                     context.add_continuation_indent(2);
                     items.extend(gen_super_interfaces(child, context));
                     context.remove_continuation_indent(2);
-                    items.push_signal(Signal::FinishIndent);
-                    items.push_signal(Signal::FinishIndent);
+                    items.finish_indent();
+                    items.finish_indent();
                 } else {
-                    items.extend(helpers::gen_space());
+                    items.space();
                     items.extend(gen_super_interfaces(child, context));
                 }
                 need_space = true;
             }
             "class_body" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_class_body(child, context));
                 need_space = false;
             }
@@ -183,16 +182,16 @@ pub fn gen_interface_declaration<'a>(
             }
             "interface" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.push_string("interface".to_string());
+                items.push_str("interface");
                 need_space = true;
             }
             "identifier" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
                 need_space = true;
             }
             "type_parameters" => {
@@ -201,22 +200,22 @@ pub fn gen_interface_declaration<'a>(
             }
             "extends_interfaces" => {
                 if wrap_clauses {
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::NewLine);
+                    items.start_indent();
+                    items.start_indent();
+                    items.newline();
                     context.add_continuation_indent(2);
                     items.extend(gen_extends_interfaces(child, context));
                     context.remove_continuation_indent(2);
-                    items.push_signal(Signal::FinishIndent);
-                    items.push_signal(Signal::FinishIndent);
+                    items.finish_indent();
+                    items.finish_indent();
                 } else {
-                    items.extend(helpers::gen_space());
+                    items.space();
                     items.extend(gen_extends_interfaces(child, context));
                 }
                 need_space = true;
             }
             "interface_body" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_interface_body(child, context));
                 need_space = false;
             }
@@ -251,34 +250,34 @@ pub fn gen_enum_declaration<'a>(
             }
             "enum" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.push_string("enum".to_string());
+                items.push_str("enum");
                 need_space = true;
             }
             "identifier" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
                 need_space = true;
             }
             "super_interfaces" => {
                 if wrap_clauses {
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::NewLine);
+                    items.start_indent();
+                    items.start_indent();
+                    items.newline();
                     items.extend(gen_super_interfaces(child, context));
-                    items.push_signal(Signal::FinishIndent);
-                    items.push_signal(Signal::FinishIndent);
+                    items.finish_indent();
+                    items.finish_indent();
                 } else {
-                    items.extend(helpers::gen_space());
+                    items.space();
                     items.extend(gen_super_interfaces(child, context));
                 }
                 need_space = true;
             }
             "enum_body" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_enum_body(child, context));
                 need_space = false;
             }
@@ -313,16 +312,16 @@ pub fn gen_record_declaration<'a>(
             }
             "record" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.push_string("record".to_string());
+                items.push_str("record");
                 need_space = true;
             }
             "identifier" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
                 need_space = false;
             }
             "formal_parameters" => {
@@ -331,20 +330,20 @@ pub fn gen_record_declaration<'a>(
             }
             "super_interfaces" => {
                 if wrap_clauses {
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::NewLine);
+                    items.start_indent();
+                    items.start_indent();
+                    items.newline();
                     items.extend(gen_super_interfaces(child, context));
-                    items.push_signal(Signal::FinishIndent);
-                    items.push_signal(Signal::FinishIndent);
+                    items.finish_indent();
+                    items.finish_indent();
                 } else {
-                    items.extend(helpers::gen_space());
+                    items.space();
                     items.extend(gen_super_interfaces(child, context));
                 }
                 need_space = true;
             }
             "class_body" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_class_body(child, context));
                 need_space = false;
             }
@@ -374,20 +373,20 @@ pub fn gen_annotation_type_declaration<'a>(
             }
             "@interface" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.push_string("@interface".to_string());
+                items.push_str("@interface");
                 need_space = true;
             }
             "identifier" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
                 need_space = true;
             }
             "annotation_type_body" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_annotation_type_body(child, context));
                 need_space = false;
             }
@@ -402,6 +401,7 @@ pub fn gen_annotation_type_declaration<'a>(
 ///
 /// Handles wrapping of the throws clause onto a continuation line when the
 /// method signature would exceed `line_width`.
+#[allow(clippy::too_many_lines)]
 pub fn gen_method_declaration<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -446,7 +446,7 @@ pub fn gen_method_declaration<'a>(
                 .find_map(|c| {
                     if c.kind() == "formal_parameters" {
                         let text = &context.source[c.start_byte()..c.end_byte()];
-                        Some(expressions::collapse_whitespace(text).len())
+                        Some(collapse_whitespace_len(text))
                     } else {
                         None
                     }
@@ -476,22 +476,15 @@ pub fn gen_method_declaration<'a>(
             }
             "type_parameters" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
                 items.extend(gen_type_parameters(child, context));
                 need_space = true;
             }
             // Return type: various type nodes
-            "void_type"
-            | "integral_type"
-            | "floating_point_type"
-            | "boolean_type"
-            | "type_identifier"
-            | "scoped_type_identifier"
-            | "generic_type"
-            | "array_type" => {
+            kind if is_type_node(kind) => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
                 items.extend(gen_node(child, context));
                 need_space = true;
@@ -499,17 +492,17 @@ pub fn gen_method_declaration<'a>(
             "identifier" => {
                 if wrap_before_name {
                     // Wrap: put method name on continuation-indent line
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::NewLine);
+                    items.start_indent();
+                    items.start_indent();
+                    items.newline();
                     did_wrap_name = true;
                     // Tell formal_parameters the effective prefix is just the method name
                     let name_text = &context.source[child.start_byte()..child.end_byte()];
                     context.set_override_prefix_width(Some(name_text.len()));
                 } else if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
                 need_space = false;
             }
             "formal_parameters" => {
@@ -519,42 +512,42 @@ pub fn gen_method_declaration<'a>(
             "throws" => {
                 if wrap_throws {
                     if !did_wrap_name {
-                        items.push_signal(Signal::StartIndent);
-                        items.push_signal(Signal::StartIndent);
+                        items.start_indent();
+                        items.start_indent();
                     }
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                     items.extend(gen_throws(child, context));
                     if !did_wrap_name {
-                        items.push_signal(Signal::FinishIndent);
-                        items.push_signal(Signal::FinishIndent);
+                        items.finish_indent();
+                        items.finish_indent();
                     }
                 } else {
-                    items.extend(helpers::gen_space());
+                    items.space();
                     items.extend(gen_throws(child, context));
                 }
                 need_space = true;
             }
             "block" => {
                 if did_wrap_name {
-                    items.push_signal(Signal::FinishIndent);
-                    items.push_signal(Signal::FinishIndent);
+                    items.finish_indent();
+                    items.finish_indent();
                 }
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_node(child, context));
                 need_space = false;
                 did_wrap_name = false; // consumed
             }
             ";" => {
                 if did_wrap_name {
-                    items.push_signal(Signal::FinishIndent);
-                    items.push_signal(Signal::FinishIndent);
+                    items.finish_indent();
+                    items.finish_indent();
                     did_wrap_name = false;
                 }
-                items.push_string(";".to_string());
+                items.push_str(";");
                 need_space = false;
             }
             "dimensions" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
                 need_space = true;
             }
             _ => {}
@@ -562,8 +555,8 @@ pub fn gen_method_declaration<'a>(
     }
 
     if did_wrap_name {
-        items.push_signal(Signal::FinishIndent);
-        items.push_signal(Signal::FinishIndent);
+        items.finish_indent();
+        items.finish_indent();
     }
 
     items
@@ -601,7 +594,7 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
     width
 }
 
-/// Estimate the prefix width before a formal_parameters or argument_list node.
+/// Estimate the prefix width before a `formal_parameters` or `argument_list` node.
 /// This is the text that appears on the same line before the opening `(`:
 /// - For methods: modifiers + return type + method name
 /// - For constructors: modifiers + constructor name
@@ -611,10 +604,7 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
 /// Uses the parent-to-node text as the base measurement, then walks up
 /// ancestors to account for keywords/LHS that share the same line.
 pub(super) fn estimate_prefix_width(node: tree_sitter::Node, source: &str, assignment_wrapped: bool) -> usize {
-    let parent = match node.parent() {
-        Some(p) => p,
-        None => return 0,
-    };
+    let Some(parent) = node.parent() else { return 0 };
 
     // Extract the text from the start of the parent to the start of this node
     let prefix_text = &source[parent.start_byte()..node.start_byte()];
@@ -678,7 +668,7 @@ pub(super) fn estimate_prefix_width(node: tree_sitter::Node, source: &str, assig
 }
 
 /// Estimate the width of a class/interface/enum/record declaration line
-/// (modifiers + keyword + name + type_parameters + extends/implements + body start)
+/// (modifiers + keyword + name + `type_parameters` + extends/implements + body start)
 /// from the source text. Only considers the "flat" width, ignoring existing line breaks.
 fn estimate_class_decl_width(node: tree_sitter::Node, source: &str) -> usize {
     let mut cursor = node.walk();
@@ -698,7 +688,7 @@ fn estimate_class_decl_width(node: tree_sitter::Node, source: &str) -> usize {
                 // Use collapsed width for all non-modifier nodes to avoid
                 // instability when the source text has been wrapped from a
                 // previous formatting pass.
-                let flat = expressions::collapse_whitespace(text);
+                let flat_len = collapse_whitespace_len(text);
                 if width > 0
                     && child.kind() != "formal_parameters"
                     && child.kind() != "("
@@ -706,7 +696,7 @@ fn estimate_class_decl_width(node: tree_sitter::Node, source: &str) -> usize {
                 {
                     width += 1; // space separator
                 }
-                width += flat.len();
+                width += flat_len;
             }
         }
     }
@@ -742,16 +732,16 @@ pub fn gen_constructor_declaration<'a>(
             }
             "type_parameters" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
                 items.extend(gen_type_parameters(child, context));
                 need_space = true;
             }
             "identifier" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
                 need_space = false;
             }
             "formal_parameters" => {
@@ -760,20 +750,20 @@ pub fn gen_constructor_declaration<'a>(
             }
             "throws" => {
                 if wrap_throws {
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::NewLine);
+                    items.start_indent();
+                    items.start_indent();
+                    items.newline();
                     items.extend(gen_throws(child, context));
-                    items.push_signal(Signal::FinishIndent);
-                    items.push_signal(Signal::FinishIndent);
+                    items.finish_indent();
+                    items.finish_indent();
                 } else {
-                    items.extend(helpers::gen_space());
+                    items.space();
                     items.extend(gen_throws(child, context));
                 }
                 need_space = true;
             }
             "constructor_body" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_node(child, context));
                 need_space = false;
             }
@@ -802,33 +792,26 @@ pub fn gen_field_declaration<'a>(
                 need_space = !ends_with_newline;
             }
             // Type nodes
-            "void_type"
-            | "integral_type"
-            | "floating_point_type"
-            | "boolean_type"
-            | "type_identifier"
-            | "scoped_type_identifier"
-            | "generic_type"
-            | "array_type" => {
+            kind if is_type_node(kind) => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
                 items.extend(gen_node(child, context));
                 need_space = true;
             }
             "variable_declarator" => {
                 if need_space {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
                 items.extend(gen_variable_declarator(child, context));
                 need_space = false;
             }
             "," => {
-                items.push_string(",".to_string());
+                items.push_str(",");
                 need_space = true;
             }
             ";" => {
-                items.push_string(";".to_string());
+                items.push_str(";");
                 need_space = false;
             }
             _ => {}
@@ -863,7 +846,7 @@ const JLS_MODIFIER_ORDER: &[&str] = &[
 /// Annotations are placed on their own line before keyword modifiers.
 /// Keyword modifiers are reordered to JLS canonical order.
 ///
-/// Returns (items, ends_with_newline) where ends_with_newline is true
+/// Returns (items, `ends_with_newline`) where `ends_with_newline` is true
 /// if the output ends with a newline (i.e., has annotations but no keywords).
 pub fn gen_modifiers<'a>(
     node: tree_sitter::Node<'a>,
@@ -896,16 +879,16 @@ pub fn gen_modifiers<'a>(
     for ann in &annotations {
         items.extend(gen_node(**ann, context));
         // Always add newline after each annotation
-        items.push_signal(Signal::NewLine);
+        items.newline();
     }
 
     // Emit keyword modifiers on a single line
     let mut first = true;
     for kw in &keywords {
         if !first {
-            items.extend(helpers::gen_space());
+            items.space();
         }
-        items.extend(helpers::gen_node_text(**kw, context.source));
+        items.extend(gen_node_text(**kw, context.source));
         first = false;
     }
 
@@ -924,11 +907,11 @@ fn gen_type_parameters<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "<" => items.push_string("<".to_string()),
-            ">" => items.push_string(">".to_string()),
+            "<" => items.push_str("<"),
+            ">" => items.push_str(">"),
             "," => {
-                items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
+                items.push_str(",");
+                items.space();
             }
             _ => {
                 items.extend(gen_node(child, context));
@@ -949,9 +932,9 @@ fn gen_superclass<'a>(
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "extends" => items.push_string("extends".to_string()),
+            "extends" => items.push_str("extends"),
             _ if child.is_named() => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_node(child, context));
             }
             _ => {}
@@ -972,17 +955,17 @@ fn gen_super_interfaces<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "implements" => {
-                items.push_string("implements".to_string());
+                items.push_str("implements");
             }
             "type_list" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_type_list(child, context));
             }
             "," => {
-                items.push_string(",".to_string());
+                items.push_str(",");
             }
             _ if child.is_named() => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_node(child, context));
             }
             _ => {}
@@ -1003,17 +986,17 @@ fn gen_extends_interfaces<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "extends" => {
-                items.push_string("extends".to_string());
+                items.push_str("extends");
             }
             "type_list" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_type_list(child, context));
             }
             "," => {
-                items.push_string(",".to_string());
+                items.push_str(",");
             }
             _ if child.is_named() => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_node(child, context));
             }
             _ => {}
@@ -1034,8 +1017,8 @@ fn gen_type_list<'a>(
     for child in node.children(&mut cursor) {
         match child.kind() {
             "," => {
-                items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
+                items.push_str(",");
+                items.space();
             }
             _ if child.is_named() => {
                 items.extend(gen_node(child, context));
@@ -1072,12 +1055,13 @@ pub fn gen_annotation_type_body<'a>(
 }
 
 /// Format an enum body: `{ CONSTANT1, CONSTANT2; methods... }`
+#[allow(clippy::too_many_lines)]
 fn gen_enum_body<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
     let mut items = PrintItems::new();
-    items.push_string("{".to_string());
+    items.push_str("{");
 
     let mut cursor = node.walk();
     let children: Vec<_> = node.children(&mut cursor).collect();
@@ -1089,12 +1073,12 @@ fn gen_enum_body<'a>(
         .collect();
 
     if members.is_empty() {
-        items.push_string("}".to_string());
+        items.push_str("}");
         return items;
     }
 
     // Use dprint-core indent signals for body
-    items.push_signal(Signal::StartIndent);
+    items.start_indent();
 
     // Separate enum constants, comments, and body declarations
     let enum_constants: Vec<_> = members
@@ -1111,7 +1095,7 @@ fn gen_enum_body<'a>(
     for child in &members {
         // Handle comments (extra nodes) without disrupting enum constant state
         if child.is_extra() {
-            items.push_signal(Signal::NewLine);
+            items.newline();
             items.extend(gen_node(**child, context));
             // Don't update prev_end_row for trailing tracking — this is handled below
             continue;
@@ -1119,12 +1103,12 @@ fn gen_enum_body<'a>(
 
         match child.kind() {
             "enum_constant" => {
-                items.push_signal(Signal::NewLine);
+                items.newline();
                 items.extend(gen_enum_constant(**child, context));
                 constant_idx += 1;
                 let is_last = constant_idx == enum_constants.len();
                 if !is_last {
-                    items.push_string(",".to_string());
+                    items.push_str(",");
                 }
                 prev_was_constant = true;
             }
@@ -1133,7 +1117,7 @@ fn gen_enum_body<'a>(
                 // since we handle commas ourselves above.
             }
             ";" => {
-                items.push_string(";".to_string());
+                items.push_str(";");
                 prev_was_constant = false;
             }
             "enum_body_declarations" => {
@@ -1146,19 +1130,19 @@ fn gen_enum_body<'a>(
                 let mut decl_prev_was_block: Option<bool> = None;
                 for decl_child in &decl_children {
                     if decl_child.kind() == ";" {
-                        items.push_string(";".to_string());
+                        items.push_str(";");
                         decl_prev_end_row = Some(decl_child.end_position().row);
                         continue;
                     }
                     if decl_child.is_extra() {
                         if !decl_prev_was_line_comment {
-                            items.push_signal(Signal::NewLine);
+                            items.newline();
                         }
                         // Preserve source blank lines between comments
                         if let Some(prev_row) = decl_prev_end_row
                             && decl_child.start_position().row > prev_row + 1
                         {
-                            items.push_signal(Signal::NewLine);
+                            items.newline();
                         }
                         items.extend(gen_node(*decl_child, context));
                         decl_prev_was_line_comment = decl_child.kind() == "line_comment";
@@ -1167,7 +1151,7 @@ fn gen_enum_body<'a>(
                     }
                     if decl_child.is_named() {
                         if !decl_prev_was_line_comment {
-                            items.push_signal(Signal::NewLine);
+                            items.newline();
                         }
                         // Blank line from source or from block member adjacency
                         let source_blank = decl_prev_end_row
@@ -1177,7 +1161,7 @@ fn gen_enum_body<'a>(
                             Some(prev_b) => prev_b || is_block_member(decl_child),
                         };
                         if source_blank || block_blank {
-                            items.push_signal(Signal::NewLine);
+                            items.newline();
                         }
                         items.extend(gen_node(*decl_child, context));
                         decl_prev_was_line_comment = false;
@@ -1189,11 +1173,11 @@ fn gen_enum_body<'a>(
             }
             _ if child.is_named() => {
                 if prev_was_constant {
-                    items.push_string(";".to_string());
+                    items.push_str(";");
                     prev_was_constant = false;
                 }
-                items.push_signal(Signal::NewLine);
-                items.push_signal(Signal::NewLine);
+                items.newline();
+                items.newline();
                 items.extend(gen_node(**child, context));
             }
             _ => {}
@@ -1204,9 +1188,9 @@ fn gen_enum_body<'a>(
     // add a trailing comma on the last constant (Java convention)
     let _ = has_body_decls;
 
-    items.push_signal(Signal::FinishIndent);
-    items.push_signal(Signal::NewLine);
-    items.push_string("}".to_string());
+    items.finish_indent();
+    items.newline();
+    items.push_str("}");
 
     items
 }
@@ -1225,17 +1209,17 @@ fn gen_enum_constant<'a>(
                 let (modifier_items, ends_with_newline) = gen_modifiers(child, context);
                 items.extend(modifier_items);
                 if !ends_with_newline {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
             }
             "identifier" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+                items.extend(gen_node_text(child, context.source));
             }
             "argument_list" => {
                 items.extend(gen_node(child, context));
             }
             "class_body" => {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_class_body(child, context));
             }
             _ => {}
@@ -1254,6 +1238,7 @@ fn gen_enum_constant<'a>(
 ///         String param1,
 ///         String param2) {
 /// ```
+#[allow(clippy::too_many_lines)]
 pub fn gen_formal_parameters<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -1331,7 +1316,7 @@ pub fn gen_formal_parameters<'a>(
         || indent_width + prefix_width + param_text_width + suffix_width
             > context.config.line_width as usize;
 
-    items.push_string("(".to_string());
+    items.push_str("(");
 
     if should_wrap {
         // PJF bin-packing: first try putting ALL params on one continuation line.
@@ -1343,17 +1328,17 @@ pub fn gen_formal_parameters<'a>(
             && continuation_col + param_text_width + 3 <= context.config.line_width as usize;
 
         // 2x StartIndent for 8-space continuation indent
-        items.push_signal(Signal::StartIndent);
-        items.push_signal(Signal::StartIndent);
+        items.start_indent();
+        items.start_indent();
 
         if all_fit_continuation {
             // All params fit on one continuation-indent line (PJF bin-packing mode)
-            items.push_signal(Signal::NewLine);
+            items.newline();
             for (i, param) in params.iter().enumerate() {
                 items.extend(gen_node(**param, context));
                 if i < params.len() - 1 {
-                    items.push_string(",".to_string());
-                    items.extend(helpers::gen_space());
+                    items.push_str(",");
+                    items.space();
                 }
             }
         } else {
@@ -1365,13 +1350,13 @@ pub fn gen_formal_parameters<'a>(
                     comments_before_param.contains_key(&param.start_byte());
                 if let Some(cmnts) = comments_before_param.get(&param.start_byte()) {
                     for cmnt in cmnts {
-                        items.push_signal(Signal::NewLine);
+                        items.newline();
                         items.extend(gen_node(*cmnt, context));
                     }
                 }
                 // Only emit NewLine before param if no comment preceded it
                 if !has_preceding_comment {
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                 }
 
                 // Check if this param exceeds line_width at continuation indent.
@@ -1379,7 +1364,7 @@ pub fn gen_formal_parameters<'a>(
                 let param_text = &context.source[param.start_byte()..param.end_byte()];
                 let param_flat_width: usize =
                     param_text.lines().map(|l| l.trim().len()).sum();
-                let suffix = if i < params.len() - 1 { 1 } else { 0 }; // comma
+                let suffix = usize::from(i < params.len() - 1); // comma
                 if continuation_col + param_flat_width + suffix
                     > context.config.line_width as usize
                 {
@@ -1398,9 +1383,9 @@ pub fn gen_formal_parameters<'a>(
                                 items.extend(gen_node(*child, context));
                             } else {
                                 if !started_continuation {
-                                    items.push_signal(Signal::StartIndent);
-                                    items.push_signal(Signal::StartIndent);
-                                    items.push_signal(Signal::NewLine);
+                                    items.start_indent();
+                                    items.start_indent();
+                                    items.newline();
                                     started_continuation = true;
                                     past_modifiers = true;
                                 }
@@ -1409,15 +1394,15 @@ pub fn gen_formal_parameters<'a>(
                                     if child.kind() == "identifier"
                                         || child.kind() == "variable_declarator"
                                     {
-                                        items.extend(helpers::gen_space());
+                                        items.space();
                                     }
                                     items.extend(gen_node(*child, context));
                                 }
                             }
                         }
                         if started_continuation {
-                            items.push_signal(Signal::FinishIndent);
-                            items.push_signal(Signal::FinishIndent);
+                            items.finish_indent();
+                            items.finish_indent();
                         }
                     } else {
                         items.extend(gen_node(**param, context));
@@ -1426,29 +1411,29 @@ pub fn gen_formal_parameters<'a>(
                     items.extend(gen_node(**param, context));
                 }
                 if i < params.len() - 1 {
-                    items.push_string(",".to_string());
+                    items.push_str(",");
                 }
             }
             // Trailing comments after last param
             if let Some(cmnts) = comments_before_param.get(&usize::MAX) {
                 for cmnt in cmnts {
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                     items.extend(gen_node(*cmnt, context));
                 }
             }
         }
-        items.push_string(")".to_string());
-        items.push_signal(Signal::FinishIndent);
-        items.push_signal(Signal::FinishIndent);
+        items.push_str(")");
+        items.finish_indent();
+        items.finish_indent();
     } else {
         for (i, param) in params.iter().enumerate() {
             items.extend(gen_node(**param, context));
             if i < params.len() - 1 {
-                items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
+                items.push_str(",");
+                items.space();
             }
         }
-        items.push_string(")".to_string());
+        items.push_str(")");
     }
 
     items
@@ -1456,7 +1441,7 @@ pub fn gen_formal_parameters<'a>(
 
 /// Format `throws Exception1, Exception2`
 ///
-/// When the throws list would cause the line to exceed line_width, wraps at
+/// When the throws list would cause the line to exceed `line_width`, wraps at
 /// commas with continuation indent (PJF style):
 /// ```java
 /// throws NoSuchFieldException, IllegalArgumentException,
@@ -1469,7 +1454,7 @@ fn gen_throws<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'
     // Collect exception types
     let types: Vec<_> = node
         .children(&mut cursor)
-        .filter(|c| c.is_named())
+        .filter(tree_sitter::Node::is_named)
         .collect();
 
     // Compute flat width of entire throws clause: "throws Type1, Type2, ..."
@@ -1492,7 +1477,7 @@ fn gen_throws<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'
     // indent already includes the continuation indent.
     let needs_wrap = indent_width + 7 + types_flat_width + 2 > line_width;
 
-    items.push_string("throws".to_string());
+    items.push_str("throws");
 
     if needs_wrap && types.len() > 1 {
         // Bin-pack exceptions: fill up the current line, then wrap remaining
@@ -1504,21 +1489,21 @@ fn gen_throws<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'
 
             if i > 0 && current_line_width + type_width + 2 > line_width {
                 // +2 for suffix (" {" or ", "). Wrap to continuation line.
-                items.push_signal(Signal::StartIndent);
-                items.push_signal(Signal::StartIndent);
-                items.push_signal(Signal::NewLine);
+                items.start_indent();
+                items.start_indent();
+                items.newline();
                 items.extend(gen_node(*typ, context));
                 if i < types.len() - 1 {
-                    items.push_string(",".to_string());
+                    items.push_str(",");
                 }
-                items.push_signal(Signal::FinishIndent);
-                items.push_signal(Signal::FinishIndent);
+                items.finish_indent();
+                items.finish_indent();
                 current_line_width = continuation_col + type_width + 2;
             } else {
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_node(*typ, context));
                 if i < types.len() - 1 {
-                    items.push_string(",".to_string());
+                    items.push_str(",");
                 }
                 current_line_width += 1 + type_width + 2; // space + type + ", "
             }
@@ -1527,12 +1512,12 @@ fn gen_throws<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'
         // Simple inline: "throws Type1, Type2"
         for (i, typ) in types.iter().enumerate() {
             if i == 0 {
-                items.extend(helpers::gen_space());
+                items.space();
             }
             items.extend(gen_node(*typ, context));
             if i < types.len() - 1 {
-                items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
+                items.push_str(",");
+                items.space();
             }
         }
     }
@@ -1542,12 +1527,13 @@ fn gen_throws<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'
 
 /// Format a variable declarator: `name = value`
 ///
-/// When the full declaration (type + name + = + value) exceeds line_width,
+/// When the full declaration (type + name + = + value) exceeds `line_width`,
 /// wraps after `=` with 8-space continuation indent (PJF style):
 /// ```java
 /// VeryLongType<Generic> variable =
 ///         new VeryLongType<>(args);
 /// ```
+#[allow(clippy::too_many_lines)]
 pub fn gen_variable_declarator<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -1591,7 +1577,7 @@ pub fn gen_variable_declarator<'a>(
             // Compute the flat width of just the RHS expression (collapse whitespace
             // to get the "on one line" width)
             let val_text = &context.source[val.start_byte()..val.end_byte()];
-            let rhs_flat_width = expressions::collapse_whitespace(val_text).len();
+            let rhs_flat_width = collapse_whitespace_len(val_text);
 
             let indent_unit = context.config.indent_width as usize;
             let indent_col = context.indent_level() * indent_unit;
@@ -1609,7 +1595,7 @@ pub fn gen_variable_declarator<'a>(
                     // Skip until we find our variable_declarator
                     if c == node {
                         // Now add the variable_declarator's children up to the `=`
-                        for vc in children.iter() {
+                        for vc in &children {
                             if vc.kind() == "=" {
                                 break;
                             }
@@ -1617,7 +1603,7 @@ pub fn gen_variable_declarator<'a>(
                             if w > 0 {
                                 w += 1;
                             } // space between tokens
-                            w += expressions::collapse_whitespace(text).len();
+                            w += collapse_whitespace_len(text);
                         }
                         break;
                     }
@@ -1628,14 +1614,14 @@ pub fn gen_variable_declarator<'a>(
                         if w > 0 {
                             w += 1;
                         } // space between tokens
-                        w += expressions::collapse_whitespace(text).len();
+                        w += collapse_whitespace_len(text);
                     }
                 }
                 w
             } else {
                 // Fallback: just the variable_declarator's LHS parts
                 let mut w = 0;
-                for c in children.iter() {
+                for c in &children {
                     if c.kind() == "=" {
                         break;
                     }
@@ -1643,7 +1629,7 @@ pub fn gen_variable_declarator<'a>(
                     if w > 0 {
                         w += 1;
                     }
-                    w += expressions::collapse_whitespace(text).len();
+                    w += collapse_whitespace_len(text);
                 }
                 w
             };
@@ -1672,7 +1658,9 @@ pub fn gen_variable_declarator<'a>(
                         context.source,
                         context.config,
                     );
-                    if !chain_fits_current {
+                    if chain_fits_current {
+                        false // Chain fits at current position, no wrapping needed
+                    } else {
                         // Chain would wrap at current position. Check if it fits
                         // inline at continuation indent — if so, wrap at '='.
                         let continuation_col =
@@ -1683,8 +1671,6 @@ pub fn gen_variable_declarator<'a>(
                             context.source,
                             context.config,
                         )
-                    } else {
-                        false // Chain fits at current position, no wrapping needed
                     }
                 }
             } else {
@@ -1720,10 +1706,8 @@ pub fn gen_variable_declarator<'a>(
                             // `LHS = opening(` inline also exceeds line_width.
                             // If so, we must wrap at `=` to avoid >line_width lines.
                             let rhs_text = &context.source[val.start_byte()..val.end_byte()];
-                            let rhs_opening_width = rhs_text
-                                .find('(')
-                                .map(|p| p + 1)
-                                .unwrap_or(rhs_flat_width);
+                            let rhs_opening_width =
+                                rhs_text.find('(').map_or(rhs_flat_width, |p| p + 1);
                             let opening_line_width =
                                 indent_col + lhs_width + 3 + rhs_opening_width;
                             opening_line_width > line_width
@@ -1742,22 +1726,19 @@ pub fn gen_variable_declarator<'a>(
     let mut cursor2 = node.walk();
     for child in node.children(&mut cursor2) {
         match child.kind() {
-            "identifier" => {
-                items.extend(helpers::gen_node_text(child, context.source));
-            }
-            "dimensions" => {
-                items.extend(helpers::gen_node_text(child, context.source));
+            "identifier" | "dimensions" => {
+                items.extend(gen_node_text(child, context.source));
             }
             "=" => {
-                items.extend(helpers::gen_space());
-                items.push_string("=".to_string());
+                items.space();
+                items.push_str("=");
                 saw_eq = true;
                 if wrap_value {
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::StartIndent);
-                    items.push_signal(Signal::NewLine);
+                    items.start_indent();
+                    items.start_indent();
+                    items.newline();
                 } else {
-                    items.extend(helpers::gen_space());
+                    items.space();
                 }
             }
             _ if child.is_named() => {
@@ -1776,8 +1757,8 @@ pub fn gen_variable_declarator<'a>(
     }
 
     if wrap_value && saw_eq {
-        items.push_signal(Signal::FinishIndent);
-        items.push_signal(Signal::FinishIndent);
+        items.finish_indent();
+        items.finish_indent();
     }
 
     items
@@ -1791,6 +1772,7 @@ pub fn gen_variable_declarator<'a>(
 ///
 /// When wrapping, uses PJF-style "bin-packing": tries to fit all args on one
 /// continuation line first, only putting each arg on its own line if they don't fit.
+#[allow(clippy::too_many_lines)]
 pub fn gen_argument_list<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -1889,18 +1871,16 @@ pub fn gen_argument_list<'a>(
         let parent_node = node.parent();
         let name_width = parent_node
             .and_then(|p| p.child_by_field_name("name"))
-            .map(|n| {
+            .map_or(0, |n| {
                 let text = &context.source[n.start_byte()..n.end_byte()];
                 text.len()
-            })
-            .unwrap_or(0);
+            });
         let type_args_width = parent_node
             .and_then(|p| p.child_by_field_name("type_arguments"))
-            .map(|ta| {
+            .map_or(0, |ta| {
                 let text = &context.source[ta.start_byte()..ta.end_byte()];
-                super::expressions::collapse_whitespace(text).len()
-            })
-            .unwrap_or(0);
+                collapse_whitespace_len(text)
+            });
         1 + type_args_width + name_width // "." + type_args + name
     } else {
         // Check if the caller (e.g., an outer gen_argument_list) set an override
@@ -1920,7 +1900,7 @@ pub fn gen_argument_list<'a>(
         ) {
         args[0].child_by_field_name("arguments").map(|arg_args| {
             let head_text = &context.source[args[0].start_byte()..arg_args.start_byte()];
-            super::expressions::collapse_whitespace(head_text).len() + 1 // +1 for "("
+            collapse_whitespace_len(head_text) + 1 // +1 for "("
         })
     } else {
         None
@@ -1967,7 +1947,7 @@ pub fn gen_argument_list<'a>(
     // Helper: check if any arg's chain dot exceeds threshold at given base column
     let exceeds_chain_limit = |base_col: usize| -> bool {
         let mut col = base_col;
-        for arg in args.iter() {
+        for arg in &args {
             let text = &context.source[arg.start_byte()..arg.end_byte()];
             let arg_width: usize = text.lines().map(|l| l.trim().len()).sum();
             let dot_pos = super::expressions::rightmost_chain_dot(**arg, context.source, col);
@@ -2013,7 +1993,7 @@ pub fn gen_argument_list<'a>(
         fits_on_continuation_line = false;
     }
 
-    items.push_string("(".to_string());
+    items.push_str("(");
 
     if fits_on_one_line {
         // Keep all args on the same line as the opening paren.
@@ -2032,69 +2012,69 @@ pub fn gen_argument_list<'a>(
         for (i, arg) in args.iter().enumerate() {
             items.extend(gen_node(**arg, context));
             if i < args.len() - 1 {
-                items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
+                items.push_str(",");
+                items.space();
             }
         }
         // Clear any unconsumed override (e.g., when arg is a chain and
         // the override wasn't consumed by the chain's in-chain arg lists).
         context.set_override_prefix_width(None);
-        items.push_string(")".to_string());
+        items.push_str(")");
     } else if fits_on_continuation_line {
         // Wrap after opening paren, but put all args on ONE continuation line (bin-packing)
-        items.push_signal(Signal::StartIndent);
-        items.push_signal(Signal::StartIndent);
-        items.push_signal(Signal::NewLine);
+        items.start_indent();
+        items.start_indent();
+        items.newline();
         context.add_continuation_indent(2);
         for (i, arg) in args.iter().enumerate() {
             items.extend(gen_node(**arg, context));
             if i < args.len() - 1 {
-                items.push_string(",".to_string());
-                items.extend(helpers::gen_space());
+                items.push_str(",");
+                items.space();
             }
         }
         context.remove_continuation_indent(2);
-        items.push_string(")".to_string());
-        items.push_signal(Signal::FinishIndent);
-        items.push_signal(Signal::FinishIndent);
+        items.push_str(")");
+        items.finish_indent();
+        items.finish_indent();
     } else {
         // Args don't fit on one continuation line, put each arg on its own line
-        items.push_signal(Signal::StartIndent);
-        items.push_signal(Signal::StartIndent);
+        items.start_indent();
+        items.start_indent();
         context.add_continuation_indent(2);
         for (i, arg) in args.iter().enumerate() {
             // Emit any comments that precede this arg
             if let Some(comments) = comments_before_arg.get(&arg.start_byte()) {
                 for comment in comments {
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                     items.extend(gen_node(*comment, context));
                 }
             }
-            items.push_signal(Signal::NewLine);
+            items.newline();
             items.extend(gen_node(**arg, context));
             if i < args.len() - 1 {
-                items.push_string(",".to_string());
+                items.push_str(",");
             }
         }
         // Emit any trailing comments (after last arg, before ')')
         if let Some(comments) = comments_before_arg.get(&usize::MAX) {
             for comment in comments {
-                items.push_signal(Signal::NewLine);
+                items.newline();
                 items.extend(gen_node(*comment, context));
             }
         }
         context.remove_continuation_indent(2);
-        items.push_string(")".to_string());
-        items.push_signal(Signal::FinishIndent);
-        items.push_signal(Signal::FinishIndent);
+        items.push_str(")");
+        items.finish_indent();
+        items.finish_indent();
     }
 
     items
 }
 
-/// Generic handler for bodies with member declarations (class_body, interface_body, etc.)
+/// Generic handler for bodies with member declarations (`class_body`, `interface_body`, etc.)
 ///
-/// Uses dprint-core's StartIndent/FinishIndent signals so that NewLine
+/// Uses dprint-core's StartIndent/FinishIndent signals so that `NewLine`
 /// automatically gets the correct indentation. Handles comment (extra) nodes
 /// that appear between members.
 /// Check if a class body member has a block body (ends with `}`).
@@ -2127,7 +2107,7 @@ fn gen_body_with_members<'a>(
     context: &mut FormattingContext<'a>,
 ) -> PrintItems {
     let mut items = PrintItems::new();
-    items.push_string("{".to_string());
+    items.push_str("{");
 
     let mut cursor = node.walk();
     let children: Vec<_> = node.children(&mut cursor).collect();
@@ -2139,11 +2119,11 @@ fn gen_body_with_members<'a>(
         .collect();
 
     if members.is_empty() {
-        items.push_string("}".to_string());
+        items.push_str("}");
         return items;
     }
 
-    items.push_signal(Signal::StartIndent);
+    items.start_indent();
     context.indent();
 
     let mut prev_was_line_comment = false;
@@ -2162,13 +2142,13 @@ fn gen_body_with_members<'a>(
             let is_trailing = comments::is_trailing_comment(**member);
             if is_trailing {
                 // Trailing comment: append on same line
-                items.extend(helpers::gen_space());
+                items.space();
                 items.extend(gen_node(**member, context));
                 prev_was_line_comment = member.kind() == "line_comment";
             } else {
                 // Leading/standalone comment within body
                 if !prev_was_line_comment {
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                 }
                 // Add blank line before comment: either from source or if adjacent to block member
                 // Always check source blank for comments (don't let blank_already_inserted suppress it)
@@ -2187,12 +2167,12 @@ fn gen_body_with_members<'a>(
                             }
                         };
                     if need_blank {
-                        items.push_signal(Signal::NewLine);
+                        items.newline();
                         blank_already_inserted = true;
                     }
                 } else if source_has_blank {
                     // blank_already_inserted but source also has a blank before this comment
-                    items.push_signal(Signal::NewLine);
+                    items.newline();
                 }
                 items.extend(gen_node(**member, context));
                 prev_was_line_comment = member.kind() == "line_comment";
@@ -2204,7 +2184,7 @@ fn gen_body_with_members<'a>(
         }
 
         if !prev_was_line_comment {
-            items.push_signal(Signal::NewLine);
+            items.newline();
         }
         // Add blank line: either from source or when adjacent to block member
         // Check source blank line even if blank_already_inserted (comment may have consumed
@@ -2222,12 +2202,12 @@ fn gen_body_with_members<'a>(
                     }
                 };
             if need_blank {
-                items.push_signal(Signal::NewLine);
+                items.newline();
             }
         } else if source_has_blank {
             // Comment already consumed the block-member blank line, but source
             // also has a blank line between the comment and this member — preserve it
-            items.push_signal(Signal::NewLine);
+            items.newline();
         }
         items.extend(gen_node(**member, context));
 
@@ -2237,14 +2217,14 @@ fn gen_body_with_members<'a>(
         blank_already_inserted = false;
     }
 
-    items.push_signal(Signal::FinishIndent);
+    items.finish_indent();
     context.dedent();
     if !prev_was_line_comment {
-        items.push_signal(Signal::NewLine);
+        items.newline();
     }
     // PJF removes source blank lines before closing `}` in class bodies.
     // (Statement blocks preserve them — handled separately in statements.rs.)
-    items.push_string("}".to_string());
+    items.push_str("}");
 
     items
 }
