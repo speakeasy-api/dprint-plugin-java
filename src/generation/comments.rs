@@ -21,14 +21,14 @@ pub fn gen_line_comment(node: tree_sitter::Node, context: &FormattingContext) ->
         if rest.is_empty() {
             // Empty comment: just "//"
         } else if rest.starts_with('/') || rest.starts_with('!') {
-            // Triple-slash or //! — preserve as-is
-            items.push_string(rest.to_string());
+            // Triple-slash or //! — preserve as-is, strip trailing whitespace
+            items.push_string(rest.trim_end().to_string());
         } else if rest.starts_with(' ') {
-            // Already has a space — preserve content after the first space
-            items.push_string(rest.to_string());
+            // Already has a space — preserve content, strip trailing whitespace
+            items.push_string(rest.trim_end().to_string());
         } else {
-            // No space after // — add one
-            items.push_string(format!(" {}", rest));
+            // No space after // — add one, strip trailing whitespace
+            items.push_string(format!(" {}", rest.trim_end()));
         }
     } else {
         // Fallback: emit as-is

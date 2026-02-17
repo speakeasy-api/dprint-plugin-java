@@ -445,13 +445,18 @@ fn gen_type_arguments<'a>(
     let should_wrap = total_inline > line_width;
 
     if should_wrap {
-        // Check if all type args fit on ONE continuation line (bin-packing)
-        let continuation_col = indent_width + 2 * context.config.indent_width as usize;
+        // PJF uses double continuation indent (+16 = 4 indent levels) for type args
+        // in local variable declarations, but single continuation (+8 = 2 indent levels)
+        // in class declaration contexts (extends/implements clauses).
+        let indent_levels = if in_class_decl { 2 } else { 4 };
+        let continuation_col =
+            indent_width + indent_levels * context.config.indent_width as usize;
         let all_fit_continuation = continuation_col + args_flat_width + 1 + trailing <= line_width; // args + ">" [+ " {"]
 
         items.push_string("<".to_string());
-        items.push_signal(Signal::StartIndent);
-        items.push_signal(Signal::StartIndent);
+        for _ in 0..indent_levels {
+            items.push_signal(Signal::StartIndent);
+        }
 
         if all_fit_continuation {
             // All type args on one continuation line
@@ -474,8 +479,9 @@ fn gen_type_arguments<'a>(
             }
         }
         items.push_string(">".to_string());
-        items.push_signal(Signal::FinishIndent);
-        items.push_signal(Signal::FinishIndent);
+        for _ in 0..indent_levels {
+            items.push_signal(Signal::FinishIndent);
+        }
     } else {
         for child in &children {
             match child.kind() {
