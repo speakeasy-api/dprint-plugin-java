@@ -1545,7 +1545,7 @@ pub fn gen_variable_declarator<'a>(
             let indent_unit = context.config.indent_width as usize;
             let indent_col = context.indent_level() * indent_unit;
             // Continuation indent: current indent + 2 indent units (double indent for wrapping)
-            let _continuation_indent = indent_col + indent_unit * 2;
+            let continuation_indent = indent_col + indent_unit * 2;
             let line_width = context.config.line_width as usize;
 
             // Compute LHS width: type + variable name (everything before the `=` sign).
@@ -1637,19 +1637,33 @@ pub fn gen_variable_declarator<'a>(
                     }
                 }
             } else {
-                // PJF wraps at `=` whenever the total line exceeds line_width.
-                // The RHS will handle its own internal wrapping (arg lists, chains, etc.)
-                // Exception: ternary and binary expressions wrap at their own operators
-                // (`?`/`:` or `&&`/`||`) instead of at `=`, so keep `var = expr` inline.
-                let is_self_wrapping = matches!(
-                    val.kind(),
-                    "ternary_expression" | "binary_expression"
-                );
-                if is_self_wrapping {
-                    false
-                } else {
+                // Anonymous class bodies always wrap at `=` (they're inherently multi-line)
+                let is_anonymous_class = val.kind() == "object_creation_expression" && {
+                    let mut vc = val.walk();
+                    val.children(&mut vc).any(|c| c.kind() == "class_body")
+                };
+                if is_anonymous_class {
                     let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
                     total_line_width > line_width
+                } else {
+                    // Ternary and binary expressions wrap at their own operators
+                    // (`?`/`:` or `&&`/`||`) instead of at `=`, so never wrap at `=`.
+                    let is_self_wrapping = matches!(
+                        val.kind(),
+                        "ternary_expression" | "binary_expression"
+                    );
+                    if is_self_wrapping {
+                        false
+                    } else {
+                        // PJF-style: only break at `=` when the RHS fits on one continuation
+                        // line. If the RHS itself is too wide, keep `= expr(` inline and let
+                        // the expression's internal wrapping (arg list, etc.) handle it.
+                        let rhs_fits_at_continuation =
+                            continuation_indent + rhs_flat_width <= line_width;
+                        let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
+                        let total_too_wide = total_line_width > line_width;
+                        rhs_fits_at_continuation && total_too_wide
+                    }
                 }
             }
         } else {
