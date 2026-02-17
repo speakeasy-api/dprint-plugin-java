@@ -332,6 +332,24 @@ public class Test {
     }
 
     #[test]
+    fn preserves_blank_after_line_comment_before_javadoc() {
+        let input = "\
+public class Foo {
+
+    void bar() {}
+
+    // Section header
+
+    /**
+     * Does stuff.
+     */
+    void baz() {}
+}
+";
+        format_and_check(input, input);
+    }
+
+    #[test]
     fn corrects_missing_spaces() {
         // Missing space before brace
         let input = "\

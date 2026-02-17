@@ -109,10 +109,14 @@ fn gen_block_comment_preserved(text: &str) -> PrintItems {
 /// if the comment had any non-whitespace content before it.
 fn strip_comment_line_trailing_ws(line: &str) -> String {
     // First, trim any trailing whitespace from the end
-    let line = line.trim_end();
+    let trimmed = line.trim_end();
 
     // If the line ends with */, check for trailing spaces before it
-    if let Some(rest) = line.strip_suffix("*/") {
+    if let Some(rest) = trimmed.strip_suffix("*/") {
+        // Check for **/ pattern (no space before */). PJF preserves **/ as-is.
+        if rest.ends_with('*') {
+            return trimmed.to_string();
+        }
         let rest_trimmed = rest.trim_end();
         // If there's content before the */, preserve a single space
         if !rest_trimmed.is_empty() && !rest_trimmed.ends_with(char::is_whitespace) {
@@ -121,7 +125,7 @@ fn strip_comment_line_trailing_ws(line: &str) -> String {
         return format!("{rest_trimmed}*/");
     }
 
-    line.to_string()
+    trimmed.to_string()
 }
 
 /// Format a Javadoc comment with tag reflowing.

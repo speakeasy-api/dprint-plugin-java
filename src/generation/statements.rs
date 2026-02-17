@@ -468,9 +468,20 @@ fn gen_switch_block<'a>(
 
     items.start_indent();
 
+    let mut prev_case_end_row: Option<usize> = children
+        .iter()
+        .find(|c| c.kind() == "{")
+        .map(|c| c.end_position().row);
     for case in &cases {
         items.newline();
+        // Preserve source blank lines between switch cases
+        if let Some(prev_row) = prev_case_end_row
+            && case.start_position().row > prev_row + 1
+        {
+            items.newline();
+        }
         items.extend(gen_switch_case(**case, context));
+        prev_case_end_row = Some(case.end_position().row);
     }
 
     items.finish_indent();
@@ -506,6 +517,7 @@ fn gen_switch_case<'a>(
             // Check if the body is a single block
             let is_single_block = body_stmts.len() == 1 && body_stmts[0].kind() == "block";
 
+            let mut prev_stmt_end_row: Option<usize> = None;
             for child in &children {
                 if child.kind() == "switch_label" {
                     if label_done {
@@ -520,6 +532,7 @@ fn gen_switch_case<'a>(
                     if is_single_block {
                         items.space();
                     }
+                    prev_stmt_end_row = Some(child.end_position().row);
                 } else if child.is_named() {
                     if !is_single_block {
                         // Multiple statements or non-block: indent and place on new lines
@@ -528,8 +541,15 @@ fn gen_switch_case<'a>(
                             in_body = true;
                         }
                         items.newline();
+                        // Preserve source blank lines between statements in case body
+                        if let Some(prev_row) = prev_stmt_end_row
+                            && child.start_position().row > prev_row + 1
+                        {
+                            items.newline();
+                        }
                     }
                     items.extend(gen_node(*child, context));
+                    prev_stmt_end_row = Some(child.end_position().row);
                 }
             }
             if in_body {

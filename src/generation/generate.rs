@@ -183,6 +183,7 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
     // Second pass: emit nodes in order
     let mut prev_kind: Option<&str> = None;
     let mut prev_was_comment = false;
+    let mut prev_end_row: Option<usize> = None;
     let mut emitted_imports = false;
 
     // Check if we have a package declaration
@@ -259,15 +260,29 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                                 items.newline();
                             }
                         }
-                    } else if prev_was_comment {
-                        // Separate consecutive comments
+                    } else if prev_was_comment && child.kind() != "line_comment" {
+                        // Separate consecutive block comments with blank line.
+                        // Consecutive line comments stay tightly grouped.
                         items.newline();
+                    } else if prev_was_comment && child.kind() == "line_comment" {
+                        if prev_kind == Some("block_comment") {
+                            // Block comments don't emit trailing newlines, so we always
+                            // need at least one newline before the next line comment.
+                            items.newline();
+                        }
+                        if prev_end_row
+                            .is_some_and(|r| child.start_position().row > r + 1)
+                        {
+                            // Source had a blank line between consecutive line comments — preserve it.
+                            items.newline();
+                        }
                     }
                     // Don't add newline here - the previous statement already ended with one
                 }
                 items.extend(gen_node(*child, context));
                 prev_kind = Some(child.kind());
                 prev_was_comment = true;
+                prev_end_row = Some(child.end_position().row);
             }
             continue;
         }
@@ -282,22 +297,35 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
         // Special case: after imports, we only add ONE blank line (not two)
         if let Some(pk) = prev_kind
             && !child.is_extra()
-            && pk != "line_comment"
         {
-            let needs_double_newline = (pk == "package_declaration")
-                || pk != "import_declaration"
-                || child.kind() != "import_declaration";
-
-            if needs_double_newline {
+            if pk == "line_comment" {
+                // After line comment: the comment already emitted a trailing newline.
+                // Only add a blank if source has one.
+                if prev_end_row.is_some_and(|r| child.start_position().row > r + 1) {
+                    items.newline();
+                }
+            } else if pk == "block_comment" {
+                // After block comment: block comments don't emit trailing newlines,
+                // so we always need at least one newline. Add an extra if source has a blank.
                 items.newline();
+                if prev_end_row.is_some_and(|r| child.start_position().row > r + 1) {
+                    items.newline();
+                }
+            } else {
+                let needs_double_newline = (pk == "package_declaration")
+                    || pk != "import_declaration"
+                    || child.kind() != "import_declaration";
+
+                if needs_double_newline {
+                    items.newline();
+                }
             }
         }
-        // Note: if prev_was_comment, the comment already includes a trailing newline,
-        // so we don't need to add another one here
 
         items.extend(gen_node(*child, context));
         prev_kind = Some(child.kind());
         prev_was_comment = false;
+        prev_end_row = Some(child.end_position().row);
 
         // Add newline after each top-level declaration
         if i < non_import_children.len() - 1

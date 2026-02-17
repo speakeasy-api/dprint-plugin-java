@@ -411,12 +411,84 @@ pub fn gen_method_declaration<'a>(
     let mut need_space = false;
 
     // Pre-calculate: estimate method signature line width to decide throws wrapping.
-    // Compute width of everything up to and including `)` + throws clause.
     let indent_width = context.indent_level() * context.config.indent_width as usize;
     let sig_width = estimate_method_sig_width(node, context.source);
     let line_width = context.config.line_width as usize;
-    // +2 for the trailing " {" that follows the throws clause
-    let wrap_throws = indent_width + sig_width + 2 > line_width;
+    // +2 for the trailing " {" or ";" that follows the throws clause
+    let full_too_wide = indent_width + sig_width + 2 > line_width;
+    // PJF wraps throws when the line containing `) throws ... {` would exceed line_width.
+    // If params fit inline, this is the full flat sig width.
+    // If params are wrapped, the `)` is on the last param line (shorter).
+    let wrap_throws = if full_too_wide {
+        let mut c = node.walk();
+        let children_vec: Vec<_> = node.children(&mut c).collect();
+        // Compute width of signature WITHOUT the throws clause
+        let sig_no_throws: usize = {
+            let mut w = 0;
+            let mut c2 = node.walk();
+            for ch in node.children(&mut c2) {
+                match ch.kind() {
+                    "block" | "constructor_body" | ";" | "throws" => break,
+                    _ => {
+                        let text = &context.source[ch.start_byte()..ch.end_byte()];
+                        let last_line = text.lines().last().unwrap_or(text);
+                        if w > 0
+                            && ch.kind() != "formal_parameters"
+                            && ch.kind() != "("
+                            && ch.kind() != ")"
+                        {
+                            w += 1; // space
+                        }
+                        w += last_line.trim().len();
+                    }
+                }
+            }
+            w
+        };
+        let params_fit_inline = indent_width + sig_no_throws <= line_width;
+        if params_fit_inline {
+            // Params on one line: throws wraps based on full sig width
+            true
+        } else {
+            // Params will wrap. Check if `) throws ... {` fits on the last param line.
+            let throws_width: usize = children_vec
+                .iter()
+                .find(|ch| ch.kind() == "throws")
+                .map_or(0, |throws_node| {
+                    let text =
+                        &context.source[throws_node.start_byte()..throws_node.end_byte()];
+                    collapse_whitespace_len(text)
+                });
+            if throws_width == 0 {
+                false
+            } else {
+                let last_param_width = children_vec
+                    .iter()
+                    .find(|ch| ch.kind() == "formal_parameters")
+                    .and_then(|params| {
+                        let mut pc = params.walk();
+                        params
+                            .children(&mut pc)
+                            .filter(|p| {
+                                p.kind() == "formal_parameter"
+                                    || p.kind() == "spread_parameter"
+                            })
+                            .last()
+                            .map(|p| {
+                                let text = &context.source[p.start_byte()..p.end_byte()];
+                                collapse_whitespace_len(text)
+                            })
+                    })
+                    .unwrap_or(0);
+                let continuation_col =
+                    indent_width + 2 * context.config.indent_width as usize;
+                // Last param line: continuation + last_param + ") throws ... {"
+                continuation_col + last_param_width + 2 + throws_width + 2 > line_width
+            }
+        }
+    } else {
+        false
+    };
 
     // PJF: wrap between return type and method name when the signature is too long.
     // Example: `public CompletableFuture<VeryLongResponse>\n        methodName(params) {`
@@ -723,8 +795,76 @@ pub fn gen_constructor_declaration<'a>(
     // Pre-calculate: estimate constructor signature line width to decide throws wrapping.
     let indent_width = context.indent_level() * context.config.indent_width as usize;
     let sig_width = estimate_method_sig_width(node, context.source);
+    let line_width = context.config.line_width as usize;
     // +2 for the trailing " {" that follows the throws clause
-    let wrap_throws = indent_width + sig_width + 2 > context.config.line_width as usize;
+    let full_too_wide = indent_width + sig_width + 2 > line_width;
+    let wrap_throws = if full_too_wide {
+        // Check if params fit inline (without wrapping)
+        let sig_no_throws: usize = {
+            let mut w = 0;
+            let mut c2 = node.walk();
+            for ch in node.children(&mut c2) {
+                match ch.kind() {
+                    "block" | "constructor_body" | ";" | "throws" => break,
+                    _ => {
+                        let text = &context.source[ch.start_byte()..ch.end_byte()];
+                        let last_line = text.lines().last().unwrap_or(text);
+                        if w > 0
+                            && ch.kind() != "formal_parameters"
+                            && ch.kind() != "("
+                            && ch.kind() != ")"
+                        {
+                            w += 1;
+                        }
+                        w += last_line.trim().len();
+                    }
+                }
+            }
+            w
+        };
+        if indent_width + sig_no_throws <= line_width {
+            // Params fit inline: wrap throws based on full sig width
+            true
+        } else {
+            // Params will wrap. Check last param line + throws.
+            let mut c = node.walk();
+            let children_vec: Vec<_> = node.children(&mut c).collect();
+            let throws_width: usize = children_vec
+                .iter()
+                .find(|ch| ch.kind() == "throws")
+                .map_or(0, |throws_node| {
+                    let text =
+                        &context.source[throws_node.start_byte()..throws_node.end_byte()];
+                    collapse_whitespace_len(text)
+                });
+            if throws_width == 0 {
+                false
+            } else {
+                let last_param_width = children_vec
+                    .iter()
+                    .find(|ch| ch.kind() == "formal_parameters")
+                    .and_then(|params| {
+                        let mut pc = params.walk();
+                        params
+                            .children(&mut pc)
+                            .filter(|p| {
+                                p.kind() == "formal_parameter"
+                                    || p.kind() == "spread_parameter"
+                            })
+                            .last()
+                            .map(|p| {
+                                let text = &context.source[p.start_byte()..p.end_byte()];
+                                collapse_whitespace_len(text)
+                            })
+                    })
+                    .unwrap_or(0);
+                let continuation_col = indent_width + 2 * context.config.indent_width as usize;
+                continuation_col + last_param_width + 2 + throws_width + 2 > line_width
+            }
+        }
+    } else {
+        false
+    };
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -1112,34 +1252,67 @@ fn gen_enum_body<'a>(
         .iter()
         .any(|c| c.kind() == "enum_body_declarations" || c.kind() == ";");
 
+    // Check if source has a trailing comma after the last enum constant.
+    // Look for a "," child immediately before ";" or "enum_body_declarations".
+    let has_trailing_comma = {
+        let non_extra: Vec<_> = members.iter().filter(|c| !c.is_extra()).collect();
+        non_extra.windows(2).any(|w| {
+            w[0].kind() == ","
+                && (w[1].kind() == ";" || w[1].kind() == "enum_body_declarations")
+        })
+    };
+
     let mut constant_idx = 0;
     let mut prev_was_constant = false;
+    // Track previous member end row for source blank line detection
+    let enum_open_brace_row = children
+        .iter()
+        .find(|c| c.kind() == "{")
+        .map(|c| c.end_position().row);
+    let mut enum_prev_end_row: Option<usize> = enum_open_brace_row;
 
     for child in &members {
         // Handle comments (extra nodes) without disrupting enum constant state
         if child.is_extra() {
             items.newline();
+            // Preserve source blank lines before comments in enum body
+            if enum_prev_end_row.is_some_and(|r| child.start_position().row > r + 1) {
+                items.newline();
+            }
             items.extend(gen_node(**child, context));
-            // Don't update prev_end_row for trailing tracking — this is handled below
+            enum_prev_end_row = Some(child.end_position().row);
             continue;
         }
 
         match child.kind() {
             "enum_constant" => {
                 items.newline();
+                // Preserve source blank lines before enum constants
+                if enum_prev_end_row.is_some_and(|r| child.start_position().row > r + 1) {
+                    items.newline();
+                }
                 items.extend(gen_enum_constant(**child, context));
                 constant_idx += 1;
                 let is_last = constant_idx == enum_constants.len();
                 if !is_last {
                     items.push_str(",");
+                } else if has_trailing_comma {
+                    // Source had trailing comma after last constant — preserve it.
+                    // PJF keeps trailing comma on last constant.
+                    items.push_str(",");
                 }
                 prev_was_constant = true;
+                enum_prev_end_row = Some(child.end_position().row);
             }
             "," => {
                 // Tree-sitter may emit commas as anonymous tokens; skip
                 // since we handle commas ourselves above.
             }
             ";" => {
+                // PJF puts the semicolon on its own line after the last constant
+                if prev_was_constant {
+                    items.newline();
+                }
                 items.push_str(";");
                 prev_was_constant = false;
             }
@@ -1153,8 +1326,13 @@ fn gen_enum_body<'a>(
                 let mut decl_prev_was_block: Option<bool> = None;
                 for decl_child in &decl_children {
                     if decl_child.kind() == ";" {
+                        // PJF puts the semicolon on its own line when there's a trailing comma
+                        if prev_was_constant && has_trailing_comma {
+                            items.newline();
+                        }
                         items.push_str(";");
                         decl_prev_end_row = Some(decl_child.end_position().row);
+                        prev_was_constant = false;
                         continue;
                     }
                     if decl_child.is_extra() {
@@ -2170,7 +2348,8 @@ fn gen_body_with_members<'a>(
     let mut prev_was_line_comment = false;
     // Track whether previous member was a block member (has body ending with })
     let mut prev_was_block: Option<bool> = None; // None = first member after {
-    let mut blank_already_inserted = false;
+    // Track whether there was a comment between the previous member and current
+    let mut had_comment_since_last_member = false;
     // Initialize to opening `{` row so we can detect source blank lines before first member
     let open_brace_row = children
         .iter()
@@ -2178,7 +2357,7 @@ fn gen_body_with_members<'a>(
         .map(|c| c.end_position().row);
     let mut prev_end_row: Option<usize> = open_brace_row;
 
-    for (idx, member) in members.iter().enumerate() {
+    for member in members.iter() {
         if member.is_extra() {
             let is_trailing = comments::is_trailing_comment(**member);
             if is_trailing {
@@ -2191,35 +2370,19 @@ fn gen_body_with_members<'a>(
                 if !prev_was_line_comment {
                     items.newline();
                 }
-                // Add blank line before comment: either from source or if adjacent to block member
-                // Always check source blank for comments (don't let blank_already_inserted suppress it)
+                // Add blank line before comment only if source has one.
+                // PJF does NOT automatically add blanks before comments (javadoc etc.)
+                // between block members — that blank is added before the actual member, not
+                // before its leading comment.
                 let source_has_blank =
                     prev_end_row.is_some_and(|prev_row| member.start_position().row > prev_row + 1);
-                if !blank_already_inserted {
-                    let need_blank = source_has_blank
-                        || match prev_was_block {
-                            None => false,
-                            Some(prev_block) => {
-                                let next_is_block = members[idx + 1..]
-                                    .iter()
-                                    .find(|m| !m.is_extra())
-                                    .is_some_and(|m| is_block_member(m));
-                                prev_block || next_is_block
-                            }
-                        };
-                    if need_blank {
-                        items.newline();
-                        blank_already_inserted = true;
-                    }
-                } else if source_has_blank {
-                    // blank_already_inserted but source also has a blank before this comment
+                if source_has_blank {
                     items.newline();
                 }
                 items.extend(gen_node(**member, context));
                 prev_was_line_comment = member.kind() == "line_comment";
                 prev_end_row = Some(member.end_position().row);
-
-                // Don't update prev_was_block — comments don't change it
+                had_comment_since_last_member = true;
             }
             continue;
         }
@@ -2227,27 +2390,25 @@ fn gen_body_with_members<'a>(
         if !prev_was_line_comment {
             items.newline();
         }
-        // Add blank line: either from source or when adjacent to block member
-        // Check source blank line even if blank_already_inserted (comment may have consumed
-        // the block-member blank but source has additional blank between comment and member)
+        // Add blank line between class body members:
+        // - Always from source blank lines
+        // - Between block members (prev or cur has body ending with }), but ONLY if no
+        //   comment intervened — PJF treats javadoc+method as one unit and doesn't add
+        //   blank between end of javadoc and the method's annotation/modifiers.
         let source_has_blank =
             prev_end_row.is_some_and(|prev_row| member.start_position().row > prev_row + 1);
-        if !blank_already_inserted {
-            let need_blank = source_has_blank
-                || match prev_was_block {
-                    // First member after { — no blank (unless source has one)
-                    None => false,
-                    Some(prev_block) => {
-                        let cur_is_block = is_block_member(member);
-                        prev_block || cur_is_block
-                    }
-                };
-            if need_blank {
-                items.newline();
+        let block_blank = if had_comment_since_last_member {
+            false // comment between members: no automatic blank
+        } else {
+            match prev_was_block {
+                None => false,
+                Some(prev_block) => {
+                    let cur_is_block = is_block_member(member);
+                    prev_block || cur_is_block
+                }
             }
-        } else if source_has_blank {
-            // Comment already consumed the block-member blank line, but source
-            // also has a blank line between the comment and this member — preserve it
+        };
+        if source_has_blank || block_blank {
             items.newline();
         }
         items.extend(gen_node(**member, context));
@@ -2255,7 +2416,7 @@ fn gen_body_with_members<'a>(
         prev_was_line_comment = false;
         prev_was_block = Some(is_block_member(member));
         prev_end_row = Some(member.end_position().row);
-        blank_already_inserted = false;
+        had_comment_since_last_member = false;
     }
 
     items.finish_indent();
