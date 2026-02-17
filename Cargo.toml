@@ -1,6 +1,6 @@
 [package]
 name = "dprint-plugin-java"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 description = "Java code formatter plugin for dprint, inspired by palantir-java-format."
 license = "Apache-2.0"
