@@ -1728,7 +1728,27 @@ pub fn gen_argument_list<'a>(
             .unwrap_or(0);
         1 + type_args_width + name_width // "." + type_args + name
     } else {
-        estimate_prefix_width(node, context.source, context.is_assignment_wrapped())
+        // Check if the caller (e.g., an outer gen_argument_list) set an override
+        // to communicate the true column position for nested calls.
+        context.take_override_prefix_width().unwrap_or_else(|| {
+            estimate_prefix_width(node, context.source, context.is_assignment_wrapped())
+        })
+    };
+
+    // For single-arg calls where the arg is itself a call expression,
+    // compute the "head width" (up to the inner call's opening paren).
+    // PJF keeps `outer(inner(` on one line and lets the inner call wrap.
+    let single_arg_head_width: Option<usize> = if args.len() == 1
+        && matches!(
+            args[0].kind(),
+            "object_creation_expression" | "method_invocation"
+        ) {
+        args[0].child_by_field_name("arguments").map(|arg_args| {
+            let head_text = &context.source[args[0].start_byte()..arg_args.start_byte()];
+            super::expressions::collapse_whitespace(head_text).len() + 1 // +1 for "("
+        })
+    } else {
+        None
     };
 
     // Check if args fit on the same line as the prefix.
@@ -1737,18 +1757,20 @@ pub fn gen_argument_list<'a>(
     } else if args.len() == 1 && is_in_chain {
         // For single-arg calls in chains, keep inline — the chain handles layout.
         true
-    } else if args.len() == 1
-        && matches!(
-            args[0].kind(),
-            "object_creation_expression" | "method_invocation"
-        )
-    {
-        // Single-arg method/constructor: keep inline so the inner call
-        // can handle its own arg wrapping — but ONLY if the line fits.
-        // For chains, don't apply chain-dot check here; the chain wrapper
-        // handles internal wrapping (e.g., List.of(Builder.builder()...) keeps
-        // the class-ref prefix inline).
-        indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize
+    } else if let Some(head_width) = single_arg_head_width {
+        // Single-arg method/constructor: PJF's approach —
+        // 1. If the full arg fits on a continuation line, wrap at outer level (normal)
+        // 2. If it doesn't fit, keep outer(inner( inline and let inner wrap
+        let continuation_indent = indent_width + (2 * context.config.indent_width as usize);
+        let arg_fits_on_continuation =
+            continuation_indent + args_flat_width + 1 < context.config.line_width as usize;
+        if arg_fits_on_continuation {
+            // Arg fits on continuation — use normal wrapping logic
+            indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize
+        } else {
+            // Arg doesn't fit on continuation — keep outer(inner( inline
+            indent_width + prefix_width + head_width < context.config.line_width as usize
+        }
     } else if args.len() == 1 && args[0].kind() == "binary_expression" {
         // Single-arg binary expressions (string concat, arithmetic, etc.) always
         // stay inline after '('. The binary expression wraps at its operators.
@@ -1783,9 +1805,15 @@ pub fn gen_argument_list<'a>(
     };
 
     // Check at inline position: if chain dots exceed 80, break after "("
+    // Skip for single-arg long chains (depth >= 3) — they will wrap at their
+    // own dots, so forcing arg-list wrapping is unnecessary. Short chains
+    // (depth 1-2) might stay inline, so the chain limit check still applies.
+    let single_arg_is_long_chain = args.len() == 1
+        && args[0].kind() == "method_invocation"
+        && super::expressions::chain_depth(*args[0]) >= 3;
     if fits_on_one_line
-        && args.len() > 1
         && !is_in_chain
+        && !single_arg_is_long_chain
         && exceeds_chain_limit(indent_width + prefix_width)
     {
         fits_on_one_line = false;
@@ -1813,7 +1841,22 @@ pub fn gen_argument_list<'a>(
     items.push_string("(".to_string());
 
     if fits_on_one_line {
-        // Keep all args on the same line as the opening paren
+        // Keep all args on the same line as the opening paren.
+        // For single-arg call expressions where the arg doesn't fit on
+        // continuation (inline-first-arg mode), set override so the inner
+        // call knows its true column position for wrapping decisions.
+        // Don't set override in chain context — chains handle their own layout.
+        if !is_in_chain {
+            if let Some(head_width) = single_arg_head_width {
+                let continuation_indent =
+                    indent_width + (2 * context.config.indent_width as usize);
+                let arg_fits_on_continuation =
+                    continuation_indent + args_flat_width + 1 < context.config.line_width as usize;
+                if !arg_fits_on_continuation {
+                    context.set_override_prefix_width(Some(prefix_width + head_width));
+                }
+            }
+        }
         for (i, arg) in args.iter().enumerate() {
             items.extend(gen_node(**arg, context));
             if i < args.len() - 1 {
@@ -1821,6 +1864,9 @@ pub fn gen_argument_list<'a>(
                 items.extend(helpers::gen_space());
             }
         }
+        // Clear any unconsumed override (e.g., when arg is a chain and
+        // the override wasn't consumed by the chain's in-chain arg lists).
+        context.set_override_prefix_width(None);
         items.push_string(")".to_string());
     } else if fits_on_continuation_line {
         // Wrap after opening paren, but put all args on ONE continuation line (bin-packing)

@@ -20,22 +20,22 @@ class Test {
         assertEquals(Pet.builder().id("test").build(), Res.builder().id("abc").build());
     }
 
-    // Single-arg method call: chain wraps internally, keep outer call inline
+    // Single-arg method call: chain dot exceeds col 80, wraps at "("
     void test4() {
         return Optional.of(UserSetupOutputs.builder().user(createRes.user().orElse(null)).build());
     }
 
-    // Single-arg method call: short chain, stays inline
+    // Single-arg method call: short chain (dot < col 80), stays inline
     void test5() {
         return Optional.of(Pet.builder().id("test").build());
     }
 
-    // Single-arg constructor: always stays inline (PJF behavior)
+    // Single-arg constructor: object creation, not a chain — stays inline
     void test6() {
         params.add(new NameValue(metadata.name, Utils.valToString(unwrappedEnumValue.get())));
     }
 
-    // Single-arg method call that exceeds 120 chars at deep indent: wraps at "("
+    // Single-arg: arg fits on continuation, wraps at outer level
     void test7() {
         if (true) {
             if (true) {
@@ -44,6 +44,16 @@ class Test {
                 }
             }
         }
+    }
+
+    // Single-arg: binary expression with chain dot exceeding col 80 — wraps at "("
+    void test8() {
+        throw new IllegalArgumentException("Unknown value type: " + value.getClass().getName());
+    }
+
+    // Single-arg: arg does NOT fit on continuation, uses inline-first-arg
+    void test9() {
+        params.add(QueryParameter.of(queryParamsMetadata.name, String.join(delimiter, items), queryParamsMetadata.allowReserved));
     }
 }
 == output ==
@@ -66,22 +76,23 @@ class Test {
         assertEquals(Pet.builder().id("test").build(), Res.builder().id("abc").build());
     }
 
-    // Single-arg method call: chain wraps internally, keep outer call inline
+    // Single-arg method call: chain dot exceeds col 80, wraps at "("
     void test4() {
-        return Optional.of(UserSetupOutputs.builder().user(createRes.user().orElse(null)).build());
+        return Optional.of(
+                UserSetupOutputs.builder().user(createRes.user().orElse(null)).build());
     }
 
-    // Single-arg method call: short chain, stays inline
+    // Single-arg method call: short chain (dot < col 80), stays inline
     void test5() {
         return Optional.of(Pet.builder().id("test").build());
     }
 
-    // Single-arg constructor: always stays inline (PJF behavior)
+    // Single-arg constructor: object creation, not a chain — stays inline
     void test6() {
         params.add(new NameValue(metadata.name, Utils.valToString(unwrappedEnumValue.get())));
     }
 
-    // Single-arg method call that exceeds 120 chars at deep indent: wraps at "("
+    // Single-arg: arg fits on continuation, wraps at outer level
     void test7() {
         if (true) {
             if (true) {
@@ -91,5 +102,17 @@ class Test {
                 }
             }
         }
+    }
+
+    // Single-arg: binary expression with chain dot exceeding col 80 — wraps at "("
+    void test8() {
+        throw new IllegalArgumentException(
+                "Unknown value type: " + value.getClass().getName());
+    }
+
+    // Single-arg: arg does NOT fit on continuation, uses inline-first-arg
+    void test9() {
+        params.add(QueryParameter.of(
+                queryParamsMetadata.name, String.join(delimiter, items), queryParamsMetadata.allowReserved));
     }
 }

@@ -846,6 +846,24 @@ pub(super) fn rightmost_chain_dot(node: tree_sitter::Node, source: &str, base_co
         } else {
             0
         }
+    } else if node.kind() == "binary_expression" {
+        // Check both operands of binary expression for chain dots
+        let mut cursor = node.walk();
+        let mut max_dot = 0usize;
+        let mut col = base_col;
+        for child in node.children(&mut cursor) {
+            if child.is_named() {
+                let dot_pos = rightmost_chain_dot(child, source, col);
+                max_dot = max_dot.max(dot_pos);
+                let child_text = &source[child.start_byte()..child.end_byte()];
+                col += child_text.lines().map(|l| l.trim().len()).sum::<usize>();
+            } else {
+                // Operator like "+", "&&", etc.
+                let op_text = &source[child.start_byte()..child.end_byte()];
+                col += op_text.len() + 2; // " op "
+            }
+        }
+        max_dot
     } else {
         0
     }
