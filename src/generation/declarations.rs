@@ -1593,6 +1593,25 @@ pub fn gen_variable_declarator<'a>(
 ///
 /// Wraps with 8-space continuation indent when the argument list would
 /// exceed `line_width`. Uses stable width estimation based on `context.indent_level()`
+/// Check if an expression node can break internally (wrap at its own operators,
+/// arguments, or body). Used to decide whether a single-arg call should keep
+/// the arg inline — if the arg can break internally, we don't need to wrap at
+/// the outer paren.
+fn arg_can_break_internally(node: &tree_sitter::Node) -> bool {
+    matches!(
+        node.kind(),
+        "binary_expression"
+            | "method_invocation"
+            | "object_creation_expression"
+            | "lambda_expression"
+            | "ternary_expression"
+            | "conditional_expression"
+            | "cast_expression"
+            | "array_creation_expression"
+            | "array_initializer"
+    )
+}
+
 /// to avoid instability between formatting passes.
 ///
 /// When wrapping, uses PJF-style "bin-packing": tries to fit all args on one
@@ -1693,21 +1712,11 @@ pub fn gen_argument_list<'a>(
         true
     } else if args.len() == 1 && is_in_chain {
         // For single-arg calls in chains, keep inline — the chain handles layout.
-        // The arg (often a nested builder chain) will wrap internally.
         true
     } else if args.len() == 1 && args[0].kind() == "binary_expression" {
-        // For single-arg binary expressions (e.g., string concat):
-        // If the whole thing fits within the chain threshold (80), keep inline.
-        // Otherwise, wrap at the paren only if the arg fits on a continuation line
-        // (wrapping would actually help). If it doesn't fit either way, keep inline
-        // and let the operator handle internal wrapping.
-        let total = indent_width + prefix_width + args_flat_width + 2;
-        if total <= context.config.method_chain_threshold as usize {
-            true
-        } else {
-            let continuation = indent_width + (2 * context.config.indent_width as usize);
-            continuation + args_flat_width + 1 >= context.config.line_width as usize
-        }
+        // Single-arg binary expressions (string concat, arithmetic, etc.) always
+        // stay inline after '('. The binary expression wraps at its operators.
+        true
     } else {
         indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize
     };
