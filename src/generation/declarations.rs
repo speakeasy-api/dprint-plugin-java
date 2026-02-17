@@ -72,7 +72,8 @@ pub fn gen_class_declaration<'a>(
     // Pre-calculate: estimate class declaration line width to decide extends/implements wrapping.
     let indent_width = context.indent_level() * context.config.indent_width as usize;
     let decl_width = estimate_class_decl_width(node, context.source);
-    let needs_wrapping = indent_width + decl_width > context.config.line_width as usize;
+    // +2 for trailing " {" after the class declaration
+    let needs_wrapping = indent_width + decl_width + 2 > context.config.line_width as usize;
 
     // When both extends and implements are present, prefer to wrap only before implements.
     // Only wrap before extends if implements is not present and extends alone is too long.
@@ -118,7 +119,9 @@ pub fn gen_class_declaration<'a>(
                     items.push_signal(Signal::StartIndent);
                     items.push_signal(Signal::StartIndent);
                     items.push_signal(Signal::NewLine);
+                    context.add_continuation_indent(2);
                     items.extend(gen_superclass(child, context));
+                    context.remove_continuation_indent(2);
                     items.push_signal(Signal::FinishIndent);
                     items.push_signal(Signal::FinishIndent);
                 } else {
@@ -132,7 +135,9 @@ pub fn gen_class_declaration<'a>(
                     items.push_signal(Signal::StartIndent);
                     items.push_signal(Signal::StartIndent);
                     items.push_signal(Signal::NewLine);
+                    context.add_continuation_indent(2);
                     items.extend(gen_super_interfaces(child, context));
+                    context.remove_continuation_indent(2);
                     items.push_signal(Signal::FinishIndent);
                     items.push_signal(Signal::FinishIndent);
                 } else {
@@ -165,7 +170,8 @@ pub fn gen_interface_declaration<'a>(
     // Pre-calculate: estimate interface declaration line width to decide extends wrapping.
     let indent_width = context.indent_level() * context.config.indent_width as usize;
     let decl_width = estimate_class_decl_width(node, context.source);
-    let wrap_clauses = indent_width + decl_width > context.config.line_width as usize;
+    // +2 for trailing " {" after the interface declaration
+    let wrap_clauses = indent_width + decl_width + 2 > context.config.line_width as usize;
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -198,7 +204,9 @@ pub fn gen_interface_declaration<'a>(
                     items.push_signal(Signal::StartIndent);
                     items.push_signal(Signal::StartIndent);
                     items.push_signal(Signal::NewLine);
+                    context.add_continuation_indent(2);
                     items.extend(gen_extends_interfaces(child, context));
+                    context.remove_continuation_indent(2);
                     items.push_signal(Signal::FinishIndent);
                     items.push_signal(Signal::FinishIndent);
                 } else {
@@ -663,10 +671,18 @@ fn estimate_class_decl_width(node: tree_sitter::Node, source: &str) -> usize {
     for child in node.children(&mut cursor) {
         match child.kind() {
             "class_body" | "interface_body" | "enum_body" => break, // Stop at body
-            _ => {
+            "modifiers" => {
                 let text = &source[child.start_byte()..child.end_byte()];
                 // Use last line only (for multiline modifiers like annotations)
                 let last_line = text.lines().last().unwrap_or(text);
+                width += last_line.trim().len();
+            }
+            _ => {
+                let text = &source[child.start_byte()..child.end_byte()];
+                // Use collapsed width for all non-modifier nodes to avoid
+                // instability when the source text has been wrapped from a
+                // previous formatting pass.
+                let flat = expressions::collapse_whitespace(text);
                 if width > 0
                     && child.kind() != "formal_parameters"
                     && child.kind() != "("
@@ -674,7 +690,7 @@ fn estimate_class_decl_width(node: tree_sitter::Node, source: &str) -> usize {
                 {
                     width += 1; // space separator
                 }
-                width += last_line.trim().len();
+                width += flat.len();
             }
         }
     }
@@ -697,7 +713,8 @@ pub fn gen_constructor_declaration<'a>(
     // Pre-calculate: estimate constructor signature line width to decide throws wrapping.
     let indent_width = context.indent_level() * context.config.indent_width as usize;
     let sig_width = estimate_method_sig_width(node, context.source);
-    let wrap_throws = indent_width + sig_width > context.config.line_width as usize;
+    // +2 for the trailing " {" that follows the throws clause
+    let wrap_throws = indent_width + sig_width + 2 > context.config.line_width as usize;
 
     for child in node.children(&mut cursor) {
         match child.kind() {

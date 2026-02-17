@@ -386,12 +386,32 @@ fn gen_type_arguments<'a>(
         })
         .sum();
 
-    // Estimate prefix width: everything on the current line before the `<`
+    // Estimate prefix width: everything on the current line before the `<`.
+    // Walk up the tree to find the full prefix including keywords like `implements`.
     let prefix_width = {
-        // Walk up to find the start of the containing line construct
         let parent = node.parent();
         if let Some(p) = parent {
-            let prefix_text = &context.source[p.start_byte()..node.start_byte()];
+            // Walk up to the nearest clause node (superclass, super_interfaces,
+            // extends_interfaces) to include keywords like "implements" in the prefix.
+            let mut line_start = p;
+            let mut n = p;
+            while let Some(par) = n.parent() {
+                match par.kind() {
+                    "superclass" | "super_interfaces" | "extends_interfaces" => {
+                        line_start = par;
+                        break;
+                    }
+                    "class_declaration"
+                    | "interface_declaration"
+                    | "enum_declaration"
+                    | "record_declaration" => break,
+                    _ => {
+                        n = par;
+                    }
+                }
+            }
+            let prefix_text =
+                &context.source[line_start.start_byte()..node.start_byte()];
             let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
             last_line.trim_start().len()
         } else {
@@ -399,7 +419,8 @@ fn gen_type_arguments<'a>(
         }
     };
 
-    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let indent_width =
+        context.effective_indent_level() * context.config.indent_width as usize;
     let line_width = context.config.line_width as usize;
 
     // Check if type args fit inline: prefix + <args> must fit on line
