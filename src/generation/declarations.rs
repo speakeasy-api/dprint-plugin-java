@@ -1358,6 +1358,7 @@ pub fn gen_formal_parameters<'a>(
             }
         } else {
             // One-per-line (too long even at continuation indent)
+            let continuation_col = indent_width + 2 * (context.config.indent_width as usize);
             for (i, param) in params.iter().enumerate() {
                 // Emit any comments that precede this parameter
                 let has_preceding_comment =
@@ -1369,11 +1370,61 @@ pub fn gen_formal_parameters<'a>(
                     }
                 }
                 // Only emit NewLine before param if no comment preceded it
-                // (the comment's NewLine already positions us on the next line)
                 if !has_preceding_comment {
                     items.push_signal(Signal::NewLine);
                 }
-                items.extend(gen_node(**param, context));
+
+                // Check if this param exceeds line_width at continuation indent.
+                // If so, split after annotations: put type+name on next line at +8.
+                let param_text = &context.source[param.start_byte()..param.end_byte()];
+                let param_flat_width: usize =
+                    param_text.lines().map(|l| l.trim().len()).sum();
+                let suffix = if i < params.len() - 1 { 1 } else { 0 }; // comma
+                if continuation_col + param_flat_width + suffix
+                    > context.config.line_width as usize
+                {
+                    // Find the last annotation child — break after it
+                    let mut pc = param.walk();
+                    let param_children: Vec<_> = param.children(&mut pc).collect();
+                    let has_modifiers =
+                        param_children.iter().any(|c| c.kind() == "modifiers");
+                    if has_modifiers {
+                        // Emit modifiers (annotations), then wrap, then type+name
+                        // on the same continuation line.
+                        let mut past_modifiers = false;
+                        let mut started_continuation = false;
+                        for child in &param_children {
+                            if child.kind() == "modifiers" {
+                                items.extend(gen_node(*child, context));
+                            } else {
+                                if !started_continuation {
+                                    items.push_signal(Signal::StartIndent);
+                                    items.push_signal(Signal::StartIndent);
+                                    items.push_signal(Signal::NewLine);
+                                    started_continuation = true;
+                                    past_modifiers = true;
+                                }
+                                if past_modifiers && child.kind() != "modifiers" {
+                                    // Space between type and name (but not before first)
+                                    if child.kind() == "identifier"
+                                        || child.kind() == "variable_declarator"
+                                    {
+                                        items.extend(helpers::gen_space());
+                                    }
+                                    items.extend(gen_node(*child, context));
+                                }
+                            }
+                        }
+                        if started_continuation {
+                            items.push_signal(Signal::FinishIndent);
+                            items.push_signal(Signal::FinishIndent);
+                        }
+                    } else {
+                        items.extend(gen_node(**param, context));
+                    }
+                } else {
+                    items.extend(gen_node(**param, context));
+                }
                 if i < params.len() - 1 {
                     items.push_string(",".to_string());
                 }
@@ -1662,7 +1713,23 @@ pub fn gen_variable_declarator<'a>(
                             continuation_indent + rhs_flat_width <= line_width;
                         let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
                         let total_too_wide = total_line_width > line_width;
-                        rhs_fits_at_continuation && total_too_wide
+                        if rhs_fits_at_continuation && total_too_wide {
+                            true
+                        } else if !rhs_fits_at_continuation && total_too_wide {
+                            // RHS is too wide for continuation, but check if keeping
+                            // `LHS = opening(` inline also exceeds line_width.
+                            // If so, we must wrap at `=` to avoid >line_width lines.
+                            let rhs_text = &context.source[val.start_byte()..val.end_byte()];
+                            let rhs_opening_width = rhs_text
+                                .find('(')
+                                .map(|p| p + 1)
+                                .unwrap_or(rhs_flat_width);
+                            let opening_line_width =
+                                indent_col + lhs_width + 3 + rhs_opening_width;
+                            opening_line_width > line_width
+                        } else {
+                            false
+                        }
                     }
                 }
             }

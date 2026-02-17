@@ -10,7 +10,8 @@ class Test {
 class Test {
     void test() {
         RequestOperation<
-                OperationWithLeadingAndTrailingUnderscoresRequest, OperationWithLeadingAndTrailingUnderscoresResponse> operation =
+                        OperationWithLeadingAndTrailingUnderscoresRequest,
+                        OperationWithLeadingAndTrailingUnderscoresResponse> operation =
                 new OperationWithLeadingAndTrailingUnderscores.Sync(sdkConfiguration, headers);
 
         Map<String, List<Consumer<HTTPResponse>>> hooks = new HashMap<>();
