@@ -1105,7 +1105,6 @@ fn gen_enum_body<'a>(
                 items.push_signal(Signal::NewLine);
                 items.extend(gen_enum_constant(**child, context));
                 constant_idx += 1;
-                // Trailing comma after each constant except the last before ";"
                 let is_last = constant_idx == enum_constants.len();
                 if !is_last {
                     items.push_string(",".to_string());

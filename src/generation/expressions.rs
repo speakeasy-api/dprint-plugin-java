@@ -1261,20 +1261,27 @@ pub fn gen_array_initializer<'a>(
         items.push_signal(Signal::FinishIndent);
     } else {
         // Compact format: inline
+        let compact_children: Vec<_> = node.children(&mut cursor).collect();
         let mut first = true;
 
-        for child in node.children(&mut cursor) {
+        for (ci, child) in compact_children.iter().enumerate() {
             match child.kind() {
                 "{" | "}" => {}
                 "," => {
-                    items.push_string(",".to_string());
-                    items.extend(helpers::gen_space());
+                    // Skip trailing commas (PJF removes them)
+                    let has_more_elements = compact_children[ci + 1..]
+                        .iter()
+                        .any(|c| c.is_named() && !c.is_extra());
+                    if has_more_elements {
+                        items.push_string(",".to_string());
+                        items.extend(helpers::gen_space());
+                    }
                 }
                 _ if child.is_named() => {
                     if first {
                         // No leading space for compact initializers
                     }
-                    items.extend(gen_node(child, context));
+                    items.extend(gen_node(*child, context));
                     first = false;
                 }
                 _ => {}
