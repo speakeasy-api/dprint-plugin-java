@@ -58,10 +58,10 @@ pub fn gen_block<'a>(
                     items.push_signal(Signal::NewLine);
                 }
                 // Preserve blank line from source before this comment
-                if let Some(prev_row) = prev_end_row {
-                    if stmt.start_position().row > prev_row + 1 {
-                        items.push_signal(Signal::NewLine);
-                    }
+                if let Some(prev_row) = prev_end_row
+                    && stmt.start_position().row > prev_row + 1
+                {
+                    items.push_signal(Signal::NewLine);
                 }
                 items.extend(gen_node(**stmt, context));
                 prev_was_line_comment = stmt.kind() == "line_comment";
@@ -74,10 +74,10 @@ pub fn gen_block<'a>(
             items.push_signal(Signal::NewLine);
         }
         // Preserve blank line from source between statements
-        if let Some(prev_row) = prev_end_row {
-            if stmt.start_position().row > prev_row + 1 {
-                items.push_signal(Signal::NewLine);
-            }
+        if let Some(prev_row) = prev_end_row
+            && stmt.start_position().row > prev_row + 1
+        {
+            items.push_signal(Signal::NewLine);
         }
         items.extend(gen_node(**stmt, context));
         prev_was_line_comment = false;
@@ -98,10 +98,10 @@ pub fn gen_block<'a>(
             .rev()
             .find(|c| c.kind() == "}")
             .map(|c| c.start_position().row);
-        if let Some(close_row) = close_brace_row {
-            if close_row > prev_row + 1 {
-                items.push_signal(Signal::NewLine);
-            }
+        if let Some(close_row) = close_brace_row
+            && close_row > prev_row + 1
+        {
+            items.push_signal(Signal::NewLine);
         }
     }
     items.push_string("}".to_string());

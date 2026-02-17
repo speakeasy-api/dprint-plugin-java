@@ -1155,10 +1155,10 @@ fn gen_enum_body<'a>(
                             items.push_signal(Signal::NewLine);
                         }
                         // Preserve source blank lines between comments
-                        if let Some(prev_row) = decl_prev_end_row {
-                            if decl_child.start_position().row > prev_row + 1 {
-                                items.push_signal(Signal::NewLine);
-                            }
+                        if let Some(prev_row) = decl_prev_end_row
+                            && decl_child.start_position().row > prev_row + 1
+                        {
+                            items.push_signal(Signal::NewLine);
                         }
                         items.extend(gen_node(*decl_child, context));
                         decl_prev_was_line_comment = decl_child.kind() == "line_comment";
@@ -1610,7 +1610,6 @@ pub fn gen_variable_declarator<'a>(
 ///
 /// Wraps with 8-space continuation indent when the argument list would
 /// exceed `line_width`. Uses stable width estimation based on `context.indent_level()`
-
 /// to avoid instability between formatting passes.
 ///
 /// When wrapping, uses PJF-style "bin-packing": tries to fit all args on one
@@ -1742,8 +1741,7 @@ pub fn gen_argument_list<'a>(
         for arg in args.iter() {
             let text = &context.source[arg.start_byte()..arg.end_byte()];
             let arg_width: usize = text.lines().map(|l| l.trim().len()).sum();
-            let dot_pos =
-                super::expressions::rightmost_chain_dot(**arg, context.source, col);
+            let dot_pos = super::expressions::rightmost_chain_dot(**arg, context.source, col);
             if dot_pos > chain_threshold {
                 return true;
             }
@@ -1753,10 +1751,12 @@ pub fn gen_argument_list<'a>(
     };
 
     // Check at inline position: if chain dots exceed 80, break after "("
-    if fits_on_one_line && args.len() > 1 && !is_in_chain {
-        if exceeds_chain_limit(indent_width + prefix_width) {
-            fits_on_one_line = false;
-        }
+    if fits_on_one_line
+        && args.len() > 1
+        && !is_in_chain
+        && exceeds_chain_limit(indent_width + prefix_width)
+    {
+        fits_on_one_line = false;
     }
 
     // If not, check if args fit on ONE continuation line (8-space indent = 2 levels of indent_width)
@@ -1765,10 +1765,12 @@ pub fn gen_argument_list<'a>(
         continuation_indent + args_flat_width + 1 < context.config.line_width as usize;
 
     // Also check at continuation position: if chain dots still exceed 80, force one-per-line
-    if !fits_on_one_line && fits_on_continuation_line && args.len() > 1 {
-        if exceeds_chain_limit(continuation_indent) {
-            fits_on_continuation_line = false;
-        }
+    if !fits_on_one_line
+        && fits_on_continuation_line
+        && args.len() > 1
+        && exceeds_chain_limit(continuation_indent)
+    {
+        fits_on_continuation_line = false;
     }
 
     items.push_string("(".to_string());
@@ -1900,8 +1902,8 @@ fn gen_body_with_members<'a>(
                 }
                 // Add blank line before comment: either from source or if adjacent to block member
                 // Always check source blank for comments (don't let blank_already_inserted suppress it)
-                let source_has_blank = prev_end_row
-                    .is_some_and(|prev_row| member.start_position().row > prev_row + 1);
+                let source_has_blank =
+                    prev_end_row.is_some_and(|prev_row| member.start_position().row > prev_row + 1);
                 if !blank_already_inserted {
                     let need_blank = source_has_blank
                         || match prev_was_block {
@@ -1937,8 +1939,8 @@ fn gen_body_with_members<'a>(
         // Add blank line: either from source or when adjacent to block member
         // Check source blank line even if blank_already_inserted (comment may have consumed
         // the block-member blank but source has additional blank between comment and member)
-        let source_has_blank = prev_end_row
-            .is_some_and(|prev_row| member.start_position().row > prev_row + 1);
+        let source_has_blank =
+            prev_end_row.is_some_and(|prev_row| member.start_position().row > prev_row + 1);
         if !blank_already_inserted {
             let need_blank = source_has_blank
                 || match prev_was_block {
@@ -1977,10 +1979,10 @@ fn gen_body_with_members<'a>(
             .rev()
             .find(|c| c.kind() == "}")
             .map(|c| c.start_position().row);
-        if let Some(close_row) = close_brace_row {
-            if close_row > prev_row + 1 {
-                items.push_signal(Signal::NewLine);
-            }
+        if let Some(close_row) = close_brace_row
+            && close_row > prev_row + 1
+        {
+            items.push_signal(Signal::NewLine);
         }
     }
     items.push_string("}".to_string());

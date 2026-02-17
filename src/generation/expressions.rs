@@ -359,12 +359,16 @@ pub fn gen_method_invocation<'a>(
     };
 
     let mut any_dot_exceeds = false;
+    let mut first_exceeding_segment: Option<usize> = None;
     let mut cumulative = root_width;
-    for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
+    for (i, (_, name_node, type_args, arg_list, trailing_comment)) in segments.iter().enumerate() {
         // The dot for this segment appears at cumulative position
         let dot_position = indent_col + prefix_width + cumulative;
         if dot_position > effective_chain_threshold {
             any_dot_exceeds = true;
+            if first_exceeding_segment.is_none() {
+                first_exceeding_segment = Some(i);
+            }
         }
         // Add this segment's width to cumulative
         cumulative += 1; // '.'
@@ -410,20 +414,76 @@ pub fn gen_method_invocation<'a>(
                 .is_some_and(|c| c.is_ascii_uppercase())
         };
 
-        let prefix_count = if root_is_class_ref {
-            // Class-ref: always keep first method inline (e.g., SDK.builder())
+        // Helper: check if a segment is zero-arg (no args or empty parens)
+        let is_seg_zero_arg = |seg: &(
+            tree_sitter::Node,
+            tree_sitter::Node,
+            Option<tree_sitter::Node>,
+            Option<tree_sitter::Node>,
+            Option<tree_sitter::Node>,
+        )|
+         -> bool {
+            match seg.3 {
+                None => true,
+                Some(al) => {
+                    let al_text = &context.source[al.start_byte()..al.end_byte()];
+                    al_text.trim() == "()"
+                }
+            }
+        };
+
+        // PJF prefix rules (verified by testing):
+        // 1. Class-ref roots: always prefix = 1 (e.g., SDK.builder())
+        // 2. Method invocation roots: prefix = 0 (root IS the first call)
+        // 3. Identifier/field_access roots:
+        //    a. If first segment has args → prefix = 0
+        //    b. If ALL segments are zero-arg → prefix = 0
+        //    c. If first segment is zero-arg AND not all zero-arg → prefix = 1
+        // 4. Stream/parallelStream extends prefix beyond 1
+        let all_zero_arg = segments.iter().all(is_seg_zero_arg);
+        let first_is_zero_arg = segments.first().is_some_and(is_seg_zero_arg);
+
+        let mut prefix_count = if root_is_class_ref {
             1
         } else if root.kind() == "method_invocation" {
-            // Bare method call root (e.g., someMethod().chain()...):
-            // The root IS the first call in the chain, so no additional prefix.
+            0
+        } else if !first_is_zero_arg {
+            // First segment has args → wrap from root
+            0
+        } else if all_zero_arg {
+            // All segments are zero-arg → wrap from root
             0
         } else {
-            // Identifier/field_access root: keep first method inline only if root
-            // is short enough (≤ continuation indent width = 2 * indent_width).
-            // PJF keeps `sdk.tag1()` inline but wraps all for `someObject.method()`.
-            let continuation = 2 * indent_width;
-            if root_width <= continuation { 1 } else { 0 }
+            // First segment is zero-arg, not all are → keep first inline
+            1
         };
+
+        // PJF extends the prefix to include `.stream()` and `.parallelStream()`
+        // methods, plus any zero-arg predecessors leading to them.
+        while prefix_count < segments.len() {
+            let seg = &segments[prefix_count];
+            if !is_seg_zero_arg(seg) {
+                break;
+            }
+            let name = &context.source[seg.1.start_byte()..seg.1.end_byte()];
+            if name == "stream" || name == "parallelStream" {
+                prefix_count += 1;
+                break;
+            }
+            // Check if a later zero-arg segment is stream/parallelStream
+            let has_stream_ahead = segments[prefix_count + 1..].iter().any(|s| {
+                if !is_seg_zero_arg(s) {
+                    return false;
+                }
+                let n = &context.source[s.1.start_byte()..s.1.end_byte()];
+                n == "stream" || n == "parallelStream"
+            });
+            if has_stream_ahead {
+                prefix_count += 1;
+            } else {
+                break;
+            }
+        }
 
         // Emit prefix segments inline, then wrap the rest
         for (i, (_, name_node, type_args, arg_list, trailing_comment)) in
@@ -605,6 +665,7 @@ fn estimate_arg_list_width(arg_list: tree_sitter::Node, source: &str) -> usize {
 
 /// Check if a method chain would fit inline (without wrapping) at a given column position.
 /// Used by gen_variable_declarator to determine if wrapping at '=' allows the chain to stay inline.
+#[allow(clippy::type_complexity)]
 pub fn chain_fits_inline_at(
     node: tree_sitter::Node,
     col: usize,
@@ -662,38 +723,38 @@ fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingConte
     match parent.map(|p| p.kind()) {
         Some("assignment_expression") => {
             // e.g., `this.field = chain...` — prefix is LHS + " = "
-            if let Some(p) = parent {
-                if let Some(lhs) = p.child_by_field_name("left") {
-                    let lhs_text = &context.source[lhs.start_byte()..lhs.end_byte()];
-                    return collapse_whitespace(lhs_text).len() + 3; // " = "
-                }
+            if let Some(p) = parent
+                && let Some(lhs) = p.child_by_field_name("left")
+            {
+                let lhs_text = &context.source[lhs.start_byte()..lhs.end_byte()];
+                return collapse_whitespace(lhs_text).len() + 3; // " = "
             }
             0
         }
         Some("variable_declarator") => {
             // e.g., `Type var = chain...` — prefix includes type + name + " = "
             // Look at grandparent (local_variable_declaration) for type info
-            if let Some(p) = parent {
-                if let Some(gp) = p.parent() {
-                    let mut type_width = 0;
-                    let mut cursor = gp.walk();
-                    for child in gp.children(&mut cursor) {
-                        if child.id() == p.id() {
-                            break;
-                        }
-                        if child.is_named() {
-                            let text = &context.source[child.start_byte()..child.end_byte()];
-                            if type_width > 0 {
-                                type_width += 1; // space between tokens
-                            }
-                            type_width += collapse_whitespace(text).len();
-                        }
+            if let Some(p) = parent
+                && let Some(gp) = p.parent()
+            {
+                let mut type_width = 0;
+                let mut cursor = gp.walk();
+                for child in gp.children(&mut cursor) {
+                    if child.id() == p.id() {
+                        break;
                     }
-                    // Add variable name width
-                    if let Some(name) = p.child_by_field_name("name") {
-                        let name_text = &context.source[name.start_byte()..name.end_byte()];
-                        return type_width + 1 + name_text.len() + 3; // " name = "
+                    if child.is_named() {
+                        let text = &context.source[child.start_byte()..child.end_byte()];
+                        if type_width > 0 {
+                            type_width += 1; // space between tokens
+                        }
+                        type_width += collapse_whitespace(text).len();
                     }
+                }
+                // Add variable name width
+                if let Some(name) = p.child_by_field_name("name") {
+                    let name_text = &context.source[name.start_byte()..name.end_byte()];
+                    return type_width + 1 + name_text.len() + 3; // " name = "
                 }
             }
             0
@@ -704,22 +765,19 @@ fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingConte
             // Chain is an argument in a method/constructor call.
             // If the parent method_invocation is part of a chain, the chain prefix
             // is ".methodName(" which precedes this argument on the same line.
-            if let Some(p) = parent {
-                if let Some(gp) = p.parent() {
-                    if gp.kind() == "method_invocation" {
-                        let in_chain = gp
-                            .child_by_field_name("object")
-                            .is_some_and(|obj| obj.kind() == "method_invocation")
-                            || gp
-                                .parent()
-                                .is_some_and(|ggp| ggp.kind() == "method_invocation");
-                        if in_chain {
-                            if let Some(name) = gp.child_by_field_name("name") {
-                                let name_text = &context.source[name.start_byte()..name.end_byte()];
-                                return 1 + name_text.len() + 1; // ".name("
-                            }
-                        }
-                    }
+            if let Some(p) = parent
+                && let Some(gp) = p.parent()
+                && gp.kind() == "method_invocation"
+            {
+                let in_chain = gp
+                    .child_by_field_name("object")
+                    .is_some_and(|obj| obj.kind() == "method_invocation")
+                    || gp
+                        .parent()
+                        .is_some_and(|ggp| ggp.kind() == "method_invocation");
+                if in_chain && let Some(name) = gp.child_by_field_name("name") {
+                    let name_text = &context.source[name.start_byte()..name.end_byte()];
+                    return 1 + name_text.len() + 1; // ".name("
                 }
             }
             0

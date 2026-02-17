@@ -758,8 +758,7 @@ fn gen_annotation_argument_list<'a>(
         let mut c = node.walk();
         node.children(&mut c).filter(|ch| ch.is_named()).count()
     };
-    let force_multiline = (has_multi_element_array && exceeds_line_width)
-        || (exceeds_line_width && named_arg_count > 1);
+    let force_multiline = (named_arg_count > 1 || has_multi_element_array) && exceeds_line_width;
 
     if force_multiline {
         // Multi-line format: force all args to separate lines with continuation indent (+8)
