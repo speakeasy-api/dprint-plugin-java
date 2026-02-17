@@ -1972,19 +1972,8 @@ fn gen_body_with_members<'a>(
     if !prev_was_line_comment {
         items.push_signal(Signal::NewLine);
     }
-    // Preserve source blank line before closing `}`
-    if let Some(prev_row) = prev_end_row {
-        let close_brace_row = children
-            .iter()
-            .rev()
-            .find(|c| c.kind() == "}")
-            .map(|c| c.start_position().row);
-        if let Some(close_row) = close_brace_row
-            && close_row > prev_row + 1
-        {
-            items.push_signal(Signal::NewLine);
-        }
-    }
+    // PJF removes source blank lines before closing `}` in class bodies.
+    // (Statement blocks preserve them — handled separately in statements.rs.)
     items.push_string("}".to_string());
 
     items
