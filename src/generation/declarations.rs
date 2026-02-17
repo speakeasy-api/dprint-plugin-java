@@ -1113,6 +1113,7 @@ fn gen_enum_body<'a>(
         if child.is_extra() {
             items.push_signal(Signal::NewLine);
             items.extend(gen_node(**child, context));
+            // Don't update prev_end_row for trailing tracking — this is handled below
             continue;
         }
 
@@ -1137,18 +1138,51 @@ fn gen_enum_body<'a>(
             }
             "enum_body_declarations" => {
                 // Tree-sitter wraps post-semicolon enum members in this node.
+                // Use gen_body_with_members logic for source blank line preservation.
                 let mut decl_cursor = child.walk();
-                for decl_child in child.children(&mut decl_cursor) {
-                    match decl_child.kind() {
-                        ";" => {
-                            items.push_string(";".to_string());
-                        }
-                        _ if decl_child.is_named() => {
+                let decl_children: Vec<_> = child.children(&mut decl_cursor).collect();
+                let mut decl_prev_end_row: Option<usize> = None;
+                let mut decl_prev_was_line_comment = false;
+                let mut decl_prev_was_block: Option<bool> = None;
+                for decl_child in &decl_children {
+                    if decl_child.kind() == ";" {
+                        items.push_string(";".to_string());
+                        decl_prev_end_row = Some(decl_child.end_position().row);
+                        continue;
+                    }
+                    if decl_child.is_extra() {
+                        if !decl_prev_was_line_comment {
                             items.push_signal(Signal::NewLine);
-                            items.push_signal(Signal::NewLine);
-                            items.extend(gen_node(decl_child, context));
                         }
-                        _ => {}
+                        // Preserve source blank lines between comments
+                        if let Some(prev_row) = decl_prev_end_row {
+                            if decl_child.start_position().row > prev_row + 1 {
+                                items.push_signal(Signal::NewLine);
+                            }
+                        }
+                        items.extend(gen_node(*decl_child, context));
+                        decl_prev_was_line_comment = decl_child.kind() == "line_comment";
+                        decl_prev_end_row = Some(decl_child.end_position().row);
+                        continue;
+                    }
+                    if decl_child.is_named() {
+                        if !decl_prev_was_line_comment {
+                            items.push_signal(Signal::NewLine);
+                        }
+                        // Blank line from source or from block member adjacency
+                        let source_blank = decl_prev_end_row
+                            .is_some_and(|prev| decl_child.start_position().row > prev + 1);
+                        let block_blank = match decl_prev_was_block {
+                            None => false,
+                            Some(prev_b) => prev_b || is_block_member(decl_child),
+                        };
+                        if source_blank || block_blank {
+                            items.push_signal(Signal::NewLine);
+                        }
+                        items.extend(gen_node(*decl_child, context));
+                        decl_prev_was_line_comment = false;
+                        decl_prev_was_block = Some(is_block_member(decl_child));
+                        decl_prev_end_row = Some(decl_child.end_position().row);
                     }
                 }
                 prev_was_constant = false;
@@ -1792,6 +1826,30 @@ pub fn gen_argument_list<'a>(
 /// Uses dprint-core's StartIndent/FinishIndent signals so that NewLine
 /// automatically gets the correct indentation. Handles comment (extra) nodes
 /// that appear between members.
+/// Check if a class body member has a block body (ends with `}`).
+/// Used to determine blank line insertion between members.
+fn is_block_member(node: &tree_sitter::Node) -> bool {
+    let kind = node.kind();
+    if matches!(
+        kind,
+        "constructor_declaration"
+            | "class_declaration"
+            | "interface_declaration"
+            | "enum_declaration"
+            | "annotation_type_declaration"
+            | "static_initializer"
+            | "record_declaration"
+            | "compact_constructor_declaration"
+    ) {
+        return true;
+    }
+    // method_declaration with a body (not abstract/interface methods ending with ;)
+    if kind == "method_declaration" {
+        return node.child_by_field_name("body").is_some();
+    }
+    false
+}
+
 fn gen_body_with_members<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -1827,29 +1885,6 @@ fn gen_body_with_members<'a>(
         .map(|c| c.end_position().row);
     let mut prev_end_row: Option<usize> = open_brace_row;
 
-    // Check if a member has a block body (ends with })
-    fn is_block_member(node: &tree_sitter::Node) -> bool {
-        let kind = node.kind();
-        if matches!(
-            kind,
-            "constructor_declaration"
-                | "class_declaration"
-                | "interface_declaration"
-                | "enum_declaration"
-                | "annotation_type_declaration"
-                | "static_initializer"
-                | "record_declaration"
-                | "compact_constructor_declaration"
-        ) {
-            return true;
-        }
-        // method_declaration with a body (not abstract/interface methods ending with ;)
-        if kind == "method_declaration" {
-            return node.child_by_field_name("body").is_some();
-        }
-        false
-    }
-
     for (idx, member) in members.iter().enumerate() {
         if member.is_extra() {
             let is_trailing = comments::is_trailing_comment(**member);
@@ -1864,9 +1899,10 @@ fn gen_body_with_members<'a>(
                     items.push_signal(Signal::NewLine);
                 }
                 // Add blank line before comment: either from source or if adjacent to block member
+                // Always check source blank for comments (don't let blank_already_inserted suppress it)
+                let source_has_blank = prev_end_row
+                    .is_some_and(|prev_row| member.start_position().row > prev_row + 1);
                 if !blank_already_inserted {
-                    let source_has_blank = prev_end_row
-                        .is_some_and(|prev_row| member.start_position().row > prev_row + 1);
                     let need_blank = source_has_blank
                         || match prev_was_block {
                             None => false,
@@ -1882,6 +1918,9 @@ fn gen_body_with_members<'a>(
                         items.push_signal(Signal::NewLine);
                         blank_already_inserted = true;
                     }
+                } else if source_has_blank {
+                    // blank_already_inserted but source also has a blank before this comment
+                    items.push_signal(Signal::NewLine);
                 }
                 items.extend(gen_node(**member, context));
                 prev_was_line_comment = member.kind() == "line_comment";
