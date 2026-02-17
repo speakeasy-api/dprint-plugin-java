@@ -432,30 +432,26 @@ pub fn gen_method_invocation<'a>(
             }
         };
 
-        // PJF prefix rules (verified by testing):
+        // PJF prefix rules (verified by testing against PJF 2.50):
         // 1. Class-ref roots: always prefix = 1 (e.g., SDK.builder())
         // 2. Method invocation roots: prefix = 0 (root IS the first call)
-        // 3. Identifier/field_access roots:
-        //    a. If first segment has args → prefix = 0
-        //    b. If ALL segments are zero-arg → prefix = 0
-        //    c. If first segment is zero-arg AND not all zero-arg → prefix = 1
-        // 4. Stream/parallelStream extends prefix beyond 1
-        let all_zero_arg = segments.iter().all(is_seg_zero_arg);
-        let first_is_zero_arg = segments.first().is_some_and(is_seg_zero_arg);
+        // 3. Identifier/field_access/new expression roots:
+        //    PJF uses root text length <= 8 as threshold (matches continuation indent).
+        //    Short roots (e.g., sdk, obj, client) keep first segment inline;
+        //    long roots (e.g., contextRunner, sdkConfiguration) wrap from root.
+        // 4. Stream/parallelStream extends prefix beyond initial count
+        let root_text_len = root.end_byte() - root.start_byte();
 
         let mut prefix_count = if root_is_class_ref {
             1
         } else if root.kind() == "method_invocation" {
             0
-        } else if !first_is_zero_arg {
-            // First segment has args → wrap from root
-            0
-        } else if all_zero_arg {
-            // All segments are zero-arg → wrap from root
-            0
-        } else {
-            // First segment is zero-arg, not all are → keep first inline
+        } else if root_text_len <= 8 {
+            // Short root → keep first segment inline with root
             1
+        } else {
+            // Long root → wrap from root
+            0
         };
 
         // PJF extends the prefix to include `.stream()` and `.parallelStream()`
