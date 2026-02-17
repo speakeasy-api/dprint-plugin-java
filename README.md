@@ -21,9 +21,8 @@ Add the plugin to your `dprint.json`:
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `style` | `"palantir"` \| `"google"` | `"palantir"` | Base style preset |
-| `lineWidth` | number | `120` (palantir) / `100` (google) | Maximum line width |
-| `indentWidth` | number | `4` (palantir) / `2` (google) | Spaces per indent level |
+| `lineWidth` | number | `120` | Maximum line width |
+| `indentWidth` | number | `4` | Spaces per indent level |
 | `useTabs` | boolean | `false` | Use tabs instead of spaces |
 | `newLineKind` | `"lf"` \| `"crlf"` \| `"system"` | `"lf"` | Line ending style |
 | `formatJavadoc` | boolean | `false` | Format Javadoc comments |
@@ -35,7 +34,6 @@ Example configuration:
 ```json
 {
   "java": {
-    "style": "google",
     "lineWidth": 100,
     "indentWidth": 2
   }
@@ -53,7 +51,7 @@ Example configuration:
 ### Prerequisites
 
 - Rust (stable toolchain)
-- [wasi-sdk](https://github.com/aspect-build/aspect-gcc-toolchain/releases) (for WASM builds)
+- [wasi-sdk](https://github.com/aspect-build/aspect-gcc-toolchain/releases) (for WASM builds, set `WASI_SDK_PATH`)
 
 ### Running Tests
 
