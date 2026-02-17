@@ -1064,7 +1064,11 @@ pub fn gen_ternary_expression<'a>(
         + ternary_text.lines().count().saturating_sub(1); // spaces between joined lines
 
     let indent_width = context.indent_level() * context.config.indent_width as usize;
-    let should_wrap = indent_width + ternary_flat_width > context.config.line_width as usize;
+    // Account for prefix on the same line (e.g., "return " or "variable = ")
+    let prefix_width =
+        super::declarations::estimate_prefix_width(node, context.source, context.is_assignment_wrapped());
+    let should_wrap =
+        indent_width + prefix_width + ternary_flat_width > context.config.line_width as usize;
 
     let mut items = PrintItems::new();
     let mut cursor = node.walk();

@@ -610,7 +610,7 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
 ///
 /// Uses the parent-to-node text as the base measurement, then walks up
 /// ancestors to account for keywords/LHS that share the same line.
-fn estimate_prefix_width(node: tree_sitter::Node, source: &str, assignment_wrapped: bool) -> usize {
+pub(super) fn estimate_prefix_width(node: tree_sitter::Node, source: &str, assignment_wrapped: bool) -> usize {
     let parent = match node.parent() {
         Some(p) => p,
         None => return 0,
@@ -1271,6 +1271,30 @@ pub fn gen_formal_parameters<'a>(
         })
         .collect();
 
+    // Collect comment (extra) nodes between parameters, keyed by the byte offset
+    // of the NEXT named param they precede.
+    let mut comments_before_param: std::collections::HashMap<usize, Vec<tree_sitter::Node>> =
+        std::collections::HashMap::new();
+    {
+        let mut pending_comments: Vec<tree_sitter::Node> = Vec::new();
+        for child in &children {
+            if child.is_extra() {
+                pending_comments.push(*child);
+            } else if (child.kind() == "formal_parameter"
+                || child.kind() == "spread_parameter"
+                || child.kind() == "receiver_parameter")
+                && !pending_comments.is_empty()
+            {
+                comments_before_param.insert(child.start_byte(), pending_comments.clone());
+                pending_comments.clear();
+            }
+        }
+        if !pending_comments.is_empty() {
+            comments_before_param.insert(usize::MAX, pending_comments);
+        }
+    }
+    let has_interleaved_comments = !comments_before_param.is_empty();
+
     // Calculate total inline width of params (stable: uses indent_level, not source column)
     let param_text_width: usize = params
         .iter()
@@ -1303,8 +1327,9 @@ pub fn gen_formal_parameters<'a>(
         _ => 2, // Just "()" for other contexts
     };
 
-    let should_wrap = indent_width + prefix_width + param_text_width + suffix_width
-        > context.config.line_width as usize;
+    let should_wrap = has_interleaved_comments
+        || indent_width + prefix_width + param_text_width + suffix_width
+            > context.config.line_width as usize;
 
     items.push_string("(".to_string());
 
@@ -1314,8 +1339,8 @@ pub fn gen_formal_parameters<'a>(
         let continuation_col = indent_width + 2 * (context.config.indent_width as usize);
         // Account for suffix after ): typically " {" for methods/constructors = 3 chars (") {")
         // PJF allows lines up to exactly line_width (120), so use <= not <
-        let all_fit_continuation =
-            continuation_col + param_text_width + 3 <= context.config.line_width as usize;
+        let all_fit_continuation = !has_interleaved_comments
+            && continuation_col + param_text_width + 3 <= context.config.line_width as usize;
 
         // 2x StartIndent for 8-space continuation indent
         items.push_signal(Signal::StartIndent);
@@ -1334,10 +1359,30 @@ pub fn gen_formal_parameters<'a>(
         } else {
             // One-per-line (too long even at continuation indent)
             for (i, param) in params.iter().enumerate() {
-                items.push_signal(Signal::NewLine);
+                // Emit any comments that precede this parameter
+                let has_preceding_comment =
+                    comments_before_param.contains_key(&param.start_byte());
+                if let Some(cmnts) = comments_before_param.get(&param.start_byte()) {
+                    for cmnt in cmnts {
+                        items.push_signal(Signal::NewLine);
+                        items.extend(gen_node(*cmnt, context));
+                    }
+                }
+                // Only emit NewLine before param if no comment preceded it
+                // (the comment's NewLine already positions us on the next line)
+                if !has_preceding_comment {
+                    items.push_signal(Signal::NewLine);
+                }
                 items.extend(gen_node(**param, context));
                 if i < params.len() - 1 {
                     items.push_string(",".to_string());
+                }
+            }
+            // Trailing comments after last param
+            if let Some(cmnts) = comments_before_param.get(&usize::MAX) {
+                for cmnt in cmnts {
+                    items.push_signal(Signal::NewLine);
+                    items.extend(gen_node(*cmnt, context));
                 }
             }
         }
@@ -1359,27 +1404,85 @@ pub fn gen_formal_parameters<'a>(
 }
 
 /// Format `throws Exception1, Exception2`
+///
+/// When the throws list would cause the line to exceed line_width, wraps at
+/// commas with continuation indent (PJF style):
+/// ```java
+/// throws NoSuchFieldException, IllegalArgumentException,
+///         UnsupportedOperationException, IOException {
+/// ```
 fn gen_throws<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<'a>) -> PrintItems {
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
-    let mut first_type = true;
 
-    for child in node.children(&mut cursor) {
-        match child.kind() {
-            "throws" => items.push_string("throws".to_string()),
-            "," => {
+    // Collect exception types
+    let types: Vec<_> = node
+        .children(&mut cursor)
+        .filter(|c| c.is_named())
+        .collect();
+
+    // Compute flat width of entire throws clause: "throws Type1, Type2, ..."
+    let types_flat_width: usize = types
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let text = &context.source[t.start_byte()..t.end_byte()];
+            text.len() + if i < types.len() - 1 { 2 } else { 0 } // ", "
+        })
+        .sum();
+
+    // Use effective indent level to account for continuation indent when throws
+    // is on a wrapped line. Add "throws " (7) prefix and " {" (2) suffix.
+    let indent_width = context.effective_indent_level() * context.config.indent_width as usize;
+    let line_width = context.config.line_width as usize;
+
+    // Check if the full throws clause fits on the current line.
+    // When throws is on a continuation line (after wrapped params), the effective
+    // indent already includes the continuation indent.
+    let needs_wrap = indent_width + 7 + types_flat_width + 2 > line_width;
+
+    items.push_string("throws".to_string());
+
+    if needs_wrap && types.len() > 1 {
+        // Bin-pack exceptions: fill up the current line, then wrap remaining
+        let continuation_col = indent_width + 2 * (context.config.indent_width as usize);
+        let mut current_line_width = indent_width + 7; // "throws "
+        for (i, typ) in types.iter().enumerate() {
+            let text = &context.source[typ.start_byte()..typ.end_byte()];
+            let type_width = text.len();
+
+            if i > 0 && current_line_width + type_width + 2 > line_width {
+                // +2 for suffix (" {" or ", "). Wrap to continuation line.
+                items.push_signal(Signal::StartIndent);
+                items.push_signal(Signal::StartIndent);
+                items.push_signal(Signal::NewLine);
+                items.extend(gen_node(*typ, context));
+                if i < types.len() - 1 {
+                    items.push_string(",".to_string());
+                }
+                items.push_signal(Signal::FinishIndent);
+                items.push_signal(Signal::FinishIndent);
+                current_line_width = continuation_col + type_width + 2;
+            } else {
+                items.extend(helpers::gen_space());
+                items.extend(gen_node(*typ, context));
+                if i < types.len() - 1 {
+                    items.push_string(",".to_string());
+                }
+                current_line_width += 1 + type_width + 2; // space + type + ", "
+            }
+        }
+    } else {
+        // Simple inline: "throws Type1, Type2"
+        for (i, typ) in types.iter().enumerate() {
+            if i == 0 {
+                items.extend(helpers::gen_space());
+            }
+            items.extend(gen_node(*typ, context));
+            if i < types.len() - 1 {
                 items.push_string(",".to_string());
                 items.extend(helpers::gen_space());
             }
-            _ if child.is_named() => {
-                // Only add space before first type (after "throws")
-                if first_type {
-                    items.extend(helpers::gen_space());
-                    first_type = false;
-                }
-                items.extend(gen_node(child, context));
-            }
-            _ => {}
         }
     }
 
@@ -1442,7 +1545,7 @@ pub fn gen_variable_declarator<'a>(
             let indent_unit = context.config.indent_width as usize;
             let indent_col = context.indent_level() * indent_unit;
             // Continuation indent: current indent + 2 indent units (double indent for wrapping)
-            let continuation_indent = indent_col + indent_unit * 2;
+            let _continuation_indent = indent_col + indent_unit * 2;
             let line_width = context.config.line_width as usize;
 
             // Compute LHS width: type + variable name (everything before the `=` sign).
@@ -1534,26 +1637,19 @@ pub fn gen_variable_declarator<'a>(
                     }
                 }
             } else {
-                // Anonymous class bodies always wrap at `=` (they're inherently multi-line)
-                let is_anonymous_class = val.kind() == "object_creation_expression" && {
-                    let mut vc = val.walk();
-                    val.children(&mut vc).any(|c| c.kind() == "class_body")
-                };
-                if is_anonymous_class {
+                // PJF wraps at `=` whenever the total line exceeds line_width.
+                // The RHS will handle its own internal wrapping (arg lists, chains, etc.)
+                // Exception: ternary and binary expressions wrap at their own operators
+                // (`?`/`:` or `&&`/`||`) instead of at `=`, so keep `var = expr` inline.
+                let is_self_wrapping = matches!(
+                    val.kind(),
+                    "ternary_expression" | "binary_expression"
+                );
+                if is_self_wrapping {
+                    false
+                } else {
                     let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
                     total_line_width > line_width
-                } else {
-                    // PJF-style: only break at `=` when the RHS fits on one continuation
-                    // line (breakOnlyIfInnerLevelsThenFitOnOneLine). If the RHS itself
-                    // is too wide, don't break at `=` — keep `= expr(` inline and let
-                    // the expression's internal wrapping (arg list, etc.) handle it.
-                    let rhs_fits_at_continuation =
-                        continuation_indent + rhs_flat_width <= line_width;
-
-                    let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
-                    let total_too_wide = total_line_width > line_width;
-
-                    rhs_fits_at_continuation && total_too_wide
                 }
             }
         } else {
