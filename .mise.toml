@@ -109,7 +109,7 @@ VERSION="${VERSION#v}"
 echo "Creating release v${VERSION}..."
 
 # Update Cargo.toml version
-sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+sed -i 's/^version = ".*"/version = "'"${VERSION}"'"/' Cargo.toml
 
 # Commit version bump
 git add Cargo.toml
@@ -143,16 +143,4 @@ run = "cargo clean"
 
 [tasks."compare-pjf"]
 description = "Compare formatting against spotless:PJF"
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-
-if [ $# -eq 0 ]; then
-  echo "Usage: mise run compare-pjf /path/to/java/project"
-  exit 1
-fi
-
-PROJECT_DIR="$1"
-echo "Comparing dprint-plugin-java vs PJF on: $PROJECT_DIR"
-# Add actual comparison logic here
-"""
+run = "bash skills/compare-pjf/scripts/compare.sh ${@}"

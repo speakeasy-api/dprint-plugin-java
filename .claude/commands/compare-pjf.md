@@ -2,7 +2,32 @@
 
 Compare the output of our dprint-plugin-java formatter against spotless:palantir-java-format on a real Java project.
 
-## Steps
+## Quick start
+
+Run the agent-agnostic comparison skill:
+
+```bash
+# Via mise:
+mise run compare-pjf $ARGUMENTS
+
+# Directly:
+bash skills/compare-pjf/scripts/compare.sh $ARGUMENTS
+```
+
+Default test project if no argument: `/home/vgd/c/speakeasy-api/openapi-generation/zSDKs/sdk-javav2`
+
+## What it does
+
+1. Builds the WASM plugin
+2. Copies `.java` files from the target project
+3. Formats with dprint using the built WASM plugin
+4. Formats with spotless:PJF using a temporary Gradle project
+5. Normalizes imports and whitespace
+6. Reports match rate with diffs for mismatches
+
+See `skills/compare-pjf/SKILL.md` for full documentation.
+
+## Manual steps (if the script fails)
 
 1. **Build the WASM plugin:**
    ```
@@ -16,7 +41,7 @@ Compare the output of our dprint-plugin-java formatter against spotless:palantir
    mkdir -p /tmp/fmt-comparison/{dprint,spotless-runner/src}
    ```
 
-3. **Copy Java files from test project** (default: `$ARGUMENTS` or `/home/vgd/c/speakeasy-api/openapi-generation/zSDKs/sdk-javav2`):
+3. **Copy Java files from test project** (`$ARGUMENTS` or the default path above):
    ```
    cd <project-dir>
    find . -name "*.java" -not -path "*/build/*" -not -path "*/.gradle/*" | while read f; do
@@ -66,14 +91,6 @@ Compare the output of our dprint-plugin-java formatter against spotless:palantir
    JAVA_HOME="$(mise where java@21)" ./gradlew spotlessApply
    ```
 
-6. **Compare outputs:**
-   dprint files: `/tmp/fmt-comparison/dprint/`
-   PJF files: `/tmp/fmt-comparison/spotless-runner/src/`
-
-   Run a diff comparison counting identical vs different files, then categorize differences.
-   Normalize before comparing:
-   - Remove `java.lang.*` imports (PJF strips these; formatter's job is debatable)
-   - Sort imports alphabetically (import ordering is separate from formatting)
-   - Strip trailing whitespace
+6. **Compare outputs** using `python3 skills/compare-pjf/scripts/normalize.py /tmp/fmt-comparison/dprint /tmp/fmt-comparison/spotless-runner/src`
 
 7. **Report** the match rate and categorize remaining formatting gaps.
