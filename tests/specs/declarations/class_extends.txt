@@ -4,6 +4,5 @@ public class Child extends Parent {
 }
 == output ==
 public class Child extends Parent {
-
     private int value;
 }

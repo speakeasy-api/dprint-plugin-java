@@ -6,6 +6,5 @@ public static class VeryLongNameAsync extends VeryLongBaseName implements AsyncR
 == output ==
 public static class VeryLongNameAsync extends VeryLongBaseName
         implements AsyncRequestOperation<BinaryAndStringUploadRequest, BinaryAndStringUploadResponse> {
-
     void method() {}
 }

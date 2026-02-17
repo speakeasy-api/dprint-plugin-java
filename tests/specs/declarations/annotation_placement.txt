@@ -19,11 +19,9 @@ class Test {
 }
 == output ==
 class Test {
-
     @Test
     void shouldCreateRetryConfig() {
         // test body
-
     }
 
     @Override

@@ -346,10 +346,12 @@ pub fn gen_method_invocation<'a>(
     let indent_width = context.config.indent_width as usize;
     let (indent_col, prefix_width) = if context.is_assignment_wrapped() {
         // Assignment wrapped: chain is at continuation indent (base + 2*indent_width)
-        let cont_col = context.indent_level() * indent_width + 2 * indent_width;
+        let cont_col = context.effective_indent_level() * indent_width + 2 * indent_width;
         (cont_col, 0)
     } else {
-        let col = context.indent_level() * indent_width;
+        // Use effective_indent_level to include continuation indent from
+        // outer chain wrapping and argument list wrapping.
+        let col = context.effective_indent_level() * indent_width;
         let prefix = compute_chain_prefix_width(node, context);
         (col, prefix)
     };
@@ -752,6 +754,31 @@ fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingConte
         }
         Some("return_statement") => 7, // "return "
         Some("throw_statement") => 6,  // "throw "
+        Some("argument_list") => {
+            // Chain is an argument in a method/constructor call.
+            // If the parent method_invocation is part of a chain, the chain prefix
+            // is ".methodName(" which precedes this argument on the same line.
+            if let Some(p) = parent {
+                if let Some(gp) = p.parent() {
+                    if gp.kind() == "method_invocation" {
+                        let in_chain = gp
+                            .child_by_field_name("object")
+                            .is_some_and(|obj| obj.kind() == "method_invocation")
+                            || gp
+                                .parent()
+                                .is_some_and(|ggp| ggp.kind() == "method_invocation");
+                        if in_chain {
+                            if let Some(name) = gp.child_by_field_name("name") {
+                                let name_text =
+                                    &context.source[name.start_byte()..name.end_byte()];
+                                return 1 + name_text.len() + 1; // ".name("
+                            }
+                        }
+                    }
+                }
+            }
+            0
+        }
         _ => 0,
     }
 }
@@ -1387,67 +1414,20 @@ pub fn gen_assignment_expression<'a>(
 ) -> PrintItems {
     let mut items = PrintItems::new();
 
-    // Check if we should wrap at '=' for chain RHS
-    let lhs = node.child_by_field_name("left");
-    let rhs = node.child_by_field_name("right");
-    let indent_width = context.config.indent_width as usize;
-    let _line_width = context.config.line_width as usize;
-    let indent_col = context.indent_level() * indent_width;
-
-    let wrap_at_eq = if let (Some(lhs_node), Some(rhs_node)) = (lhs, rhs) {
-        let is_chain =
-            rhs_node.kind() == "method_invocation" && chain_depth(rhs_node) >= 1;
-        if is_chain {
-            let lhs_text = &context.source[lhs_node.start_byte()..lhs_node.end_byte()];
-            let lhs_width = collapse_whitespace(lhs_text).len();
-            // Check if chain would wrap at current position (after "LHS = ")
-            let current_col = indent_col + lhs_width + 3;
-            let chain_fits_current =
-                chain_fits_inline_at(rhs_node, current_col, context.source, context.config);
-            if !chain_fits_current {
-                // Chain would wrap. Wrap at '=' if chain fits at continuation indent.
-                let continuation_col = indent_col + 2 * indent_width;
-                chain_fits_inline_at(rhs_node, continuation_col, context.source, context.config)
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
+    // PJF never wraps assignment expressions at '='. For chain RHS, PJF keeps
+    // `LHS = root` on one line and uses chain-level wrapping. For non-chain RHS,
+    // the expression handles its own internal wrapping (arg lists, etc.).
     let mut cursor = node.walk();
-    let mut saw_op = false;
 
     for child in node.children(&mut cursor) {
         if child.is_named() {
-            if wrap_at_eq && saw_op && child.kind() == "method_invocation" {
-                context.set_assignment_wrapped(true);
-            }
             items.extend(gen_node(child, context));
-            if wrap_at_eq && saw_op {
-                context.set_assignment_wrapped(false);
-            }
         } else {
             let op = &context.source[child.start_byte()..child.end_byte()];
             items.extend(helpers::gen_space());
             items.push_string(op.to_string());
-            saw_op = true;
-            if wrap_at_eq {
-                items.push_signal(Signal::StartIndent);
-                items.push_signal(Signal::StartIndent);
-                items.push_signal(Signal::NewLine);
-            } else {
-                items.extend(helpers::gen_space());
-            }
+            items.extend(helpers::gen_space());
         }
-    }
-
-    if wrap_at_eq {
-        items.push_signal(Signal::FinishIndent);
-        items.push_signal(Signal::FinishIndent);
     }
 
     items

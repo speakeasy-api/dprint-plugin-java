@@ -12,16 +12,12 @@ return x;
 }
 == output ==
 public class Foo extends Bar implements Baz, Qux {
-
     private int x;
-
     private String name = "hello";
-
     public Foo(int x, String name) {
         this.x = x;
         this.name = name;
     }
-
     public int getX() {
         return x;
     }

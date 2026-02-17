@@ -9,16 +9,13 @@ public class Test {
 }
 == output ==
 public class Test {
-
     public static final String[] SERVERS = {
         /* The default server. */
         "http://localhost:35123",
         /* A server with an enum variable. */
         "http://{HostName}:{PORT}",
     };
-
     int[] simple = {1, 2, 3};
-
     String[] withLineComments = {
         // First server
         "server1",

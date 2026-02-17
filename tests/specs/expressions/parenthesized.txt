@@ -7,7 +7,6 @@ public class Test {
 }
 == output ==
 public class Test {
-
     void test() {
         int x = (a + b) * c;
         boolean y = (flag1 || flag2) && flag3;

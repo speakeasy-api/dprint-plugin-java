@@ -5,6 +5,5 @@ public interface VeryLongInterfaceNameThatExtendsManyInterfaces extends FirstBas
 == output ==
 public interface VeryLongInterfaceNameThatExtendsManyInterfaces
         extends FirstBaseInterface, SecondBaseInterface, ThirdBaseInterface {
-
     void method();
 }

@@ -7,7 +7,6 @@ public class Test {
 }
 == output ==
 public class Test {
-
     void test() {
         assert condition;
         assert value > 0 : "value must be positive";

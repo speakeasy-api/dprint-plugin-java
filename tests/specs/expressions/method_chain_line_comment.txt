@@ -7,7 +7,6 @@ public class Test {
 }
 == output ==
 public class Test {
-
     void test() {
         x = a.b() // comment
         .c();

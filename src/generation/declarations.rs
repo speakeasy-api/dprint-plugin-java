@@ -1448,8 +1448,8 @@ pub fn gen_variable_declarator<'a>(
                             break;
                         }
 
-                        // Accumulate width from type nodes and modifiers before variable_declarator
-                        if c.is_named() && c.kind() != "modifiers" {
+                        // Accumulate width from type, modifiers, etc. before variable_declarator
+                        if c.is_named() {
                             let text = &context.source[c.start_byte()..c.end_byte()];
                             if w > 0 {
                                 w += 1;
@@ -1662,13 +1662,9 @@ pub fn gen_argument_list<'a>(
                     .is_some_and(|gp| gp.kind() == "method_invocation"))
     });
 
-    // Use effective indent level (including continuation indent from wrapped chains)
-    // only when we're actually inside a method invocation chain.
-    let indent_level = if is_in_chain {
-        context.effective_indent_level()
-    } else {
-        context.indent_level()
-    };
+    // Use effective indent level (including continuation indent from wrapped chains
+    // and wrapped argument lists) to get the true column position.
+    let indent_level = context.effective_indent_level();
     let indent_width = indent_level * context.config.indent_width as usize;
     let prefix_width = if is_in_chain {
         // Inside a chain, the chain wrapper handles overall layout.
@@ -1739,6 +1735,7 @@ pub fn gen_argument_list<'a>(
         items.push_signal(Signal::StartIndent);
         items.push_signal(Signal::StartIndent);
         items.push_signal(Signal::NewLine);
+        context.add_continuation_indent(2);
         for (i, arg) in args.iter().enumerate() {
             items.extend(gen_node(**arg, context));
             if i < args.len() - 1 {
@@ -1746,6 +1743,7 @@ pub fn gen_argument_list<'a>(
                 items.extend(helpers::gen_space());
             }
         }
+        context.remove_continuation_indent(2);
         items.push_string(")".to_string());
         items.push_signal(Signal::FinishIndent);
         items.push_signal(Signal::FinishIndent);
@@ -1753,6 +1751,7 @@ pub fn gen_argument_list<'a>(
         // Args don't fit on one continuation line, put each arg on its own line
         items.push_signal(Signal::StartIndent);
         items.push_signal(Signal::StartIndent);
+        context.add_continuation_indent(2);
         for (i, arg) in args.iter().enumerate() {
             items.push_signal(Signal::NewLine);
             items.extend(gen_node(**arg, context));
@@ -1760,6 +1759,7 @@ pub fn gen_argument_list<'a>(
                 items.push_string(",".to_string());
             }
         }
+        context.remove_continuation_indent(2);
         items.push_string(")".to_string());
         items.push_signal(Signal::FinishIndent);
         items.push_signal(Signal::FinishIndent);
@@ -1797,11 +1797,14 @@ fn gen_body_with_members<'a>(
     items.push_signal(Signal::StartIndent);
     context.indent();
 
-    // Always add blank line after opening brace (PJF parity)
-    items.push_signal(Signal::NewLine);
-
-    let mut prev_kind: Option<&str> = None;
-    let mut prev_was_comment = false;
+    // Initialize prev_end_row to opening brace's row for blank line preservation.
+    // PJF preserves source blank lines in class bodies (doesn't force-add them).
+    let open_brace_row = children
+        .iter()
+        .find(|c| c.kind() == "{")
+        .map(|c| c.end_position().row);
+    let mut prev_end_row: Option<usize> = open_brace_row;
+    let mut prev_was_line_comment = false;
 
     for member in &members {
         if member.is_extra() {
@@ -1810,36 +1813,46 @@ fn gen_body_with_members<'a>(
                 // Trailing comment: append on same line
                 items.extend(helpers::gen_space());
                 items.extend(gen_node(**member, context));
+                prev_was_line_comment = member.kind() == "line_comment";
+                prev_end_row = Some(member.end_position().row);
             } else {
                 // Leading/standalone comment within body
-                // Add blank line before comment if after a previous member (PJF parity)
-                if prev_kind.is_some() && !prev_was_comment {
+                if !prev_was_line_comment {
                     items.push_signal(Signal::NewLine);
                 }
-
-                items.push_signal(Signal::NewLine);
+                // Preserve blank line from source before this comment
+                if let Some(prev_row) = prev_end_row {
+                    if member.start_position().row > prev_row + 1 {
+                        items.push_signal(Signal::NewLine);
+                    }
+                }
                 items.extend(gen_node(**member, context));
-                prev_was_comment = true;
+                prev_was_line_comment = member.kind() == "line_comment";
+                prev_end_row = Some(member.end_position().row);
             }
             continue;
         }
 
-        // Add blank line between all members (PJF parity)
-        // Skip if previous was a comment (comments handle their own spacing)
-        if prev_kind.is_some() && !prev_was_comment {
+        if !prev_was_line_comment {
             items.push_signal(Signal::NewLine);
         }
-
-        items.push_signal(Signal::NewLine);
+        // Preserve blank line from source between members
+        if let Some(prev_row) = prev_end_row {
+            if member.start_position().row > prev_row + 1 {
+                items.push_signal(Signal::NewLine);
+            }
+        }
         items.extend(gen_node(**member, context));
 
-        prev_kind = Some(member.kind());
-        prev_was_comment = false;
+        prev_was_line_comment = false;
+        prev_end_row = Some(member.end_position().row);
     }
 
     items.push_signal(Signal::FinishIndent);
     context.dedent();
-    items.push_signal(Signal::NewLine);
+    if !prev_was_line_comment {
+        items.push_signal(Signal::NewLine);
+    }
     items.push_string("}".to_string());
 
     items

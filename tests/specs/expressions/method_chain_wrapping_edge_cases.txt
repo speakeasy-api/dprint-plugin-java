@@ -19,7 +19,6 @@ public class Test {
 }
 == output ==
 public class Test {
-
     void test() {
         // Chain at threshold (80 chars, stays on one line with > not >=)
         list.<String>stream().<Integer>map(x -> x.length()).collect(Collectors.toList());

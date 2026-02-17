@@ -17,7 +17,6 @@ public class Test {
 }
 == output ==
 public class Test {
-
     void test() {
         AsyncRequestlessOperation<GetNamespaceConflictResponse> operation =
                 new GetNamespaceConflict.Async(sdkConfiguration, _headers);
@@ -42,14 +41,11 @@ public class Test {
 
     private AsyncRequestlessOperation<GetNamespaceConflictResponse> fieldOperation =
             new GetNamespaceConflict.Async(sdkConfiguration, _headers);
-
     private int simpleField = 42;
-
     private Map<String, List<Integer>> fieldMap = someMethod()
             .withLongChain()
             .andAnotherMethod(param1, param2, param3)
             .build();
-
     private Map<String, List<Integer>> fieldMap2 = someMethod()
             .withLongChain()
             .andAnotherMethod(param1, param2, param3)

@@ -9,7 +9,6 @@ public class Test {
 }
 == output ==
 public class Test {
-
     void test() {
         return Utils.enhancedDeepEquals(this.contentType, other.contentType)
                 && Utils.enhancedDeepEquals(this.statusCode, other.statusCode)

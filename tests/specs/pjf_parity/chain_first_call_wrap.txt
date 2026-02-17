@@ -14,7 +14,6 @@ class Test {
 }
 == output ==
 class Test {
-
     void test() {
         contextRunner
                 .withUserConfiguration(CustomConfig.class)
@@ -22,12 +21,13 @@ class Test {
                 .run(ctx -> {
                     assertThat(ctx).isNotNull();
                 });
+
         SDK.builder().serverURL("http://localhost").build();
+
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(Config.class))
                 .run(context -> {
                     // test
-
                 });
     }
 }

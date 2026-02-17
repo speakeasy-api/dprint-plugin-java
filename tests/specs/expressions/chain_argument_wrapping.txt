@@ -8,7 +8,6 @@ class Test {
 }
 == output ==
 class Test {
-
     void test() {
         // Test: argument lists inside chain segments should wrap when args exceed line width
         // accounting for the chain's continuation indent (+8 spaces)

@@ -11,10 +11,8 @@ public class Bike {
 }
 == output ==
 public class Bike {
-
     @JsonProperty("wheels")
     private long wheels;
-
     @JsonProperty("hasPedals")
     private boolean hasPedals;
 

@@ -5,7 +5,6 @@ public class Foo {
 }
 == output ==
 public class Foo {
-
     /** First field */
     private int x;
 }

@@ -10,7 +10,6 @@ class Test {
 }
 == output ==
 class Test {
-
     void test() {
         try {
             doSomething();

@@ -8,12 +8,14 @@ class Test {
 }
 == output ==
 class Test {
-
     void test() {
         assertEquals(
                 NamespaceTypesTest.builder()
                         .petSpecies(PetSpecies.CAT)
-                        .animal(Cat.builder().animalType(CatAnimalType.CAT).furLength("short").build())
+                        .animal(Cat.builder()
+                                .animalType(CatAnimalType.CAT)
+                                .furLength("short")
+                                .build())
                         .build(),
                 res.namespaceTypesTest().orElse(null));
         GetNamespaceTypesResponse res =
@@ -23,7 +25,10 @@ class Test {
                 .address(Address.builder()
                         .street("123 Main St")
                         .city("Springfield")
-                        .location(Location.builder().latitude(37.7749).longitude(-122.4194).build())
+                        .location(Location.builder()
+                                .latitude(37.7749)
+                                .longitude(-122.4194)
+                                .build())
                         .build())
                 .build();
     }

@@ -14,7 +14,6 @@ public class Test {
 }
 == output ==
 public class Test {
-
     public void veryLongMethodNameThatWillDefinitelyCauseWrapping()
             throws IOException, SQLException, InterruptedException {
         performAction();

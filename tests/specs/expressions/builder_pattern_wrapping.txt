@@ -7,7 +7,6 @@ class Test {
 }
 == output ==
 class Test {
-
     void test() {
         SDK sdk = SDK.builder()
                 .serverURL("http://localhost:18080")

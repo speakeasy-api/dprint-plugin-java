@@ -10,7 +10,6 @@ public class Test {
 }
 == output ==
 public class Test {
-
     void test() {
         list.stream().map(x -> {
             return x * 2;

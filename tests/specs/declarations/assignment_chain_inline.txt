@@ -8,7 +8,6 @@ class Test {
 }
 == output ==
 class Test {
-
     void test() {
         SDK sdk = SDK.builder().serverURL("url").client(http).build();
         VeryLongTypeNameThatExceedsLineWidth x =

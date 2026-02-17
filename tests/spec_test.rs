@@ -83,7 +83,7 @@ fn spec_class_with_body() {
     run_spec(
         "class_with_body",
         "public class Hello {\n    private int x;\n}\n",
-        "public class Hello {\n\n    private int x;\n}\n",
+        "public class Hello {\n    private int x;\n}\n",
     );
 }
 
@@ -92,7 +92,7 @@ fn spec_class_bad_indent() {
     run_spec(
         "class_bad_indent",
         "public class Hello {\nprivate int x;\n}\n",
-        "public class Hello {\n\n    private int x;\n}\n",
+        "public class Hello {\n    private int x;\n}\n",
     );
 }
 
@@ -101,7 +101,7 @@ fn spec_class_missing_brace_space() {
     run_spec(
         "class_missing_brace_space",
         "public class Hello{\n    private int x;\n}\n",
-        "public class Hello {\n\n    private int x;\n}\n",
+        "public class Hello {\n    private int x;\n}\n",
     );
 }
 
@@ -128,7 +128,7 @@ fn spec_method_declaration() {
     run_spec(
         "method_declaration",
         "public class Test {\n    public static void main(String[] args) {\n        System.out.println(\"hello\");\n    }\n}\n",
-        "public class Test {\n\n    public static void main(String[] args) {\n        System.out.println(\"hello\");\n    }\n}\n",
+        "public class Test {\n    public static void main(String[] args) {\n        System.out.println(\"hello\");\n    }\n}\n",
     );
 }
 
@@ -137,7 +137,7 @@ fn spec_method_bad_indent() {
     run_spec(
         "method_bad_indent",
         "public class Test {\npublic void foo() {\nreturn;\n}\n}\n",
-        "public class Test {\n\n    public void foo() {\n        return;\n    }\n}\n",
+        "public class Test {\n    public void foo() {\n        return;\n    }\n}\n",
     );
 }
 
@@ -173,7 +173,7 @@ fn spec_field_with_initializer() {
     run_spec(
         "field_with_initializer",
         "public class Test {\n    private int count = 0;\n    private String name = \"default\";\n}\n",
-        "public class Test {\n\n    private int count = 0;\n\n    private String name = \"default\";\n}\n",
+        "public class Test {\n    private int count = 0;\n    private String name = \"default\";\n}\n",
     );
 }
 
@@ -238,7 +238,7 @@ fn spec_return_and_throw() {
     run_spec(
         "return_and_throw",
         "public class Test {\n    int test() {\n        if (error) {\n            throw new RuntimeException(\"oops\");\n        }\n        return 42;\n    }\n}\n",
-        "public class Test {\n\n    int test() {\n        if (error) {\n            throw new RuntimeException(\"oops\");\n        }\n        return 42;\n    }\n}\n",
+        "public class Test {\n    int test() {\n        if (error) {\n            throw new RuntimeException(\"oops\");\n        }\n        return 42;\n    }\n}\n",
     );
 }
 
@@ -1416,7 +1416,6 @@ fn spec_chain_wrapping_pjf_column_position() {
 }
 "#,
         r#"class Test {
-
     void test() {
         contextRunner
                 .withPropertyValues("openapi.security.option3.oauth2=test-token")
@@ -1437,7 +1436,7 @@ fn spec_chain_short_root_first_inline() {
     run_spec(
         "chain_short_inline",
         "class Test {\n    void test() {\n        obj.method1().method2().method3();\n    }\n}\n",
-        "class Test {\n\n    void test() {\n        obj.method1().method2().method3();\n    }\n}\n",
+        "class Test {\n    void test() {\n        obj.method1().method2().method3();\n    }\n}\n",
     );
 }
 
@@ -1454,7 +1453,6 @@ fn spec_chain_wrap_first_when_long_root() {
 }
 "#,
         r#"class Test {
-
     void test() {
         veryLongReceiverName
                 .firstMethod("some-long-argument-value-here")

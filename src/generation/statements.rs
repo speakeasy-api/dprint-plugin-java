@@ -37,6 +37,12 @@ pub fn gen_block<'a>(
     context.indent();
 
     let mut prev_was_line_comment = false;
+    // Initialize to opening brace's row to preserve blank lines after `{`
+    let open_brace_row = children
+        .iter()
+        .find(|c| c.kind() == "{")
+        .map(|c| c.end_position().row);
+    let mut prev_end_row: Option<usize> = open_brace_row;
     for stmt in &stmts {
         if stmt.is_extra() {
             let is_trailing = comments::is_trailing_comment(**stmt);
@@ -45,13 +51,21 @@ pub fn gen_block<'a>(
                 items.extend(helpers::gen_space());
                 items.extend(gen_node(**stmt, context));
                 prev_was_line_comment = stmt.kind() == "line_comment";
+                prev_end_row = Some(stmt.end_position().row);
             } else {
                 // Leading/standalone comment
                 if !prev_was_line_comment {
                     items.push_signal(Signal::NewLine);
                 }
+                // Preserve blank line from source before this comment
+                if let Some(prev_row) = prev_end_row {
+                    if stmt.start_position().row > prev_row + 1 {
+                        items.push_signal(Signal::NewLine);
+                    }
+                }
                 items.extend(gen_node(**stmt, context));
                 prev_was_line_comment = stmt.kind() == "line_comment";
+                prev_end_row = Some(stmt.end_position().row);
             }
             continue;
         }
@@ -59,13 +73,24 @@ pub fn gen_block<'a>(
         if !prev_was_line_comment {
             items.push_signal(Signal::NewLine);
         }
+        // Preserve blank line from source between statements
+        if let Some(prev_row) = prev_end_row {
+            if stmt.start_position().row > prev_row + 1 {
+                items.push_signal(Signal::NewLine);
+            }
+        }
         items.extend(gen_node(**stmt, context));
         prev_was_line_comment = false;
+        prev_end_row = Some(stmt.end_position().row);
     }
 
     items.push_signal(Signal::FinishIndent);
     context.dedent();
-    items.push_signal(Signal::NewLine);
+    // Don't emit extra newline if last item was a line comment (which already
+    // includes a trailing newline), to avoid blank line before `}`.
+    if !prev_was_line_comment {
+        items.push_signal(Signal::NewLine);
+    }
     items.push_string("}".to_string());
 
     items

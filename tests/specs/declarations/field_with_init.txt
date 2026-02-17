@@ -6,10 +6,7 @@ public class Test {
 }
 == output ==
 public class Test {
-
     private int count = 0;
-
     private String message = "Hello";
-
     private List<String> items = new ArrayList<>();
 }

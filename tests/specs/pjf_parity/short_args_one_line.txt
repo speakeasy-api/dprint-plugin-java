@@ -10,12 +10,9 @@ class Test {
 }
 == output ==
 class Test {
-
     // PJF keeps this on one line (total < 120 chars even with all args)
-
-    public static final String USER_AGENT =
-            String.format(
-                    "speakeasy-sdk/%s %s %s %s %s", LANGUAGE, SDK_VERSION, GEN_VERSION, OPENAPI_DOC_VERSION, BASE_PACKAGE);
+    public static final String USER_AGENT = String.format(
+            "speakeasy-sdk/%s %s %s %s %s", LANGUAGE, SDK_VERSION, GEN_VERSION, OPENAPI_DOC_VERSION, BASE_PACKAGE);
 
     void test() {
         // Even with wrapping at '(', if args fit on continuation line, keep them together

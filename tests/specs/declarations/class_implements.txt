@@ -6,7 +6,6 @@ public class MyClass implements Serializable, Cloneable {
 }
 == output ==
 public class MyClass implements Serializable, Cloneable {
-
     void method() {
         return;
     }

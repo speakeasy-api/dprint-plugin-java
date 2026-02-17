@@ -13,11 +13,8 @@ public class SDK {
 }
 == output ==
 public class SDK {
-
     private static final Headers headers = Headers.EMPTY;
-
     private final AsyncSDK asyncSDK;
-
     private SDKConfiguration config;
 
     public SDK() {
@@ -25,6 +22,5 @@ public class SDK {
     }
 
     public void method1() {}
-
     public void method2() {}
 }
