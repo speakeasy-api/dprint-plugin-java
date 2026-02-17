@@ -451,14 +451,15 @@ pub fn gen_method_declaration<'a>(
             true
         } else {
             // Params will wrap. Check if `) throws ... {` fits on the last param line.
-            let throws_width: usize = children_vec
-                .iter()
-                .find(|ch| ch.kind() == "throws")
-                .map_or(0, |throws_node| {
-                    let text =
-                        &context.source[throws_node.start_byte()..throws_node.end_byte()];
-                    collapse_whitespace_len(text)
-                });
+            let throws_width: usize =
+                children_vec
+                    .iter()
+                    .find(|ch| ch.kind() == "throws")
+                    .map_or(0, |throws_node| {
+                        let text =
+                            &context.source[throws_node.start_byte()..throws_node.end_byte()];
+                        collapse_whitespace_len(text)
+                    });
             if throws_width == 0 {
                 false
             } else {
@@ -470,8 +471,7 @@ pub fn gen_method_declaration<'a>(
                         params
                             .children(&mut pc)
                             .filter(|p| {
-                                p.kind() == "formal_parameter"
-                                    || p.kind() == "spread_parameter"
+                                p.kind() == "formal_parameter" || p.kind() == "spread_parameter"
                             })
                             .last()
                             .map(|p| {
@@ -480,8 +480,7 @@ pub fn gen_method_declaration<'a>(
                             })
                     })
                     .unwrap_or(0);
-                let continuation_col =
-                    indent_width + 2 * context.config.indent_width as usize;
+                let continuation_col = indent_width + 2 * context.config.indent_width as usize;
                 // Last param line: continuation + last_param + ") throws ... {"
                 continuation_col + last_param_width + 2 + throws_width + 2 > line_width
             }
@@ -679,8 +678,14 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
 ///
 /// Uses the parent-to-node text as the base measurement, then walks up
 /// ancestors to account for keywords/LHS that share the same line.
-pub(super) fn estimate_prefix_width(node: tree_sitter::Node, source: &str, assignment_wrapped: bool) -> usize {
-    let Some(parent) = node.parent() else { return 0 };
+pub(super) fn estimate_prefix_width(
+    node: tree_sitter::Node,
+    source: &str,
+    assignment_wrapped: bool,
+) -> usize {
+    let Some(parent) = node.parent() else {
+        return 0;
+    };
 
     // Extract the text from the start of the parent to the start of this node
     let prefix_text = &source[parent.start_byte()..node.start_byte()];
@@ -829,14 +834,15 @@ pub fn gen_constructor_declaration<'a>(
             // Params will wrap. Check last param line + throws.
             let mut c = node.walk();
             let children_vec: Vec<_> = node.children(&mut c).collect();
-            let throws_width: usize = children_vec
-                .iter()
-                .find(|ch| ch.kind() == "throws")
-                .map_or(0, |throws_node| {
-                    let text =
-                        &context.source[throws_node.start_byte()..throws_node.end_byte()];
-                    collapse_whitespace_len(text)
-                });
+            let throws_width: usize =
+                children_vec
+                    .iter()
+                    .find(|ch| ch.kind() == "throws")
+                    .map_or(0, |throws_node| {
+                        let text =
+                            &context.source[throws_node.start_byte()..throws_node.end_byte()];
+                        collapse_whitespace_len(text)
+                    });
             if throws_width == 0 {
                 false
             } else {
@@ -848,8 +854,7 @@ pub fn gen_constructor_declaration<'a>(
                         params
                             .children(&mut pc)
                             .filter(|p| {
-                                p.kind() == "formal_parameter"
-                                    || p.kind() == "spread_parameter"
+                                p.kind() == "formal_parameter" || p.kind() == "spread_parameter"
                             })
                             .last()
                             .map(|p| {
@@ -1257,8 +1262,7 @@ fn gen_enum_body<'a>(
     let has_trailing_comma = {
         let non_extra: Vec<_> = members.iter().filter(|c| !c.is_extra()).collect();
         non_extra.windows(2).any(|w| {
-            w[0].kind() == ","
-                && (w[1].kind() == ";" || w[1].kind() == "enum_body_declarations")
+            w[0].kind() == "," && (w[1].kind() == ";" || w[1].kind() == "enum_body_declarations")
         })
     };
 
@@ -1547,8 +1551,7 @@ pub fn gen_formal_parameters<'a>(
             let continuation_col = indent_width + 2 * (context.config.indent_width as usize);
             for (i, param) in params.iter().enumerate() {
                 // Emit any comments that precede this parameter
-                let has_preceding_comment =
-                    comments_before_param.contains_key(&param.start_byte());
+                let has_preceding_comment = comments_before_param.contains_key(&param.start_byte());
                 if let Some(cmnts) = comments_before_param.get(&param.start_byte()) {
                     for cmnt in cmnts {
                         items.newline();
@@ -1563,17 +1566,14 @@ pub fn gen_formal_parameters<'a>(
                 // Check if this param exceeds line_width at continuation indent.
                 // If so, split after annotations: put type+name on next line at +8.
                 let param_text = &context.source[param.start_byte()..param.end_byte()];
-                let param_flat_width: usize =
-                    param_text.lines().map(|l| l.trim().len()).sum();
+                let param_flat_width: usize = param_text.lines().map(|l| l.trim().len()).sum();
                 let suffix = usize::from(i < params.len() - 1); // comma
-                if continuation_col + param_flat_width + suffix
-                    > context.config.line_width as usize
+                if continuation_col + param_flat_width + suffix > context.config.line_width as usize
                 {
                     // Find the last annotation child — break after it
                     let mut pc = param.walk();
                     let param_children: Vec<_> = param.children(&mut pc).collect();
-                    let has_modifiers =
-                        param_children.iter().any(|c| c.kind() == "modifiers");
+                    let has_modifiers = param_children.iter().any(|c| c.kind() == "modifiers");
                     if has_modifiers {
                         // Emit modifiers (annotations), then wrap, then type+name
                         // on the same continuation line.
@@ -1901,7 +1901,8 @@ pub fn gen_variable_declarator<'a>(
                     // Ternary and binary expressions usually wrap at their own operators
                     // (`?`/`:` or `&&`/`||`). But for ternaries that fit on a continuation
                     // line, prefer wrapping at `=` (PJF style).
-                    let is_ternary = matches!(val.kind(), "ternary_expression" | "conditional_expression");
+                    let is_ternary =
+                        matches!(val.kind(), "ternary_expression" | "conditional_expression");
                     let is_binary = val.kind() == "binary_expression";
                     if is_ternary {
                         let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
@@ -1927,8 +1928,7 @@ pub fn gen_variable_declarator<'a>(
                             let rhs_text = &context.source[val.start_byte()..val.end_byte()];
                             let rhs_opening_width =
                                 rhs_text.find('(').map_or(rhs_flat_width, |p| p + 1);
-                            let opening_line_width =
-                                indent_col + lhs_width + 3 + rhs_opening_width;
+                            let opening_line_width = indent_col + lhs_width + 3 + rhs_opening_width;
                             opening_line_width > line_width
                         } else {
                             false

@@ -1,10 +1,10 @@
 use dprint_core::formatting::PrintItems;
 
+use super::comments::{gen_block_comment, gen_line_comment};
 use super::context::FormattingContext;
 use super::declarations;
 use super::generate::gen_node;
 use super::helpers::{PrintItemsExt, collapse_whitespace_len, gen_node_text};
-use super::comments::{gen_line_comment, gen_block_comment};
 
 /// A segment of a flattened method invocation chain.
 ///
@@ -267,7 +267,11 @@ pub fn gen_update_expression<'a>(
 /// chain and uses PJF-style column-position wrapping: if the column where the
 /// first `.` would appear exceeds `method_chain_threshold` (default 80), ALL
 /// segments wrap onto new lines with 8-space continuation indent.
-#[allow(clippy::too_many_lines, clippy::bool_to_int_with_if, clippy::comparison_chain)]
+#[allow(
+    clippy::too_many_lines,
+    clippy::bool_to_int_with_if,
+    clippy::comparison_chain
+)]
 pub fn gen_method_invocation<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -781,12 +785,10 @@ pub(super) fn rightmost_chain_dot(node: tree_sitter::Node, source: &str, base_co
         let name_w = node
             .child_by_field_name("name")
             .map_or(0, |n| n.end_byte() - n.start_byte());
-        let args_w = node
-            .child_by_field_name("arguments")
-            .map_or(0, |a| {
-                let t = &source[a.start_byte()..a.end_byte()];
-                t.lines().map(|l| l.trim().len()).sum::<usize>()
-            });
+        let args_w = node.child_by_field_name("arguments").map_or(0, |a| {
+            let t = &source[a.start_byte()..a.end_byte()];
+            t.lines().map(|l| l.trim().len()).sum::<usize>()
+        });
         let last_seg_width = 1 + name_w + args_w; // ".name(args)"
         base_col + flat_width.saturating_sub(last_seg_width)
     } else if node.kind() == "method_invocation" {
@@ -912,7 +914,12 @@ fn flatten_chain<'a>(
         let trailing_comment = extract_trailing_line_comment(current);
 
         if let Some(name_node) = name {
-            chain.push(ChainSegment { name: name_node, type_args, arg_list, trailing_comment });
+            chain.push(ChainSegment {
+                name: name_node,
+                type_args,
+                arg_list,
+                trailing_comment,
+            });
         }
 
         match object {
@@ -1015,8 +1022,11 @@ pub fn gen_ternary_expression<'a>(
 
     let indent_width = context.indent_level() * context.config.indent_width as usize;
     // Account for prefix on the same line (e.g., "return " or "variable = ")
-    let prefix_width =
-        super::declarations::estimate_prefix_width(node, context.source, context.is_assignment_wrapped());
+    let prefix_width = super::declarations::estimate_prefix_width(
+        node,
+        context.source,
+        context.is_assignment_wrapped(),
+    );
     let should_wrap =
         indent_width + prefix_width + ternary_flat_width > context.config.line_width as usize;
 
@@ -1092,7 +1102,11 @@ pub fn gen_object_creation_expression<'a>(
                 items.push_str("new");
                 items.space();
             }
-            "type_arguments" | "type_identifier" | "scoped_type_identifier" | "generic_type" | "argument_list" => {
+            "type_arguments"
+            | "type_identifier"
+            | "scoped_type_identifier"
+            | "generic_type"
+            | "argument_list" => {
                 items.extend(gen_node(child, context));
             }
             "class_body" => {
@@ -1169,19 +1183,20 @@ pub fn gen_array_initializer<'a>(
     let has_comments = node.children(&mut cursor).any(|c| c.is_extra());
 
     // Check if this is inside an annotation context
-    let in_annotation = node
-        .parent()
-        .is_some_and(|p| {
-            p.kind() == "annotation_argument_list"
-                || p.kind() == "element_value_pair"
-                || (p.kind() == "annotation_argument_list"
-                    && p.parent()
-                        .is_some_and(|gp| gp.kind().contains("annotation")))
-        });
+    let in_annotation = node.parent().is_some_and(|p| {
+        p.kind() == "annotation_argument_list"
+            || p.kind() == "element_value_pair"
+            || (p.kind() == "annotation_argument_list"
+                && p.parent()
+                    .is_some_and(|gp| gp.kind().contains("annotation")))
+    });
 
     // Count named (element) children
     cursor = node.walk();
-    let element_count = node.children(&mut cursor).filter(tree_sitter::Node::is_named).count();
+    let element_count = node
+        .children(&mut cursor)
+        .filter(tree_sitter::Node::is_named)
+        .count();
 
     // Force expanded format in annotation context with multiple elements,
     // but only if the annotation wouldn't fit on one line

@@ -10,7 +10,7 @@ use super::helpers::{PrintItemsExt, collapse_whitespace_len, gen_node_text, is_t
 use super::statements;
 
 /// Generate dprint `PrintItems` IR from a tree-sitter parse tree.
-#[must_use] 
+#[must_use]
 pub fn generate(source: &str, tree: &tree_sitter::Tree, config: &Configuration) -> PrintItems {
     let mut context = FormattingContext::new(source, config);
     let root = tree.root_node();
@@ -270,9 +270,7 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                             // need at least one newline before the next line comment.
                             items.newline();
                         }
-                        if prev_end_row
-                            .is_some_and(|r| child.start_position().row > r + 1)
-                        {
+                        if prev_end_row.is_some_and(|r| child.start_position().row > r + 1) {
                             // Source had a blank line between consecutive line comments — preserve it.
                             items.newline();
                         }
@@ -388,7 +386,9 @@ fn gen_generic_type<'a>(
 /// declaration modifiers or `new` where applicable. Uses collapsed
 /// whitespace on the source's last line to keep estimates stable.
 fn estimate_type_args_prefix_width(node: tree_sitter::Node, source: &str) -> usize {
-    let Some(parent) = node.parent() else { return 0 };
+    let Some(parent) = node.parent() else {
+        return 0;
+    };
 
     let prefix_text = &source[parent.start_byte()..node.start_byte()];
     let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
@@ -812,7 +812,10 @@ fn gen_annotation_argument_list<'a>(
         };
         if let Some(arr) = arr_node {
             let mut ac = arr.walk();
-            let element_count = arr.children(&mut ac).filter(tree_sitter::Node::is_named).count();
+            let element_count = arr
+                .children(&mut ac)
+                .filter(tree_sitter::Node::is_named)
+                .count();
             element_count > 1
         } else {
             false
@@ -844,7 +847,9 @@ fn gen_annotation_argument_list<'a>(
     // But only if there are multiple arguments (single-arg annotations stay inline)
     let named_arg_count = {
         let mut c = node.walk();
-        node.children(&mut c).filter(tree_sitter::Node::is_named).count()
+        node.children(&mut c)
+            .filter(tree_sitter::Node::is_named)
+            .count()
     };
     let force_multiline = (named_arg_count > 1 || has_multi_element_array) && exceeds_line_width;
 

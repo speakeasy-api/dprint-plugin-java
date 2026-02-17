@@ -48,7 +48,7 @@ pub struct FormattingContext<'a> {
 
 impl<'a> FormattingContext<'a> {
     /// Create a new formatting context.
-    #[must_use] 
+    #[must_use]
     pub fn new(source: &'a str, config: &'a Configuration) -> Self {
         Self {
             source,
@@ -65,7 +65,7 @@ impl<'a> FormattingContext<'a> {
     }
 
     /// Get the current indentation level.
-    #[must_use] 
+    #[must_use]
     pub fn indent_level(&self) -> usize {
         self.indent_level
     }
@@ -93,13 +93,13 @@ impl<'a> FormattingContext<'a> {
     }
 
     /// Get the immediate parent node kind, if any.
-    #[must_use] 
+    #[must_use]
     pub fn parent(&self) -> Option<&'static str> {
         self.parent_stack.last().copied()
     }
 
     /// Check if the given node kind is in the parent stack.
-    #[must_use] 
+    #[must_use]
     pub fn has_ancestor(&self, kind: &'static str) -> bool {
         self.parent_stack.contains(&kind)
     }
@@ -117,7 +117,7 @@ impl<'a> FormattingContext<'a> {
     }
 
     /// Get the effective indent level including continuation indent.
-    #[must_use] 
+    #[must_use]
     pub fn effective_indent_level(&self) -> usize {
         self.indent_level + self.continuation_indent_levels
     }
@@ -128,7 +128,7 @@ impl<'a> FormattingContext<'a> {
     }
 
     /// Check if the current chain is inside an assignment that already wrapped at '='.
-    #[must_use] 
+    #[must_use]
     pub fn is_assignment_wrapped(&self) -> bool {
         self.assignment_wrapped
     }
@@ -168,7 +168,7 @@ impl<'a> FormattingContext<'a> {
     }
 
     /// Check whether the current variable declarator starts on a continuation line.
-    #[must_use] 
+    #[must_use]
     pub fn is_declarator_on_new_line(&self) -> bool {
         self.declarator_on_new_line
     }

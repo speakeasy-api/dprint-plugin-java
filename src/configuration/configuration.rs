@@ -23,7 +23,7 @@ dprint_core::generate_str_to_from![
 ];
 
 impl JavaStyle {
-    #[must_use] 
+    #[must_use]
     pub fn line_width(self) -> u32 {
         match self {
             JavaStyle::Palantir => 120,
@@ -31,7 +31,7 @@ impl JavaStyle {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn indent_width(self) -> u8 {
         match self {
             JavaStyle::Palantir | JavaStyle::Aosp => 4,
