@@ -585,11 +585,11 @@ fn spec_header_comment_no_blank_preserved() {
 
 #[test]
 fn spec_header_comment_blank_preserved() {
-    // Blank line in source → blank line in output (PJF preserves)
+    // Blank line in source → no blank line in output (PJF removes)
     run_spec(
         "header_comment_blank",
         "/*\n * License.\n */\n\npackage com.example;\n\npublic class Foo {}\n",
-        "/*\n * License.\n */\n\npackage com.example;\n\npublic class Foo {}\n",
+        "/*\n * License.\n */\npackage com.example;\n\npublic class Foo {}\n",
     );
 }
 

@@ -420,7 +420,7 @@ pub fn gen_method_declaration<'a>(
 
     // PJF: wrap between return type and method name when the signature is too long.
     // Example: `public CompletableFuture<VeryLongResponse>\n        methodName(params) {`
-    let wrap_before_name = {
+    let mut wrap_before_name = {
         let mut cursor_pre = node.walk();
         let children_pre: Vec<_> = node.children(&mut cursor_pre).collect();
         // Find the method name (identifier) position
@@ -486,7 +486,11 @@ pub fn gen_method_declaration<'a>(
                 if need_space {
                     items.space();
                 }
+                context.start_type_args_wrap_tracking();
                 items.extend(gen_node(child, context));
+                if context.finish_type_args_wrap_tracking() {
+                    wrap_before_name = true;
+                }
                 need_space = true;
             }
             "identifier" => {
@@ -782,6 +786,7 @@ pub fn gen_field_declaration<'a>(
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
     let mut need_space = false;
+    let mut type_args_wrapped = false;
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -796,14 +801,32 @@ pub fn gen_field_declaration<'a>(
                 if need_space {
                     items.space();
                 }
+                context.start_type_args_wrap_tracking();
                 items.extend(gen_node(child, context));
+                type_args_wrapped = context.finish_type_args_wrap_tracking();
                 need_space = true;
             }
             "variable_declarator" => {
-                if need_space {
-                    items.space();
+                if type_args_wrapped {
+                    items.start_indent();
+                    items.start_indent();
+                    items.newline();
+                    context.indent();
+                    context.indent();
+                    context.set_declarator_on_new_line(true);
+                    items.extend(gen_variable_declarator(child, context));
+                    context.set_declarator_on_new_line(false);
+                    context.dedent();
+                    context.dedent();
+                    items.finish_indent();
+                    items.finish_indent();
+                    type_args_wrapped = false;
+                } else {
+                    if need_space {
+                        items.space();
+                    }
+                    items.extend(gen_variable_declarator(child, context));
                 }
-                items.extend(gen_variable_declarator(child, context));
                 need_space = false;
             }
             "," => {
@@ -1587,7 +1610,21 @@ pub fn gen_variable_declarator<'a>(
 
             // Compute LHS width: type + variable name (everything before the `=` sign).
             // We need to look at the parent node to get the type information.
-            let lhs_width = if let Some(parent) = node.parent() {
+            let lhs_width = if context.is_declarator_on_new_line() {
+                // The declarator starts on a continuation line; only count its own LHS.
+                let mut w = 0;
+                for c in &children {
+                    if c.kind() == "=" {
+                        break;
+                    }
+                    let text = &context.source[c.start_byte()..c.end_byte()];
+                    if w > 0 {
+                        w += 1;
+                    }
+                    w += collapse_whitespace_len(text);
+                }
+                w
+            } else if let Some(parent) = node.parent() {
                 let mut w = 0;
                 let mut cursor = parent.walk();
 
@@ -1683,13 +1720,17 @@ pub fn gen_variable_declarator<'a>(
                     let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
                     total_line_width > line_width
                 } else {
-                    // Ternary and binary expressions wrap at their own operators
-                    // (`?`/`:` or `&&`/`||`) instead of at `=`, so never wrap at `=`.
-                    let is_self_wrapping = matches!(
-                        val.kind(),
-                        "ternary_expression" | "binary_expression"
-                    );
-                    if is_self_wrapping {
+                    // Ternary and binary expressions usually wrap at their own operators
+                    // (`?`/`:` or `&&`/`||`). But for ternaries that fit on a continuation
+                    // line, prefer wrapping at `=` (PJF style).
+                    let is_ternary = matches!(val.kind(), "ternary_expression" | "conditional_expression");
+                    let is_binary = val.kind() == "binary_expression";
+                    if is_ternary {
+                        let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
+                        let rhs_fits_at_continuation =
+                            continuation_indent + rhs_flat_width <= line_width;
+                        total_line_width > line_width && rhs_fits_at_continuation
+                    } else if is_binary {
                         false
                     } else {
                         // PJF-style: only break at `=` when the RHS fits on one continuation

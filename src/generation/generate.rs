@@ -183,7 +183,6 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
     // Second pass: emit nodes in order
     let mut prev_kind: Option<&str> = None;
     let mut prev_was_comment = false;
-    let mut prev_comment_end_line: Option<usize> = None;
     let mut emitted_imports = false;
 
     // Check if we have a package declaration
@@ -269,22 +268,12 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                 items.extend(gen_node(*child, context));
                 prev_kind = Some(child.kind());
                 prev_was_comment = true;
-                prev_comment_end_line = Some(child.end_position().row);
             }
             continue;
         }
 
-        // Preserve blank line between header comment and package declaration if present in source
-        if prev_was_comment && child.kind() == "package_declaration" {
-            // Check if there was a blank line between the comment and package in the original source
-            if let Some(prev_end_line) = prev_comment_end_line {
-                let package_start_line = child.start_position().row;
-                if package_start_line > prev_end_line + 1 {
-                    // There was a blank line in the source — preserve it
-                    items.newline();
-                }
-            }
-        }
+        // Do not preserve blank lines between a header comment and package declaration.
+        // palantir-java-format always removes that extra blank line.
 
         // Add blank lines between different top-level sections
         // But skip this if the current child is a comment (comments handle their own spacing)
@@ -367,6 +356,64 @@ fn gen_generic_type<'a>(
     items
 }
 
+/// Estimate the prefix width before a type arguments node, including
+/// declaration modifiers or `new` where applicable. Uses collapsed
+/// whitespace on the source's last line to keep estimates stable.
+fn estimate_type_args_prefix_width(node: tree_sitter::Node, source: &str) -> usize {
+    let Some(parent) = node.parent() else { return 0 };
+
+    let prefix_text = &source[parent.start_byte()..node.start_byte()];
+    let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
+    let mut width = collapse_prefix_len(last_line);
+
+    let mut prev = parent;
+    let mut ancestor = parent.parent();
+    while let Some(anc) = ancestor {
+        match anc.kind() {
+            "method_declaration"
+            | "field_declaration"
+            | "local_variable_declaration"
+            | "formal_parameter"
+            | "object_creation_expression"
+            | "method_invocation"
+            | "constructor_declaration" => {
+                let text = &source[anc.start_byte()..prev.start_byte()];
+                let last = text.lines().last().unwrap_or(text);
+                width += collapse_prefix_len(last);
+                break;
+            }
+            "return_statement" => {
+                width += 7; // "return "
+                break;
+            }
+            "throw_statement" => {
+                width += 6; // "throw "
+                break;
+            }
+            _ => {
+                prev = anc;
+                ancestor = anc.parent();
+            }
+        }
+    }
+
+    width
+}
+
+/// Collapse whitespace for a prefix segment, preserving a trailing space
+/// when the segment ends with whitespace (to account for token separators).
+fn collapse_prefix_len(s: &str) -> usize {
+    let trimmed_start = s.trim_start();
+    if trimmed_start.is_empty() {
+        return 0;
+    }
+    let mut len = collapse_whitespace_len(trimmed_start);
+    if trimmed_start.ends_with(char::is_whitespace) {
+        len += 1;
+    }
+    len
+}
+
 /// Format type arguments: `<String, Integer>`
 ///
 /// When type arguments are too long, wraps each on its own line at double
@@ -376,6 +423,7 @@ fn gen_generic_type<'a>(
 ///         BinaryAndStringUploadRequest,
 ///         org.openapis.review.openapi.models.operations.async.BinaryAndStringUploadResponse>
 /// ```
+#[allow(clippy::too_many_lines)]
 fn gen_type_arguments<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -401,7 +449,7 @@ fn gen_type_arguments<'a>(
     // Estimate prefix width: everything on the current line before the `<`.
     // Walk up the tree to find the full prefix including keywords like `implements`.
     // Also detect if we're in a class declaration context (followed by ` {`).
-    let (prefix_width, in_class_decl) = {
+    let (base_prefix_width, in_class_decl) = {
         let parent = node.parent();
         if let Some(p) = parent {
             let mut line_start = p;
@@ -431,6 +479,13 @@ fn gen_type_arguments<'a>(
         }
     };
 
+    let prefix_width = if in_class_decl {
+        base_prefix_width
+    } else {
+        let expanded = estimate_type_args_prefix_width(node, context.source);
+        base_prefix_width.max(expanded)
+    };
+
     let indent_width = context.effective_indent_level() * context.config.indent_width as usize;
     let line_width = context.config.line_width as usize;
 
@@ -441,6 +496,7 @@ fn gen_type_arguments<'a>(
     let should_wrap = total_inline > line_width;
 
     if should_wrap {
+        context.mark_type_args_wrapped();
         // PJF uses double continuation indent (+16 = 4 indent levels) for type args
         // in local variable declarations, but single continuation (+8 = 2 indent levels)
         // in class declaration contexts (extends/implements clauses).

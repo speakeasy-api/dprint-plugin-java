@@ -5,6 +5,7 @@ use crate::configuration::Configuration;
 /// This holds the configuration, source text reference, and mutable
 /// state like the current indentation level and parent node stack
 /// for context-aware formatting decisions.
+#[allow(clippy::struct_excessive_bools)]
 pub struct FormattingContext<'a> {
     /// Reference to the source text being formatted.
     pub source: &'a str,
@@ -34,6 +35,15 @@ pub struct FormattingContext<'a> {
     /// Used when method name wraps to continuation line, making the effective
     /// prefix shorter than what `estimate_prefix_width` computes from source.
     override_prefix_width: Option<usize>,
+
+    /// Track whether a type argument list wrapped while emitting a declaration type.
+    /// This is used to align the subsequent variable declarator on a continuation line.
+    track_type_args_wrapping: bool,
+    type_args_wrapped: bool,
+
+    /// Indicates the current variable declarator starts on a continuation line
+    /// (for example, after a wrapped generic type).
+    declarator_on_new_line: bool,
 }
 
 impl<'a> FormattingContext<'a> {
@@ -48,6 +58,9 @@ impl<'a> FormattingContext<'a> {
             continuation_indent_levels: 0,
             assignment_wrapped: false,
             override_prefix_width: None,
+            track_type_args_wrapping: false,
+            type_args_wrapped: false,
+            declarator_on_new_line: false,
         }
     }
 
@@ -128,6 +141,36 @@ impl<'a> FormattingContext<'a> {
     /// Take (consume) the override prefix width, if any.
     pub fn take_override_prefix_width(&mut self) -> Option<usize> {
         self.override_prefix_width.take()
+    }
+
+    /// Begin tracking whether a type argument list wraps while emitting a declaration type.
+    pub fn start_type_args_wrap_tracking(&mut self) {
+        self.track_type_args_wrapping = true;
+        self.type_args_wrapped = false;
+    }
+
+    /// Mark that a type argument list wrapped.
+    pub fn mark_type_args_wrapped(&mut self) {
+        if self.track_type_args_wrapping {
+            self.type_args_wrapped = true;
+        }
+    }
+
+    /// Stop tracking and return whether any type arguments wrapped.
+    pub fn finish_type_args_wrap_tracking(&mut self) -> bool {
+        self.track_type_args_wrapping = false;
+        std::mem::take(&mut self.type_args_wrapped)
+    }
+
+    /// Set whether the current variable declarator starts on a continuation line.
+    pub fn set_declarator_on_new_line(&mut self, value: bool) {
+        self.declarator_on_new_line = value;
+    }
+
+    /// Check whether the current variable declarator starts on a continuation line.
+    #[must_use] 
+    pub fn is_declarator_on_new_line(&self) -> bool {
+        self.declarator_on_new_line
     }
 }
 

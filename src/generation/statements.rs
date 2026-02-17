@@ -122,6 +122,7 @@ pub fn gen_local_variable_declaration<'a>(
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
     let mut need_space = false;
+    let mut type_args_wrapped = false;
 
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -137,14 +138,32 @@ pub fn gen_local_variable_declaration<'a>(
                 if need_space {
                     items.space();
                 }
+                context.start_type_args_wrap_tracking();
                 items.extend(gen_node(child, context));
+                type_args_wrapped = context.finish_type_args_wrap_tracking();
                 need_space = true;
             }
             "variable_declarator" => {
-                if need_space {
-                    items.space();
+                if type_args_wrapped {
+                    items.start_indent();
+                    items.start_indent();
+                    items.newline();
+                    context.indent();
+                    context.indent();
+                    context.set_declarator_on_new_line(true);
+                    items.extend(gen_node(child, context));
+                    context.set_declarator_on_new_line(false);
+                    context.dedent();
+                    context.dedent();
+                    items.finish_indent();
+                    items.finish_indent();
+                    type_args_wrapped = false;
+                } else {
+                    if need_space {
+                        items.space();
+                    }
+                    items.extend(gen_node(child, context));
                 }
-                items.extend(gen_node(child, context));
                 need_space = false;
             }
             "," => {
