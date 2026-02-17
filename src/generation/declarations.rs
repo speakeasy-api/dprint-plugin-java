@@ -1820,6 +1820,12 @@ fn gen_body_with_members<'a>(
     // Track whether previous member was a block member (has body ending with })
     let mut prev_was_block: Option<bool> = None; // None = first member after {
     let mut blank_already_inserted = false;
+    // Initialize to opening `{` row so we can detect source blank lines before first member
+    let open_brace_row = children
+        .iter()
+        .find(|c| c.kind() == "{")
+        .map(|c| c.end_position().row);
+    let mut prev_end_row: Option<usize> = open_brace_row;
 
     // Check if a member has a block body (ends with })
     fn is_block_member(node: &tree_sitter::Node) -> bool {
@@ -1857,19 +1863,21 @@ fn gen_body_with_members<'a>(
                 if !prev_was_line_comment {
                     items.push_signal(Signal::NewLine);
                 }
-                // Determine if we need a blank line before this comment
+                // Add blank line before comment: either from source or if adjacent to block member
                 if !blank_already_inserted {
-                    let need_blank = match prev_was_block {
-                        // First member after { — no blank
-                        None => false,
-                        Some(prev_block) => {
-                            let next_is_block = members[idx + 1..]
-                                .iter()
-                                .find(|m| !m.is_extra())
-                                .is_some_and(|m| is_block_member(m));
-                            prev_block || next_is_block
-                        }
-                    };
+                    let source_has_blank = prev_end_row
+                        .is_some_and(|prev_row| member.start_position().row > prev_row + 1);
+                    let need_blank = source_has_blank
+                        || match prev_was_block {
+                            None => false,
+                            Some(prev_block) => {
+                                let next_is_block = members[idx + 1..]
+                                    .iter()
+                                    .find(|m| !m.is_extra())
+                                    .is_some_and(|m| is_block_member(m));
+                                prev_block || next_is_block
+                            }
+                        };
                     if need_blank {
                         items.push_signal(Signal::NewLine);
                         blank_already_inserted = true;
@@ -1877,6 +1885,7 @@ fn gen_body_with_members<'a>(
                 }
                 items.extend(gen_node(**member, context));
                 prev_was_line_comment = member.kind() == "line_comment";
+                prev_end_row = Some(member.end_position().row);
 
                 // Don't update prev_was_block — comments don't change it
             }
@@ -1886,24 +1895,34 @@ fn gen_body_with_members<'a>(
         if !prev_was_line_comment {
             items.push_signal(Signal::NewLine);
         }
-        // Add blank line between members when either is a block member
+        // Add blank line: either from source or when adjacent to block member
+        // Check source blank line even if blank_already_inserted (comment may have consumed
+        // the block-member blank but source has additional blank between comment and member)
+        let source_has_blank = prev_end_row
+            .is_some_and(|prev_row| member.start_position().row > prev_row + 1);
         if !blank_already_inserted {
-            let need_blank = match prev_was_block {
-                // First member after { — no blank
-                None => false,
-                Some(prev_block) => {
-                    let cur_is_block = is_block_member(member);
-                    prev_block || cur_is_block
-                }
-            };
+            let need_blank = source_has_blank
+                || match prev_was_block {
+                    // First member after { — no blank (unless source has one)
+                    None => false,
+                    Some(prev_block) => {
+                        let cur_is_block = is_block_member(member);
+                        prev_block || cur_is_block
+                    }
+                };
             if need_blank {
                 items.push_signal(Signal::NewLine);
             }
+        } else if source_has_blank {
+            // Comment already consumed the block-member blank line, but source
+            // also has a blank line between the comment and this member — preserve it
+            items.push_signal(Signal::NewLine);
         }
         items.extend(gen_node(**member, context));
 
         prev_was_line_comment = false;
         prev_was_block = Some(is_block_member(member));
+        prev_end_row = Some(member.end_position().row);
         blank_already_inserted = false;
     }
 
@@ -1911,6 +1930,19 @@ fn gen_body_with_members<'a>(
     context.dedent();
     if !prev_was_line_comment {
         items.push_signal(Signal::NewLine);
+    }
+    // Preserve source blank line before closing `}`
+    if let Some(prev_row) = prev_end_row {
+        let close_brace_row = children
+            .iter()
+            .rev()
+            .find(|c| c.kind() == "}")
+            .map(|c| c.start_position().row);
+        if let Some(close_row) = close_brace_row {
+            if close_row > prev_row + 1 {
+                items.push_signal(Signal::NewLine);
+            }
+        }
     }
     items.push_string("}".to_string());
 

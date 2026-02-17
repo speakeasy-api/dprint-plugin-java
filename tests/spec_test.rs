@@ -143,19 +143,21 @@ fn spec_method_bad_indent() {
 
 #[test]
 fn spec_constructor() {
+    // PJF preserves source blank lines (blank after { and between field/constructor)
     run_spec(
         "constructor",
         "public class Person {\n\n    private String name;\n\n    public Person(String name) {\n        this.name = name;\n    }\n}\n",
-        "public class Person {\n    private String name;\n\n    public Person(String name) {\n        this.name = name;\n    }\n}\n",
+        "public class Person {\n\n    private String name;\n\n    public Person(String name) {\n        this.name = name;\n    }\n}\n",
     );
 }
 
 #[test]
 fn spec_interface() {
+    // PJF preserves source blank lines between members
     run_spec(
         "interface",
         "public interface Printable {\n\n    void print();\n\n    String toString();\n}\n",
-        "public interface Printable {\n    void print();\n    String toString();\n}\n",
+        "public interface Printable {\n\n    void print();\n\n    String toString();\n}\n",
     );
 }
 

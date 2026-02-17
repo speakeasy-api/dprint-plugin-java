@@ -185,23 +185,15 @@ mod tests {
 
     #[test]
     fn exact_output_class_with_method() {
-        // Blank line after { is not preserved (PJF removes them in most cases)
         let input = "\
 public class Hello {
-
     public static void main(String[] args) {
         System.out.println(\"Hello, world!\");
     }
 }
 ";
-        let expected = "\
-public class Hello {
-    public static void main(String[] args) {
-        System.out.println(\"Hello, world!\");
-    }
-}
-";
-        format_and_check(input, expected);
+        // No blank line after { when source doesn't have one
+        format_and_check(input, input);
     }
 
     #[test]

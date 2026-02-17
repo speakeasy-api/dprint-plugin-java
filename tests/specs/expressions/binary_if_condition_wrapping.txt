@@ -21,6 +21,7 @@ public class Test {
 }
 == output ==
 public class Test {
+
     void test() {
         if (httpClientConfiguration.getRedactedHeaders() != null
                 && !httpClientConfiguration.getRedactedHeaders().isEmpty()) {

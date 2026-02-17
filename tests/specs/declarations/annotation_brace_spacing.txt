@@ -15,5 +15,6 @@ import java.lang.annotation.Target;
 @Target({ElementType.TYPE, ElementType.METHOD})
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class Test {
+
     int[] arr = new int[] {1, 2, 3};
 }

@@ -91,6 +91,19 @@ pub fn gen_block<'a>(
     if !prev_was_line_comment {
         items.push_signal(Signal::NewLine);
     }
+    // Preserve source blank line before closing `}`
+    if let Some(prev_row) = prev_end_row {
+        let close_brace_row = children
+            .iter()
+            .rev()
+            .find(|c| c.kind() == "}")
+            .map(|c| c.start_position().row);
+        if let Some(close_row) = close_brace_row {
+            if close_row > prev_row + 1 {
+                items.push_signal(Signal::NewLine);
+            }
+        }
+    }
     items.push_string("}".to_string());
 
     items
