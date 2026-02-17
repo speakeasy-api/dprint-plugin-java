@@ -202,6 +202,7 @@ pub fn gen_if_statement<'a>(
     let children: Vec<_> = node.children(&mut cursor).collect();
 
     let mut i = 0;
+    let mut prev_was_block = false;
     while i < children.len() {
         let child = children[i];
         match child.kind() {
@@ -215,19 +216,28 @@ pub fn gen_if_statement<'a>(
             }
             "block" => {
                 items.extend(gen_block(child, context));
+                prev_was_block = true;
             }
             "else" => {
-                items.extend(helpers::gen_space());
+                if prev_was_block {
+                    // After block: `} else` on same line
+                    items.extend(helpers::gen_space());
+                } else {
+                    // After brace-less statement: `else` on new line
+                    items.push_signal(Signal::NewLine);
+                }
                 items.push_string("else".to_string());
                 items.extend(helpers::gen_space());
+                prev_was_block = false;
             }
             "if_statement" => {
                 // else if: recursively format
                 items.extend(gen_if_statement(child, context));
             }
             _ if child.is_named() => {
-                // Non-block consequence (single statement) - wrap in block style
+                // Non-block consequence (single statement)
                 items.extend(gen_node(child, context));
+                prev_was_block = false;
             }
             _ => {}
         }

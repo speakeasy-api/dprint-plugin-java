@@ -1622,7 +1622,34 @@ pub fn gen_argument_list<'a>(
     let mut cursor = node.walk();
     let children: Vec<_> = node.children(&mut cursor).collect();
 
-    let args: Vec<_> = children.iter().filter(|c| c.is_named()).collect();
+    let args: Vec<_> = children
+        .iter()
+        .filter(|c| c.is_named() && !c.is_extra())
+        .collect();
+
+    // Collect comment (extra) nodes between arguments, keyed by the byte offset
+    // of the NEXT named arg they precede. Comments before the first arg are keyed
+    // by the first arg's start_byte.
+    let mut comments_before_arg: std::collections::HashMap<usize, Vec<tree_sitter::Node>> =
+        std::collections::HashMap::new();
+    {
+        let mut pending_comments: Vec<tree_sitter::Node> = Vec::new();
+        for child in &children {
+            if child.is_extra() {
+                pending_comments.push(*child);
+            } else if child.is_named() {
+                if !pending_comments.is_empty() {
+                    comments_before_arg.insert(child.start_byte(), pending_comments.clone());
+                    pending_comments.clear();
+                }
+            }
+        }
+        // Comments after the last arg (before ')') — attach to a sentinel key
+        if !pending_comments.is_empty() {
+            comments_before_arg.insert(usize::MAX, pending_comments);
+        }
+    }
+    let has_interleaved_comments = !comments_before_arg.is_empty();
 
     // Estimate the "flat" width of arguments (stripping embedded newlines).
     // For lambda expressions with block bodies, only count the header (params -> {)
@@ -1730,6 +1757,11 @@ pub fn gen_argument_list<'a>(
         indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize
     };
 
+    // Comments between arguments force one-per-line wrapping
+    if has_interleaved_comments {
+        fits_on_one_line = false;
+    }
+
     // PJF's preferBreakingLastInnerLevel: if any arg contains a method chain whose
     // last dot would exceed METHOD_CHAIN_COLUMN_LIMIT (80), force wrapping.
     // Check at both inline and continuation positions.
@@ -1763,6 +1795,11 @@ pub fn gen_argument_list<'a>(
     let continuation_indent = indent_width + (2 * context.config.indent_width as usize);
     let mut fits_on_continuation_line =
         continuation_indent + args_flat_width + 1 < context.config.line_width as usize;
+
+    // Comments between arguments force one-per-line (can't bin-pack with comments)
+    if has_interleaved_comments {
+        fits_on_continuation_line = false;
+    }
 
     // Also check at continuation position: if chain dots still exceed 80, force one-per-line
     if !fits_on_one_line
@@ -1808,10 +1845,24 @@ pub fn gen_argument_list<'a>(
         items.push_signal(Signal::StartIndent);
         context.add_continuation_indent(2);
         for (i, arg) in args.iter().enumerate() {
+            // Emit any comments that precede this arg
+            if let Some(comments) = comments_before_arg.get(&arg.start_byte()) {
+                for comment in comments {
+                    items.push_signal(Signal::NewLine);
+                    items.extend(gen_node(*comment, context));
+                }
+            }
             items.push_signal(Signal::NewLine);
             items.extend(gen_node(**arg, context));
             if i < args.len() - 1 {
                 items.push_string(",".to_string());
+            }
+        }
+        // Emit any trailing comments (after last arg, before ')')
+        if let Some(comments) = comments_before_arg.get(&usize::MAX) {
+            for comment in comments {
+                items.push_signal(Signal::NewLine);
+                items.extend(gen_node(*comment, context));
             }
         }
         context.remove_continuation_indent(2);
