@@ -98,18 +98,16 @@ pub fn gen_block<'a>(
         parent_kind,
         "method_declaration" | "constructor_declaration" | "static_initializer"
     );
-    if !strip_trailing_blank {
-        if let Some(prev_row) = prev_end_row {
-            let close_brace_row = children
-                .iter()
-                .rev()
-                .find(|c| c.kind() == "}")
-                .map(|c| c.start_position().row);
-            if let Some(close_row) = close_brace_row
-                && close_row > prev_row + 1
-            {
-                items.push_signal(Signal::NewLine);
-            }
+    if !strip_trailing_blank && let Some(prev_row) = prev_end_row {
+        let close_brace_row = children
+            .iter()
+            .rev()
+            .find(|c| c.kind() == "}")
+            .map(|c| c.start_position().row);
+        if let Some(close_row) = close_brace_row
+            && close_row > prev_row + 1
+        {
+            items.push_signal(Signal::NewLine);
         }
     }
     items.push_string("}".to_string());

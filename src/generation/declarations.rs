@@ -1637,11 +1637,9 @@ pub fn gen_argument_list<'a>(
         for child in &children {
             if child.is_extra() {
                 pending_comments.push(*child);
-            } else if child.is_named() {
-                if !pending_comments.is_empty() {
-                    comments_before_arg.insert(child.start_byte(), pending_comments.clone());
-                    pending_comments.clear();
-                }
+            } else if child.is_named() && !pending_comments.is_empty() {
+                comments_before_arg.insert(child.start_byte(), pending_comments.clone());
+                pending_comments.clear();
             }
         }
         // Comments after the last arg (before ')') — attach to a sentinel key
@@ -1846,15 +1844,12 @@ pub fn gen_argument_list<'a>(
         // continuation (inline-first-arg mode), set override so the inner
         // call knows its true column position for wrapping decisions.
         // Don't set override in chain context — chains handle their own layout.
-        if !is_in_chain {
-            if let Some(head_width) = single_arg_head_width {
-                let continuation_indent =
-                    indent_width + (2 * context.config.indent_width as usize);
-                let arg_fits_on_continuation =
-                    continuation_indent + args_flat_width + 1 < context.config.line_width as usize;
-                if !arg_fits_on_continuation {
-                    context.set_override_prefix_width(Some(prefix_width + head_width));
-                }
+        if !is_in_chain && let Some(head_width) = single_arg_head_width {
+            let continuation_indent = indent_width + (2 * context.config.indent_width as usize);
+            let arg_fits_on_continuation =
+                continuation_indent + args_flat_width + 1 < context.config.line_width as usize;
+            if !arg_fits_on_continuation {
+                context.set_override_prefix_width(Some(prefix_width + head_width));
             }
         }
         for (i, arg) in args.iter().enumerate() {

@@ -252,9 +252,9 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                         // Add blank line before comment (previous statement's newline + this newline = blank line)
                         // Exception: after imports, we only add ONE blank line total (not two)
                         if (prev_kind == Some("import_declaration")
-                        || prev_kind == Some("package_declaration"))
-                        && is_block_comment
-                    {
+                            || prev_kind == Some("package_declaration"))
+                            && is_block_comment
+                        {
                             // Add one newline to create the blank line (import already has its newline)
                             items.push_signal(Signal::NewLine);
                         } else {
@@ -449,8 +449,7 @@ fn gen_type_arguments<'a>(
         // in local variable declarations, but single continuation (+8 = 2 indent levels)
         // in class declaration contexts (extends/implements clauses).
         let indent_levels = if in_class_decl { 2 } else { 4 };
-        let continuation_col =
-            indent_width + indent_levels * context.config.indent_width as usize;
+        let continuation_col = indent_width + indent_levels * context.config.indent_width as usize;
         let all_fit_continuation = continuation_col + args_flat_width + 1 + trailing <= line_width; // args + ">" [+ " {"]
 
         items.push_string("<".to_string());
