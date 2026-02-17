@@ -122,6 +122,19 @@ pub fn gen_node<'a>(
             expressions::gen_explicit_constructor_invocation(node, context)
         }
 
+        // Static initializer: `static { ... }`
+        "static_initializer" => {
+            let mut items = PrintItems::new();
+            items.push_string("static".to_string());
+            for child in node.children(&mut node.walk()) {
+                if child.kind() == "block" {
+                    items.extend(helpers::gen_space());
+                    items.extend(statements::gen_block(child, context));
+                }
+            }
+            items
+        }
+
         // --- Fallback: emit source text unchanged ---
         _ => helpers::gen_node_text(node, context.source),
     };

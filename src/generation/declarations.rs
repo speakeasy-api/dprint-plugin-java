@@ -630,6 +630,7 @@ fn estimate_prefix_width(
     // Walk up ancestors to accumulate prefix from keywords/LHS that share the line.
     // Stop when we hit a node that may introduce a line break (e.g., variable_declarator
     // wraps at `=`, method_declaration can wrap return type from name).
+    let mut prev = parent;
     let mut ancestor = parent.parent();
     let parent_start_row = parent.start_position().row;
     while let Some(anc) = ancestor {
@@ -650,16 +651,28 @@ fn estimate_prefix_width(
                 // If the assignment is being wrapped at '=', the RHS starts on a new
                 // line at continuation indent — don't count LHS as prefix width.
                 if !assignment_wrapped {
-                    let lhs_text = &source[anc.start_byte()..parent.start_byte()];
+                    let lhs_text = &source[anc.start_byte()..prev.start_byte()];
                     let lhs_last_line = lhs_text.lines().last().unwrap_or(lhs_text);
                     width += lhs_last_line.trim_start().len();
                 }
                 break;
             }
+            "variable_declarator" | "local_variable_declaration" | "field_declaration" => {
+                // If the assignment already wrapped at '=', the RHS starts on a new
+                // line at continuation indent — don't count LHS as prefix width.
+                if !assignment_wrapped {
+                    let lhs_text = &source[anc.start_byte()..prev.start_byte()];
+                    let lhs_last_line = lhs_text.lines().last().unwrap_or(lhs_text);
+                    width += lhs_last_line.trim_start().len();
+                }
+                // Continue walking up if there's a containing declaration
+                prev = anc;
+                ancestor = anc.parent();
+            }
             // These are wrapping boundaries — stop walking
-            "variable_declarator" | "local_variable_declaration" | "field_declaration"
-            | "method_declaration" | "constructor_declaration" => break,
+            "method_declaration" | "constructor_declaration" => break,
             _ => {
+                prev = anc;
                 ancestor = anc.parent();
             }
         }
@@ -1364,45 +1377,6 @@ pub fn gen_variable_declarator<'a>(
     // Walk the parent node's children to reconstruct the flat width accurately,
     // mirroring how gen_field_declaration / gen_local_variable_declaration build the line.
     let has_value = children.iter().any(|c| c.kind() == "=");
-    // If the value is a ternary expression, skip variable declarator wrapping.
-    // The ternary's own wrapping logic will handle line-breaking before ? and :.
-    let value_is_ternary = children.iter().any(|c| c.kind() == "ternary_expression");
-    // If the value is a wrappable binary expression (&&, ||, or string +), skip variable
-    // declarator wrapping. The binary expression's own wrapping logic will handle line-breaking.
-    let value_is_wrappable_binary = children.iter().any(|c| {
-        if c.kind() == "binary_expression" {
-            let op = c
-                .children(&mut c.walk())
-                .find(|ch| !ch.is_named())
-                .map(|ch| &context.source[ch.start_byte()..ch.end_byte()]);
-            match op {
-                Some("&&") | Some("||") => true,
-                Some("+") => {
-                    // Check if it's string concatenation by looking for string_literal operands
-                    let mut cursor = c.walk();
-                    c.children(&mut cursor)
-                        .filter(|ch| ch.is_named())
-                        .any(|ch| {
-                            ch.kind() == "string_literal"
-                                || (ch.kind() == "binary_expression" && {
-                                    let inner_op = ch
-                                        .children(&mut ch.walk())
-                                        .find(|ic| !ic.is_named())
-                                        .map(|ic| &context.source[ic.start_byte()..ic.end_byte()]);
-                                    inner_op == Some("+")
-                                        && ch
-                                            .children(&mut ch.walk())
-                                            .filter(|ic| ic.is_named())
-                                            .any(|ic| ic.kind() == "string_literal")
-                                })
-                        })
-                }
-                _ => false,
-            }
-        } else {
-            false
-        }
-    });
     // If the value is an array_initializer with comments, skip variable declarator wrapping.
     // The array_initializer will expand to multiple lines on its own.
     let value_is_array_with_comments = children.iter().any(|c| {
@@ -1420,8 +1394,6 @@ pub fn gen_variable_declarator<'a>(
     // If the RHS is a single expression that fits on one line (even if the total line
     // with LHS exceeds line_width), we do NOT wrap at `=`.
     let wrap_value = has_value
-        && !value_is_ternary
-        && !value_is_wrappable_binary
         && !value_is_array_with_comments
         && {
             // Find the RHS value expression (the named child after `=`)
@@ -1589,9 +1561,9 @@ pub fn gen_variable_declarator<'a>(
                 }
             }
             _ if child.is_named() => {
-                // If we wrapped at '=' and the RHS is a chain, tell the chain
-                // wrapper that the assignment already wrapped (prefix is on prev line)
-                if wrap_value && saw_eq && child.kind() == "method_invocation" {
+                // If we wrapped at '=', tell downstream that the assignment is
+                // on a different line (prefix width should not include LHS)
+                if wrap_value && saw_eq {
                     context.set_assignment_wrapped(true);
                 }
                 items.extend(gen_node(child, context));

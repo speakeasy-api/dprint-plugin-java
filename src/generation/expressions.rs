@@ -112,17 +112,33 @@ pub fn gen_binary_expression<'a>(
             let (operands, operators) = flatten_wrappable_chain(node, context.source);
 
             let should_wrap = {
-                // Use the expression's source column + its own width to decide.
-                // This accounts for prefixes like "if (" or "return " without
-                // including trailing content (closing parens, other args) that
-                // would cause over-wrapping of short expressions.
                 let start_col = node.start_position().column;
                 let expr_text = &context.source[node.start_byte()..node.end_byte()];
                 let expr_flat_width: usize =
                     expr_text.lines().map(|l| l.trim().len()).sum::<usize>()
                         + expr_text.lines().count().saturating_sub(1);
 
-                start_col + expr_flat_width > context.config.line_width as usize
+                // For conditions inside if/while/for, account for trailing `) {`
+                let is_condition = node
+                    .parent()
+                    .and_then(|p| {
+                        if p.kind() == "parenthesized_expression" {
+                            p.parent()
+                        } else {
+                            None
+                        }
+                    })
+                    .map(|gp| {
+                        matches!(
+                            gp.kind(),
+                            "if_statement" | "while_statement" | "for_statement"
+                        )
+                    })
+                    .unwrap_or(false);
+
+                let suffix_width = if is_condition { 3 } else { 0 }; // `) {`
+
+                start_col + expr_flat_width + suffix_width > context.config.line_width as usize
             };
 
             if should_wrap {
