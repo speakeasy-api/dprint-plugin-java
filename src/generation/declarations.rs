@@ -1672,7 +1672,7 @@ pub fn gen_argument_list<'a>(
     };
 
     // Check if args fit on the same line as the prefix.
-    let fits_on_one_line = if args.is_empty() {
+    let mut fits_on_one_line = if args.is_empty() {
         true
     } else if args.len() == 1 && is_in_chain {
         // For single-arg calls in chains, keep inline — the chain handles layout.
@@ -1680,12 +1680,26 @@ pub fn gen_argument_list<'a>(
     } else if args.len() == 1
         && matches!(
             args[0].kind(),
-            "method_invocation" | "object_creation_expression"
+            "object_creation_expression" | "method_invocation"
         )
     {
-        // Single-arg method/constructor calls: keep inline so the inner call
-        // can handle its own arg wrapping. PJF keeps `outer(inner(` on one line.
-        true
+        // Single-arg method/constructor: keep inline so the inner call
+        // can handle its own arg wrapping — but ONLY if the line fits.
+        // Also check chain dot threshold for method invocations.
+        let line_fits =
+            indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize;
+        if !line_fits {
+            false
+        } else if args[0].kind() == "method_invocation" {
+            let dot_pos = super::expressions::rightmost_chain_dot(
+                *args[0],
+                context.source,
+                indent_width + prefix_width,
+            );
+            dot_pos <= context.config.method_chain_threshold as usize
+        } else {
+            true
+        }
     } else if args.len() == 1 && args[0].kind() == "binary_expression" {
         // Single-arg binary expressions (string concat, arithmetic, etc.) always
         // stay inline after '('. The binary expression wraps at its operators.
@@ -1694,10 +1708,45 @@ pub fn gen_argument_list<'a>(
         indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize
     };
 
+    // PJF's preferBreakingLastInnerLevel: if any arg contains a method chain whose
+    // last dot would exceed METHOD_CHAIN_COLUMN_LIMIT (80), force wrapping.
+    // Check at both inline and continuation positions.
+    let chain_threshold = context.config.method_chain_threshold as usize;
+
+    // Helper: check if any arg's chain dot exceeds threshold at given base column
+    let exceeds_chain_limit = |base_col: usize| -> bool {
+        let mut col = base_col;
+        for arg in args.iter() {
+            let text = &context.source[arg.start_byte()..arg.end_byte()];
+            let arg_width: usize = text.lines().map(|l| l.trim().len()).sum();
+            let dot_pos =
+                super::expressions::rightmost_chain_dot(**arg, context.source, col);
+            if dot_pos > chain_threshold {
+                return true;
+            }
+            col += arg_width + 2; // ", "
+        }
+        false
+    };
+
+    // Check at inline position: if chain dots exceed 80, break after "("
+    if fits_on_one_line && args.len() > 1 && !is_in_chain {
+        if exceeds_chain_limit(indent_width + prefix_width) {
+            fits_on_one_line = false;
+        }
+    }
+
     // If not, check if args fit on ONE continuation line (8-space indent = 2 levels of indent_width)
     let continuation_indent = indent_width + (2 * context.config.indent_width as usize);
-    let fits_on_continuation_line =
+    let mut fits_on_continuation_line =
         continuation_indent + args_flat_width + 1 < context.config.line_width as usize;
+
+    // Also check at continuation position: if chain dots still exceed 80, force one-per-line
+    if !fits_on_one_line && fits_on_continuation_line && args.len() > 1 {
+        if exceeds_chain_limit(continuation_indent) {
+            fits_on_continuation_line = false;
+        }
+    }
 
     items.push_string("(".to_string());
 

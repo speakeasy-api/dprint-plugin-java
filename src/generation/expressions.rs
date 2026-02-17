@@ -749,6 +749,54 @@ pub(super) fn chain_depth(node: tree_sitter::Node) -> usize {
     depth
 }
 
+/// Find the rightmost "last dot" position within any method chain in the expression.
+/// Returns the column position relative to `base_col` where the last `.method(...)` segment
+/// starts. For nested expressions, this walks into arguments to find deeply nested chains.
+/// Returns 0 if no chain dots are found.
+pub(super) fn rightmost_chain_dot(node: tree_sitter::Node, source: &str, base_col: usize) -> usize {
+    let text = &source[node.start_byte()..node.end_byte()];
+    let flat_width: usize = text.lines().map(|l| l.trim().len()).sum();
+
+    if node.kind() == "method_invocation" && chain_depth(node) >= 1 {
+        // This is a chain. Find the last dot position.
+        let name_w = node
+            .child_by_field_name("name")
+            .map(|n| n.end_byte() - n.start_byte())
+            .unwrap_or(0);
+        let args_w = node
+            .child_by_field_name("arguments")
+            .map(|a| {
+                let t = &source[a.start_byte()..a.end_byte()];
+                t.lines().map(|l| l.trim().len()).sum::<usize>()
+            })
+            .unwrap_or(0);
+        let last_seg_width = 1 + name_w + args_w; // ".name(args)"
+        base_col + flat_width.saturating_sub(last_seg_width)
+    } else if node.kind() == "method_invocation" {
+        // Single method call — check if args contain chains
+        if let Some(args_node) = node.child_by_field_name("arguments") {
+            let mut cursor = args_node.walk();
+            let mut max_dot = 0usize;
+            // Compute position of each arg based on preceding text
+            for child in args_node.children(&mut cursor) {
+                if child.is_named() {
+                    let child_offset: usize = {
+                        let before = &source[node.start_byte()..child.start_byte()];
+                        before.lines().map(|l| l.trim().len()).sum()
+                    };
+                    let dot_pos = rightmost_chain_dot(child, source, base_col + child_offset);
+                    max_dot = max_dot.max(dot_pos);
+                }
+            }
+            max_dot
+        } else {
+            0
+        }
+    } else {
+        0
+    }
+}
+
 /// Compute the width of the chain root + first segment for assignment wrapping decisions.
 /// For a chain like `AuthResponse.builder().contentType().statusCode()`, this returns
 /// (root_width="AuthResponse", first_seg_width=".builder()") so the caller can check

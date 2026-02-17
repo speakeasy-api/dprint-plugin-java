@@ -9,6 +9,31 @@ class Test {
                 rawResponse,
                 cause);
     }
+
+    // PJF splits to one-per-line when chain's last dot exceeds col 80 on continuation
+    void test2() {
+        assertEquals(Pet.builder().id("pet-foo-123").name("Fluffy").species("cat").build(), res.pet().orElse(null));
+    }
+
+    // Short enough: chain dot < col 80 on continuation — keep on one continuation line
+    void test3() {
+        assertEquals(Pet.builder().id("test").build(), Res.builder().id("abc").build());
+    }
+
+    // Single-arg method call: wrap when chain dot exceeds col 80
+    void test4() {
+        return Optional.of(UserSetupOutputs.builder().user(createRes.user().orElse(null)).build());
+    }
+
+    // Single-arg method call: short chain, stays inline
+    void test5() {
+        return Optional.of(Pet.builder().id("test").build());
+    }
+
+    // Single-arg constructor: always stays inline (PJF behavior)
+    void test6() {
+        params.add(new NameValue(metadata.name, Utils.valToString(unwrappedEnumValue.get())));
+    }
 }
 == output ==
 class Test {
@@ -16,5 +41,33 @@ class Test {
     void test1() {
         return new SDKException(
                 message, rawResponse.statusCode(), Utils.extractByteArrayFromBody(rawResponse), rawResponse, cause);
+    }
+
+    // PJF splits to one-per-line when chain's last dot exceeds col 80 on continuation
+    void test2() {
+        assertEquals(
+                Pet.builder().id("pet-foo-123").name("Fluffy").species("cat").build(),
+                res.pet().orElse(null));
+    }
+
+    // Short enough: chain dot < col 80 on continuation — keep on one continuation line
+    void test3() {
+        assertEquals(Pet.builder().id("test").build(), Res.builder().id("abc").build());
+    }
+
+    // Single-arg method call: wrap when chain dot exceeds col 80
+    void test4() {
+        return Optional.of(
+                UserSetupOutputs.builder().user(createRes.user().orElse(null)).build());
+    }
+
+    // Single-arg method call: short chain, stays inline
+    void test5() {
+        return Optional.of(Pet.builder().id("test").build());
+    }
+
+    // Single-arg constructor: always stays inline (PJF behavior)
+    void test6() {
+        params.add(new NameValue(metadata.name, Utils.valToString(unwrappedEnumValue.get())));
     }
 }

@@ -424,8 +424,7 @@ fn gen_type_arguments<'a>(
                     }
                 }
             }
-            let prefix_text =
-                &context.source[line_start.start_byte()..node.start_byte()];
+            let prefix_text = &context.source[line_start.start_byte()..node.start_byte()];
             let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
             (last_line.trim_start().len(), found_clause)
         } else {
@@ -433,8 +432,7 @@ fn gen_type_arguments<'a>(
         }
     };
 
-    let indent_width =
-        context.effective_indent_level() * context.config.indent_width as usize;
+    let indent_width = context.effective_indent_level() * context.config.indent_width as usize;
     let line_width = context.config.line_width as usize;
 
     // Check if type args fit inline: prefix + <args> must fit on line.
@@ -445,10 +443,8 @@ fn gen_type_arguments<'a>(
 
     if should_wrap {
         // Check if all type args fit on ONE continuation line (bin-packing)
-        let continuation_col =
-            indent_width + 2 * context.config.indent_width as usize;
-        let all_fit_continuation =
-            continuation_col + args_flat_width + 1 + trailing <= line_width; // args + ">" [+ " {"]
+        let continuation_col = indent_width + 2 * context.config.indent_width as usize;
+        let all_fit_continuation = continuation_col + args_flat_width + 1 + trailing <= line_width; // args + ">" [+ " {"]
 
         items.push_string("<".to_string());
         items.push_signal(Signal::StartIndent);
@@ -751,8 +747,7 @@ fn gen_annotation_argument_list<'a>(
     };
 
     let indent_col = context.indent_level() * context.config.indent_width as usize;
-    let annotation_total_width =
-        indent_col + annotation_prefix_width + flat_width;
+    let annotation_total_width = indent_col + annotation_prefix_width + flat_width;
     let exceeds_line_width = annotation_total_width > context.config.line_width as usize;
 
     // Force multi-line when:
