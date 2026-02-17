@@ -407,7 +407,8 @@ pub fn gen_method_declaration<'a>(
     let indent_width = context.indent_level() * context.config.indent_width as usize;
     let sig_width = estimate_method_sig_width(node, context.source);
     let line_width = context.config.line_width as usize;
-    let wrap_throws = indent_width + sig_width > line_width;
+    // +2 for the trailing " {" that follows the throws clause
+    let wrap_throws = indent_width + sig_width + 2 > line_width;
 
     // PJF: wrap between return type and method name when the signature is too long.
     // Example: `public CompletableFuture<VeryLongResponse>\n        methodName(params) {`
@@ -1498,16 +1499,29 @@ pub fn gen_variable_declarator<'a>(
                         }
                     }
                 } else {
-                    // Not a chain: use the old logic
-                    // Check 1: The RHS alone wouldn't fit on one line at continuation indent.
-                    let rhs_too_wide = continuation_indent + rhs_flat_width > line_width;
+                    // Anonymous class bodies always wrap at `=` (they're inherently multi-line)
+                    let is_anonymous_class = val.kind() == "object_creation_expression" && {
+                        let mut vc = val.walk();
+                        val.children(&mut vc).any(|c| c.kind() == "class_body")
+                    };
+                    if is_anonymous_class {
+                        let total_line_width =
+                            indent_col + lhs_width + 3 + rhs_flat_width + 1;
+                        total_line_width > line_width
+                    } else {
+                        // PJF-style: only break at `=` when the RHS fits on one continuation
+                        // line (breakOnlyIfInnerLevelsThenFitOnOneLine). If the RHS itself
+                        // is too wide, don't break at `=` — keep `= expr(` inline and let
+                        // the expression's internal wrapping (arg list, etc.) handle it.
+                        let rhs_fits_at_continuation =
+                            continuation_indent + rhs_flat_width <= line_width;
 
-                    // Check 2: The total line (indent + LHS + " = " + RHS + ";") exceeds line_width.
-                    // Add 1 for the trailing ";" from the parent declaration.
-                    let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
-                    let total_too_wide = total_line_width > line_width;
+                        let total_line_width =
+                            indent_col + lhs_width + 3 + rhs_flat_width + 1;
+                        let total_too_wide = total_line_width > line_width;
 
-                    rhs_too_wide || total_too_wide
+                        rhs_fits_at_continuation && total_too_wide
+                    }
                 }
             } else {
                 false
@@ -1577,14 +1591,45 @@ pub fn gen_argument_list<'a>(
 
     let args: Vec<_> = children.iter().filter(|c| c.is_named()).collect();
 
-    // Estimate the "flat" width of arguments (stripping embedded newlines)
+    // Estimate the "flat" width of arguments (stripping embedded newlines).
+    // For lambda expressions with block bodies, only count the header (params -> {)
+    // since the block body will always be on separate lines.
     let args_flat_width: usize = args
         .iter()
         .enumerate()
         .map(|(i, a)| {
-            let text = &context.source[a.start_byte()..a.end_byte()];
-            let flat: usize = text.lines().map(|l| l.trim().len()).sum();
-            flat + if i < args.len() - 1 { 2 } else { 0 }
+            let width = if a.kind() == "lambda_expression" {
+                // Find the block body child — if present, only measure up to "{"
+                let mut cursor = a.walk();
+                let has_block = a
+                    .children(&mut cursor)
+                    .any(|c| c.kind() == "block");
+                if has_block {
+                    // Lambda header: params + " -> {"
+                    let mut cursor2 = a.walk();
+                    let mut header_width = 0;
+                    for child in a.children(&mut cursor2) {
+                        if child.kind() == "block" {
+                            header_width += 1; // the "{"
+                            break;
+                        }
+                        let text = &context.source[child.start_byte()..child.end_byte()];
+                        if child.kind() == "->" {
+                            header_width += 4; // " -> "
+                        } else {
+                            header_width += text.len();
+                        }
+                    }
+                    header_width
+                } else {
+                    let text = &context.source[a.start_byte()..a.end_byte()];
+                    text.lines().map(|l| l.trim().len()).sum()
+                }
+            } else {
+                let text = &context.source[a.start_byte()..a.end_byte()];
+                text.lines().map(|l| l.trim().len()).sum()
+            };
+            width + if i < args.len() - 1 { 2 } else { 0 }
         })
         .sum();
 
