@@ -20,7 +20,7 @@ class Test {
         assertEquals(Pet.builder().id("test").build(), Res.builder().id("abc").build());
     }
 
-    // Single-arg method call: wrap when chain dot exceeds col 80
+    // Single-arg method call: chain wraps internally, keep outer call inline
     void test4() {
         return Optional.of(UserSetupOutputs.builder().user(createRes.user().orElse(null)).build());
     }
@@ -33,6 +33,17 @@ class Test {
     // Single-arg constructor: always stays inline (PJF behavior)
     void test6() {
         params.add(new NameValue(metadata.name, Utils.valToString(unwrappedEnumValue.get())));
+    }
+
+    // Single-arg method call that exceeds 120 chars at deep indent: wraps at "("
+    void test7() {
+        if (true) {
+            if (true) {
+                if (true) {
+                    return res.withObject(Utils.unmarshal(response, new TypeReference<GetEmptyObjectErrorResponseBody>() {}));
+                }
+            }
+        }
     }
 }
 == output ==
@@ -55,10 +66,9 @@ class Test {
         assertEquals(Pet.builder().id("test").build(), Res.builder().id("abc").build());
     }
 
-    // Single-arg method call: wrap when chain dot exceeds col 80
+    // Single-arg method call: chain wraps internally, keep outer call inline
     void test4() {
-        return Optional.of(
-                UserSetupOutputs.builder().user(createRes.user().orElse(null)).build());
+        return Optional.of(UserSetupOutputs.builder().user(createRes.user().orElse(null)).build());
     }
 
     // Single-arg method call: short chain, stays inline
@@ -69,5 +79,17 @@ class Test {
     // Single-arg constructor: always stays inline (PJF behavior)
     void test6() {
         params.add(new NameValue(metadata.name, Utils.valToString(unwrappedEnumValue.get())));
+    }
+
+    // Single-arg method call that exceeds 120 chars at deep indent: wraps at "("
+    void test7() {
+        if (true) {
+            if (true) {
+                if (true) {
+                    return res.withObject(
+                            Utils.unmarshal(response, new TypeReference<GetEmptyObjectErrorResponseBody>() {}));
+                }
+            }
+        }
     }
 }

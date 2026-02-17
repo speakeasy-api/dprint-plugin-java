@@ -1685,21 +1685,10 @@ pub fn gen_argument_list<'a>(
     {
         // Single-arg method/constructor: keep inline so the inner call
         // can handle its own arg wrapping — but ONLY if the line fits.
-        // Also check chain dot threshold for method invocations.
-        let line_fits =
-            indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize;
-        if !line_fits {
-            false
-        } else if args[0].kind() == "method_invocation" {
-            let dot_pos = super::expressions::rightmost_chain_dot(
-                *args[0],
-                context.source,
-                indent_width + prefix_width,
-            );
-            dot_pos <= context.config.method_chain_threshold as usize
-        } else {
-            true
-        }
+        // For chains, don't apply chain-dot check here; the chain wrapper
+        // handles internal wrapping (e.g., List.of(Builder.builder()...) keeps
+        // the class-ref prefix inline).
+        indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize
     } else if args.len() == 1 && args[0].kind() == "binary_expression" {
         // Single-arg binary expressions (string concat, arithmetic, etc.) always
         // stay inline after '('. The binary expression wraps at its operators.
