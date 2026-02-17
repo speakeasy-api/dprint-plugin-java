@@ -291,8 +291,9 @@ pub fn gen_method_invocation<'a>(
     // Adjust indent_col and prefix_width accordingly.
     let indent_width = context.config.indent_width as usize;
     let (indent_col, prefix_width) = if context.is_assignment_wrapped() {
-        // Assignment wrapped: chain is at continuation indent (base + 2*indent_width)
-        let cont_col = context.effective_indent_level() * indent_width + 2 * indent_width;
+        // Assignment wrapped: chain is at continuation indent, already tracked
+        // in effective_indent_level via add_continuation_indent(2)
+        let cont_col = context.effective_indent_level() * indent_width;
         (cont_col, 0)
     } else {
         // Use effective_indent_level to include continuation indent from
@@ -367,8 +368,9 @@ pub fn gen_method_invocation<'a>(
     }
 
     // Also check total line width (indent + prefix + chain) against line_width
+    // Use >= (not >) to match PJF's strict behavior (line_width is exclusive)
     let effective_position = indent_col + prefix_width + chain_flat_width;
-    let should_wrap = any_dot_exceeds || effective_position > line_width;
+    let should_wrap = any_dot_exceeds || effective_position >= line_width;
 
     let mut items = PrintItems::new();
     items.extend(gen_node(root, context));
@@ -649,8 +651,8 @@ pub fn chain_fits_inline_at(
         }
     }
 
-    // Total line position must fit within line_width
-    (col + total_width) <= line_width
+    // Total line position must fit within line_width (strict less-than, matching PJF)
+    (col + total_width) < line_width
 }
 
 /// Compute the width of content that precedes a chain on the same line.
@@ -1357,20 +1359,78 @@ pub fn gen_assignment_expression<'a>(
 ) -> PrintItems {
     let mut items = PrintItems::new();
 
-    // PJF never wraps assignment expressions at '='. For chain RHS, PJF keeps
-    // `LHS = root` on one line and uses chain-level wrapping. For non-chain RHS,
-    // the expression handles its own internal wrapping (arg lists, etc.).
     let mut cursor = node.walk();
+    let children: Vec<_> = node.children(&mut cursor).collect();
 
-    for child in node.children(&mut cursor) {
+    // Find the LHS, operator, and RHS
+    let lhs = node.child_by_field_name("left");
+    let rhs = node.child_by_field_name("right");
+
+    // Determine if we should wrap at '='
+    let wrap_at_eq = if let (Some(lhs_node), Some(rhs_node)) = (lhs, rhs) {
+        let is_chain =
+            rhs_node.kind() == "method_invocation" && chain_depth(rhs_node) >= 1;
+
+        if is_chain {
+            let indent_unit = context.config.indent_width as usize;
+            let indent_col = context.effective_indent_level() * indent_unit;
+            let lhs_text = &context.source[lhs_node.start_byte()..lhs_node.end_byte()];
+            let lhs_width = collapse_whitespace(lhs_text).len();
+
+            // Check if chain fits inline at current position (after "LHS = ")
+            let current_col = indent_col + lhs_width + 3;
+            let chain_fits_current =
+                chain_fits_inline_at(rhs_node, current_col, context.source, context.config);
+
+            if !chain_fits_current {
+                // Chain would wrap. Check if wrapping at '=' lets the chain stay inline.
+                let continuation_col = indent_col + 2 * indent_unit;
+                chain_fits_inline_at(
+                    rhs_node,
+                    continuation_col,
+                    context.source,
+                    context.config,
+                )
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    let mut saw_eq = false;
+    for child in &children {
         if child.is_named() {
-            items.extend(gen_node(child, context));
+            if wrap_at_eq && saw_eq {
+                context.set_assignment_wrapped(true);
+                context.add_continuation_indent(2);
+            }
+            items.extend(gen_node(*child, context));
+            if wrap_at_eq && saw_eq {
+                context.remove_continuation_indent(2);
+                context.set_assignment_wrapped(false);
+            }
         } else {
             let op = &context.source[child.start_byte()..child.end_byte()];
             items.extend(helpers::gen_space());
             items.push_string(op.to_string());
-            items.extend(helpers::gen_space());
+            saw_eq = true;
+            if wrap_at_eq {
+                items.push_signal(Signal::StartIndent);
+                items.push_signal(Signal::StartIndent);
+                items.push_signal(Signal::NewLine);
+            } else {
+                items.extend(helpers::gen_space());
+            }
         }
+    }
+
+    if wrap_at_eq {
+        items.push_signal(Signal::FinishIndent);
+        items.push_signal(Signal::FinishIndent);
     }
 
     items

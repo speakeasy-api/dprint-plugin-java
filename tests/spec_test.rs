@@ -1082,6 +1082,14 @@ fn spec_file_chain_inline_comments() {
     ));
 }
 
+#[test]
+fn spec_file_assignment_expression_wrapping() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/expressions/assignment_expression_wrapping.txt"
+    ));
+}
+
 // ---- Comments ----
 #[test]
 fn spec_file_trailing_whitespace() {

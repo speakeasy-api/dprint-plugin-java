@@ -1,0 +1,20 @@
+== input ==
+class TestHelpers {
+    static class AuthenticateOutputs {
+        private String token;
+        public AuthenticateOutputs(String token) {
+            this.token = Optional.ofNullable(token).orElseThrow(() -> new IllegalArgumentException("token cannot be null"));
+        }
+    }
+}
+== output ==
+class TestHelpers {
+    static class AuthenticateOutputs {
+        private String token;
+
+        public AuthenticateOutputs(String token) {
+            this.token =
+                    Optional.ofNullable(token).orElseThrow(() -> new IllegalArgumentException("token cannot be null"));
+        }
+    }
+}

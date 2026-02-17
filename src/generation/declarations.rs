@@ -610,7 +610,11 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
 ///
 /// Uses the parent-to-node text as the base measurement, then walks up
 /// ancestors to account for keywords/LHS that share the same line.
-fn estimate_prefix_width(node: tree_sitter::Node, source: &str) -> usize {
+fn estimate_prefix_width(
+    node: tree_sitter::Node,
+    source: &str,
+    assignment_wrapped: bool,
+) -> usize {
     let parent = match node.parent() {
         Some(p) => p,
         None => return 0,
@@ -643,10 +647,13 @@ fn estimate_prefix_width(node: tree_sitter::Node, source: &str) -> usize {
                 break;
             }
             "assignment_expression" => {
-                // Add LHS width: e.g., "this.baseUrl = " before the RHS
-                let lhs_text = &source[anc.start_byte()..parent.start_byte()];
-                let lhs_last_line = lhs_text.lines().last().unwrap_or(lhs_text);
-                width += lhs_last_line.trim_start().len();
+                // If the assignment is being wrapped at '=', the RHS starts on a new
+                // line at continuation indent — don't count LHS as prefix width.
+                if !assignment_wrapped {
+                    let lhs_text = &source[anc.start_byte()..parent.start_byte()];
+                    let lhs_last_line = lhs_text.lines().last().unwrap_or(lhs_text);
+                    width += lhs_last_line.trim_start().len();
+                }
                 break;
             }
             // These are wrapping boundaries — stop walking
@@ -1237,7 +1244,7 @@ pub fn gen_formal_parameters<'a>(
     // If the method name was wrapped to a continuation line, use the override prefix width.
     let prefix_width = context
         .take_override_prefix_width()
-        .unwrap_or_else(|| estimate_prefix_width(node, context.source));
+        .unwrap_or_else(|| estimate_prefix_width(node, context.source, context.is_assignment_wrapped()));
 
     // Suffix after closing paren: ") {" for methods/constructors with body (+4 for "(" + ") {"),
     // ");" for abstract methods (+3 for "(" + ");"), default +4 for safety.
@@ -1701,7 +1708,7 @@ pub fn gen_argument_list<'a>(
             .unwrap_or(0);
         1 + type_args_width + name_width // "." + type_args + name
     } else {
-        estimate_prefix_width(node, context.source)
+        estimate_prefix_width(node, context.source, context.is_assignment_wrapped())
     };
 
     // Check if args fit on the same line as the prefix.
