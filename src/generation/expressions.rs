@@ -1152,18 +1152,24 @@ pub fn gen_array_initializer<'a>(
         items.push_signal(Signal::StartIndent);
         let mut prev_was_line_comment = false;
 
-        // Collect named children so we can add trailing comma
         let all_children: Vec<_> = node.children(&mut cursor).collect();
 
-        // Count total named children for trailing comma logic
-        let named_count = all_children.iter().filter(|c| c.is_named()).count();
-        let mut named_idx = 0;
-
-        for child in &all_children {
+        for (ci, child) in all_children.iter().enumerate() {
             match child.kind() {
                 "{" | "}" => {}
                 "," => {
-                    items.push_string(",".to_string());
+                    // PJF removes trailing commas in annotation arrays but keeps them
+                    // in regular Java array initializers.
+                    if in_annotation {
+                        let has_more_elements = all_children[ci + 1..]
+                            .iter()
+                            .any(|c| c.is_named() && !c.is_extra());
+                        if has_more_elements {
+                            items.push_string(",".to_string());
+                        }
+                    } else {
+                        items.push_string(",".to_string());
+                    }
                 }
                 _ if child.is_extra() => {
                     // Comment node
@@ -1179,22 +1185,6 @@ pub fn gen_array_initializer<'a>(
                         items.push_signal(Signal::NewLine);
                     }
                     items.extend(gen_node(*child, context));
-                    named_idx += 1;
-
-                    // Add trailing comma after last element in annotation context
-                    // (PJF always adds trailing comma in expanded arrays)
-                    if force_expand && named_idx == named_count {
-                        // Check if there's already a comma following this element
-                        let has_trailing_comma = all_children
-                            .iter()
-                            .skip_while(|c| c.id() != child.id())
-                            .skip(1)
-                            .any(|c| c.kind() == ",");
-                        if !has_trailing_comma {
-                            items.push_string(",".to_string());
-                        }
-                    }
-
                     prev_was_line_comment = false;
                 }
                 _ => {}

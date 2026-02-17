@@ -25,7 +25,7 @@ class TestAlreadyWrapped {}
         properties = {
             "openapi.server-url=https://test.api.example.com",
             "openapi.server-idx=2",
-            "openapi.server-variables.subdomain=test",
+            "openapi.server-variables.subdomain=test"
         })
 public class TestArrayWrapping {}
 
@@ -45,6 +45,6 @@ class TestShortArrayStaysInline {}
         properties = {
             "openapi.server-url=https://test.api.example.com",
             "openapi.server-idx=2",
-            "openapi.server-variables.subdomain=test",
+            "openapi.server-variables.subdomain=test"
         })
 class TestAlreadyWrapped {}
