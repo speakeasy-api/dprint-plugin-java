@@ -161,22 +161,17 @@ pub fn gen_binary_expression<'a>(
             let (operands, operators) = flatten_wrappable_chain(node, context.source);
 
             let should_wrap = {
-                let indent_width = context.indent_level() * context.config.indent_width as usize;
+                // Use the expression's source column + its own width to decide.
+                // This accounts for prefixes like "if (" or "return " without
+                // including trailing content (closing parens, other args) that
+                // would cause over-wrapping of short expressions.
+                let start_col = node.start_position().column;
+                let expr_text = &context.source[node.start_byte()..node.end_byte()];
+                let expr_flat_width: usize =
+                    expr_text.lines().map(|l| l.trim().len()).sum::<usize>()
+                        + expr_text.lines().count().saturating_sub(1);
 
-                let line_start_byte = find_line_start_byte(node);
-
-                // Find the end of the source line to include trailing content like `) {` or `;`
-                let line_end_byte = context.source[node.end_byte()..]
-                    .find('\n')
-                    .map(|pos| node.end_byte() + pos)
-                    .unwrap_or(context.source.len());
-
-                let line_text = &context.source[line_start_byte..line_end_byte];
-                let line_flat_width: usize =
-                    line_text.lines().map(|l| l.trim().len()).sum::<usize>()
-                        + line_text.lines().count().saturating_sub(1);
-
-                indent_width + line_flat_width > context.config.line_width as usize
+                start_col + expr_flat_width > context.config.line_width as usize
             };
 
             if should_wrap {
