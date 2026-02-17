@@ -485,20 +485,21 @@ pub fn gen_method_invocation<'a>(
         let prefix_count = if root_is_class_ref {
             // Class-ref: always at least 1 (root + first method), plus any additional zero-arg
             1.max(zero_arg_prefix_count)
-        } else if zero_arg_prefix_count >= 1 && zero_arg_prefix_count < segments.len() {
-            // Consecutive zero-arg methods at start form the prefix
+        } else if zero_arg_prefix_count >= 2 && zero_arg_prefix_count < segments.len() {
+            // 2+ consecutive zero-arg methods form a strong prefix for non-class-ref roots
             // (e.g., headers.entrySet().stream() → prefix of 2)
-            // Only applies when not ALL segments are zero-arg (all-getter chains use threshold)
             zero_arg_prefix_count
-        } else {
-            // Either no zero-arg prefix, or ALL segments are zero-arg.
-            // Use threshold to decide if first segment stays inline.
+        } else if zero_arg_prefix_count == segments.len() {
+            // ALL segments are zero-arg (getter chain): use threshold for first segment
             let chain_threshold = context.config.method_chain_threshold as usize;
             if (indent_col + root_width + first_seg_width) > chain_threshold {
                 0
             } else {
                 1
             }
+        } else {
+            // 0 or 1 zero-arg prefix methods: wrap all segments (PJF behavior)
+            0
         };
 
         // Emit prefix segments inline, then wrap the rest

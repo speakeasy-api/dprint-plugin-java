@@ -16,7 +16,8 @@ class Test {
 class Test {
 
     void test() {
-        contextRunner.withUserConfiguration(CustomConfig.class)
+        contextRunner
+                .withUserConfiguration(CustomConfig.class)
                 .withPropertyValues("key=value")
                 .run(ctx -> {
                     assertThat(ctx).isNotNull();

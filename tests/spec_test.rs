@@ -1443,10 +1443,8 @@ fn spec_chain_short_root_first_inline() {
 
 #[test]
 fn spec_chain_wrap_first_when_long_root() {
-    // Long root + first segment exceeds column 80 -> ALL wrap
-    // veryLongReceiverName (20) + .firstMethod("some-long-argument-value-here") (42) = 62
-    // At indent 8: column 70 < 80, so first stays inline.
-    // But chain total > 80, so wrapping is triggered. First segment stays inline.
+    // Non-class-ref root with 0 zero-arg prefix methods.
+    // PJF wraps ALL segments when zero_arg_prefix_count < 2.
     run_spec(
         "chain_wrap_first_long",
         r#"class Test {
@@ -1458,7 +1456,8 @@ fn spec_chain_wrap_first_when_long_root() {
         r#"class Test {
 
     void test() {
-        veryLongReceiverName.firstMethod("some-long-argument-value-here")
+        veryLongReceiverName
+                .firstMethod("some-long-argument-value-here")
                 .secondMethod()
                 .thirdMethod();
     }
