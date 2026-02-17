@@ -14,8 +14,7 @@ class Test {
                 .client(testHttpClient)
                 .security(auth)
                 .build();
-        Deprecated1Response res = sdk.tag1()
-                .deprecated1()
+        Deprecated1Response res = sdk.tag1().deprecated1()
                 .serverURL("http://test-server-url.example.com/api")
                 .call();
     }

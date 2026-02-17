@@ -452,10 +452,13 @@ pub fn gen_method_invocation<'a>(
             };
 
         // PJF chain prefix detection:
-        // Class-reference roots (uppercase, e.g., SDK, AuthResponse, pkg.AuthResponse)
-        // form a "prefix" with the first method call that always stays inline.
-        // For other roots, the first segment wraps when root+first exceeds chain_threshold.
-        let chain_threshold = context.config.method_chain_threshold as usize;
+        // Determine how many initial segments form the "prefix" (stay inline with root).
+        //
+        // Rules (derived from PJF source analysis):
+        // 1. Class-ref roots (uppercase): root + first method always forms prefix
+        // 2. Non-class-ref roots: consecutive zero-arg methods from start form prefix,
+        //    but require ≥ 2 zero-arg methods (a single zero-arg method is not enough)
+        // 3. For 2-segment chains, the first segment stays inline (threshold-based)
         let root_is_class_ref = {
             let root_text = &context.source[root.start_byte()..root.end_byte()];
             let last_component = root_text.rsplit('.').next().unwrap_or(root_text);
@@ -464,20 +467,69 @@ pub fn gen_method_invocation<'a>(
                 .next()
                 .is_some_and(|c| c.is_ascii_uppercase())
         };
-        let wrap_first = if root_is_class_ref {
-            false // Class-ref prefix: root + first method always stay inline
+
+        // Count consecutive zero-arg methods from the start
+        let mut zero_arg_prefix_count = 0;
+        for (_, _, _, arg_list, _) in &segments {
+            let is_zero_arg = arg_list.map_or(true, |al| {
+                let mut c = al.walk();
+                !al.children(&mut c).any(|child| child.is_named())
+            });
+            if is_zero_arg {
+                zero_arg_prefix_count += 1;
+            } else {
+                break;
+            }
+        }
+
+        let prefix_count = if root_is_class_ref {
+            // Class-ref: always at least 1 (root + first method), plus any additional zero-arg
+            1.max(zero_arg_prefix_count)
+        } else if zero_arg_prefix_count >= 1 && zero_arg_prefix_count < segments.len() {
+            // Consecutive zero-arg methods at start form the prefix
+            // (e.g., headers.entrySet().stream() → prefix of 2)
+            // Only applies when not ALL segments are zero-arg (all-getter chains use threshold)
+            zero_arg_prefix_count
         } else {
-            (indent_col + root_width + first_seg_width) > chain_threshold
+            // Either no zero-arg prefix, or ALL segments are zero-arg.
+            // Use threshold to decide if first segment stays inline.
+            let chain_threshold = context.config.method_chain_threshold as usize;
+            if (indent_col + root_width + first_seg_width) > chain_threshold {
+                0
+            } else {
+                1
+            }
         };
 
-        if wrap_first {
-            // ALL segments wrap (including first)
-            items.push_signal(Signal::StartIndent);
-            items.push_signal(Signal::StartIndent);
-            // Track continuation indent for argument list width calculations
-            context.add_continuation_indent(2);
-            let mut prev_had_comment = false;
-            for (_, name_node, type_args, arg_list, trailing_comment) in &segments {
+        // Emit prefix segments inline, then wrap the rest
+        for (i, (_, name_node, type_args, arg_list, trailing_comment)) in
+            segments.iter().enumerate()
+        {
+            if i < prefix_count {
+                // Inline with root (prefix)
+                items.push_string(".".to_string());
+                if let Some(ta) = type_args {
+                    items.extend(gen_node(*ta, context));
+                }
+                items.extend(helpers::gen_node_text(*name_node, context.source));
+                if let Some(al) = arg_list {
+                    items.extend(gen_node(*al, context));
+                }
+                if let Some(tc) = trailing_comment {
+                    items.extend(helpers::gen_space());
+                    items.extend(gen_node(*tc, context));
+                }
+            } else if i == prefix_count {
+                // First wrapping segment — start indent block
+                items.push_signal(Signal::StartIndent);
+                items.push_signal(Signal::StartIndent);
+                context.add_continuation_indent(2);
+                // Check if previous prefix segment had a trailing comment
+                let prev_had_comment = if i > 0 {
+                    segments[i - 1].4.is_some()
+                } else {
+                    false
+                };
                 if !prev_had_comment {
                     items.push_signal(Signal::NewLine);
                 }
@@ -492,17 +544,13 @@ pub fn gen_method_invocation<'a>(
                 if let Some(tc) = trailing_comment {
                     items.extend(helpers::gen_space());
                     items.extend(gen_node(*tc, context));
-                    prev_had_comment = true;
-                } else {
-                    prev_had_comment = false;
                 }
-            }
-            context.remove_continuation_indent(2);
-            items.push_signal(Signal::FinishIndent);
-            items.push_signal(Signal::FinishIndent);
-        } else {
-            // Keep first segment inline with root, wrap subsequent segments
-            if let Some((_, name_node, type_args, arg_list, trailing_comment)) = segments.first() {
+            } else {
+                // Subsequent wrapping segments
+                let prev_had_comment = segments[i - 1].4.is_some();
+                if !prev_had_comment {
+                    items.push_signal(Signal::NewLine);
+                }
                 items.push_string(".".to_string());
                 if let Some(ta) = type_args {
                     items.extend(gen_node(*ta, context));
@@ -516,38 +564,12 @@ pub fn gen_method_invocation<'a>(
                     items.extend(gen_node(*tc, context));
                 }
             }
-
-            if segments.len() > 1 {
-                items.push_signal(Signal::StartIndent);
-                items.push_signal(Signal::StartIndent);
-                // Track continuation indent for argument list width calculations
-                context.add_continuation_indent(2);
-                let mut prev_had_comment =
-                    segments.first().and_then(|(_, _, _, _, tc)| *tc).is_some();
-                for (_, name_node, type_args, arg_list, trailing_comment) in &segments[1..] {
-                    if !prev_had_comment {
-                        items.push_signal(Signal::NewLine);
-                    }
-                    items.push_string(".".to_string());
-                    if let Some(ta) = type_args {
-                        items.extend(gen_node(*ta, context));
-                    }
-                    items.extend(helpers::gen_node_text(*name_node, context.source));
-                    if let Some(al) = arg_list {
-                        items.extend(gen_node(*al, context));
-                    }
-                    if let Some(tc) = trailing_comment {
-                        items.extend(helpers::gen_space());
-                        items.extend(gen_node(*tc, context));
-                        prev_had_comment = true;
-                    } else {
-                        prev_had_comment = false;
-                    }
-                }
-                context.remove_continuation_indent(2);
-                items.push_signal(Signal::FinishIndent);
-                items.push_signal(Signal::FinishIndent);
-            }
+        }
+        // Close indent block if any segments were wrapped
+        if prefix_count < segments.len() {
+            context.remove_continuation_indent(2);
+            items.push_signal(Signal::FinishIndent);
+            items.push_signal(Signal::FinishIndent);
         }
     } else {
         // Keep on one line

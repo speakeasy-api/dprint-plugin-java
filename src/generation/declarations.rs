@@ -1588,21 +1588,72 @@ pub fn gen_argument_list<'a>(
         })
         .sum();
 
+    // Detect if this argument_list is inside a chained method call.
+    // A call is "in a chain" if its parent method_invocation has a chained receiver
+    // (receiver is itself a method_invocation) or is itself a receiver in a chain
+    // (parent MI's parent is also a MI).
+    let is_in_chain = node.parent().is_some_and(|p| {
+        p.kind() == "method_invocation"
+            && (p.child_by_field_name("object")
+                .is_some_and(|obj| obj.kind() == "method_invocation")
+                || p.parent()
+                    .is_some_and(|gp| gp.kind() == "method_invocation"))
+    });
+
     // Use effective indent level (including continuation indent from wrapped chains)
     // only when we're actually inside a method invocation chain.
-    // For annotations and other contexts, use the base indent level.
-    let is_in_chain = context.has_ancestor("method_invocation");
     let indent_level = if is_in_chain {
         context.effective_indent_level()
     } else {
         context.indent_level()
     };
     let indent_width = indent_level * context.config.indent_width as usize;
-    let prefix_width = estimate_prefix_width(node, context.source);
+    let prefix_width = if is_in_chain {
+        // Inside a chain, the chain wrapper handles overall layout.
+        // Use only the immediate method/constructor name as prefix, not the full chain text.
+        let parent_node = node.parent();
+        let name_width = parent_node
+            .and_then(|p| p.child_by_field_name("name"))
+            .map(|n| {
+                let text = &context.source[n.start_byte()..n.end_byte()];
+                text.len()
+            })
+            .unwrap_or(0);
+        let type_args_width = parent_node
+            .and_then(|p| p.child_by_field_name("type_arguments"))
+            .map(|ta| {
+                let text = &context.source[ta.start_byte()..ta.end_byte()];
+                super::expressions::collapse_whitespace(text).len()
+            })
+            .unwrap_or(0);
+        1 + type_args_width + name_width // "." + type_args + name
+    } else {
+        estimate_prefix_width(node, context.source)
+    };
 
-    // Check if args fit on the same line as the prefix
-    let fits_on_one_line = args.len() <= 1
-        || indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize;
+    // Check if args fit on the same line as the prefix.
+    let fits_on_one_line = if args.is_empty() {
+        true
+    } else if args.len() == 1 && is_in_chain {
+        // For single-arg calls in chains, keep inline — the chain handles layout.
+        // The arg (often a nested builder chain) will wrap internally.
+        true
+    } else if args.len() == 1 && args[0].kind() == "binary_expression" {
+        // For single-arg binary expressions (e.g., string concat):
+        // If the whole thing fits within the chain threshold (80), keep inline.
+        // Otherwise, wrap at the paren only if the arg fits on a continuation line
+        // (wrapping would actually help). If it doesn't fit either way, keep inline
+        // and let the operator handle internal wrapping.
+        let total = indent_width + prefix_width + args_flat_width + 2;
+        if total <= context.config.method_chain_threshold as usize {
+            true
+        } else {
+            let continuation = indent_width + (2 * context.config.indent_width as usize);
+            continuation + args_flat_width + 1 >= context.config.line_width as usize
+        }
+    } else {
+        indent_width + prefix_width + args_flat_width + 2 < context.config.line_width as usize
+    };
 
     // If not, check if args fit on ONE continuation line (8-space indent = 2 levels of indent_width)
     let continuation_indent = indent_width + (2 * context.config.indent_width as usize);
