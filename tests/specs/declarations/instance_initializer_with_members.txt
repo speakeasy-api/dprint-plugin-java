@@ -16,6 +16,7 @@ class Test {
                 {
                     System.out.println("init");
                 }
+
                 @Override
                 public int compare(String a, String b) {
                     return a.length() - b.length();

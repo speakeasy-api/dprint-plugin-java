@@ -146,7 +146,7 @@ fn spec_constructor() {
     run_spec(
         "constructor",
         "public class Person {\n\n    private String name;\n\n    public Person(String name) {\n        this.name = name;\n    }\n}\n",
-        "public class Person {\n\n    private String name;\n\n    public Person(String name) {\n        this.name = name;\n    }\n}\n",
+        "public class Person {\n    private String name;\n\n    public Person(String name) {\n        this.name = name;\n    }\n}\n",
     );
 }
 
@@ -155,7 +155,7 @@ fn spec_interface() {
     run_spec(
         "interface",
         "public interface Printable {\n\n    void print();\n\n    String toString();\n}\n",
-        "public interface Printable {\n\n    void print();\n\n    String toString();\n}\n",
+        "public interface Printable {\n    void print();\n    String toString();\n}\n",
     );
 }
 
@@ -183,8 +183,8 @@ fn spec_field_with_initializer() {
 fn spec_if_else() {
     run_spec(
         "if_else",
-        "public class Test {\n\n    void test() {\n        if (x > 0) {\n            return;\n        } else {\n            throw new RuntimeException();\n        }\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        if (x > 0) {\n            return;\n        } else {\n            throw new RuntimeException();\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        if (x > 0) {\n            return;\n        } else {\n            throw new RuntimeException();\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        if (x > 0) {\n            return;\n        } else {\n            throw new RuntimeException();\n        }\n    }\n}\n",
     );
 }
 
@@ -192,8 +192,8 @@ fn spec_if_else() {
 fn spec_if_else_if() {
     run_spec(
         "if_else_if",
-        "public class Test {\n\n    void test() {\n        if (x > 0) {\n            a();\n        } else if (x < 0) {\n            b();\n        } else {\n            c();\n        }\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        if (x > 0) {\n            a();\n        } else if (x < 0) {\n            b();\n        } else {\n            c();\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        if (x > 0) {\n            a();\n        } else if (x < 0) {\n            b();\n        } else {\n            c();\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        if (x > 0) {\n            a();\n        } else if (x < 0) {\n            b();\n        } else {\n            c();\n        }\n    }\n}\n",
     );
 }
 
@@ -201,8 +201,8 @@ fn spec_if_else_if() {
 fn spec_for_loop() {
     run_spec(
         "for_loop",
-        "public class Test {\n\n    void test() {\n        for (int i = 0; i < 10; i++) {\n            doSomething(i);\n        }\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        for (int i = 0; i < 10; i++) {\n            doSomething(i);\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        for (int i = 0; i < 10; i++) {\n            doSomething(i);\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        for (int i = 0; i < 10; i++) {\n            doSomething(i);\n        }\n    }\n}\n",
     );
 }
 
@@ -210,8 +210,8 @@ fn spec_for_loop() {
 fn spec_enhanced_for() {
     run_spec(
         "enhanced_for",
-        "public class Test {\n\n    void test() {\n        for (String item : items) {\n            process(item);\n        }\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        for (String item : items) {\n            process(item);\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        for (String item : items) {\n            process(item);\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        for (String item : items) {\n            process(item);\n        }\n    }\n}\n",
     );
 }
 
@@ -219,8 +219,8 @@ fn spec_enhanced_for() {
 fn spec_while_loop() {
     run_spec(
         "while_loop",
-        "public class Test {\n\n    void test() {\n        while (running) {\n            tick();\n        }\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        while (running) {\n            tick();\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        while (running) {\n            tick();\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        while (running) {\n            tick();\n        }\n    }\n}\n",
     );
 }
 
@@ -228,8 +228,8 @@ fn spec_while_loop() {
 fn spec_try_catch_finally() {
     run_spec(
         "try_catch_finally",
-        "public class Test {\n\n    void test() {\n        try {\n            risky();\n        } catch (IOException e) {\n            handle(e);\n        } finally {\n            cleanup();\n        }\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        try {\n            risky();\n        } catch (IOException e) {\n            handle(e);\n        } finally {\n            cleanup();\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        try {\n            risky();\n        } catch (IOException e) {\n            handle(e);\n        } finally {\n            cleanup();\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        try {\n            risky();\n        } catch (IOException e) {\n            handle(e);\n        } finally {\n            cleanup();\n        }\n    }\n}\n",
     );
 }
 
@@ -246,8 +246,8 @@ fn spec_return_and_throw() {
 fn spec_do_while() {
     run_spec(
         "do_while",
-        "public class Test {\n\n    void test() {\n        do {\n            process();\n        } while (hasMore());\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        do {\n            process();\n        } while (hasMore());\n    }\n}\n",
+        "public class Test {\n    void test() {\n        do {\n            process();\n        } while (hasMore());\n    }\n}\n",
+        "public class Test {\n    void test() {\n        do {\n            process();\n        } while (hasMore());\n    }\n}\n",
     );
 }
 
@@ -257,8 +257,8 @@ fn spec_do_while() {
 fn spec_binary_expression() {
     run_spec(
         "binary_expression",
-        "public class Test {\n\n    void test() {\n        int x = a + b * c;\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        int x = a + b * c;\n    }\n}\n",
+        "public class Test {\n    void test() {\n        int x = a + b * c;\n    }\n}\n",
+        "public class Test {\n    void test() {\n        int x = a + b * c;\n    }\n}\n",
     );
 }
 
@@ -267,8 +267,8 @@ fn spec_method_chain() {
     // PJF per-dot check: no dot exceeds column 80, so chain stays inline
     run_spec(
         "method_chain",
-        "public class Test {\n\n    void test() {\n        list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());\n    }\n}\n",
+        "public class Test {\n    void test() {\n        list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());\n    }\n}\n",
+        "public class Test {\n    void test() {\n        list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList());\n    }\n}\n",
     );
 }
 
@@ -276,8 +276,8 @@ fn spec_method_chain() {
 fn spec_lambda() {
     run_spec(
         "lambda",
-        "public class Test {\n\n    void test() {\n        Runnable r = () -> {\n            doSomething();\n        };\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        Runnable r = () -> {\n            doSomething();\n        };\n    }\n}\n",
+        "public class Test {\n    void test() {\n        Runnable r = () -> {\n            doSomething();\n        };\n    }\n}\n",
+        "public class Test {\n    void test() {\n        Runnable r = () -> {\n            doSomething();\n        };\n    }\n}\n",
     );
 }
 
@@ -285,8 +285,8 @@ fn spec_lambda() {
 fn spec_ternary() {
     run_spec(
         "ternary",
-        "public class Test {\n\n    void test() {\n        int x = a > b ? a : b;\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        int x = a > b ? a : b;\n    }\n}\n",
+        "public class Test {\n    void test() {\n        int x = a > b ? a : b;\n    }\n}\n",
+        "public class Test {\n    void test() {\n        int x = a > b ? a : b;\n    }\n}\n",
     );
 }
 
@@ -294,8 +294,8 @@ fn spec_ternary() {
 fn spec_new_object() {
     run_spec(
         "new_object",
-        "public class Test {\n\n    void test() {\n        Object obj = new ArrayList<>(10);\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        Object obj = new ArrayList<>(10);\n    }\n}\n",
+        "public class Test {\n    void test() {\n        Object obj = new ArrayList<>(10);\n    }\n}\n",
+        "public class Test {\n    void test() {\n        Object obj = new ArrayList<>(10);\n    }\n}\n",
     );
 }
 
@@ -303,8 +303,8 @@ fn spec_new_object() {
 fn spec_cast_expression() {
     run_spec(
         "cast_expression",
-        "public class Test {\n\n    void test() {\n        String s = (String) obj;\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        String s = (String) obj;\n    }\n}\n",
+        "public class Test {\n    void test() {\n        String s = (String) obj;\n    }\n}\n",
+        "public class Test {\n    void test() {\n        String s = (String) obj;\n    }\n}\n",
     );
 }
 
@@ -312,8 +312,8 @@ fn spec_cast_expression() {
 fn spec_instanceof() {
     run_spec(
         "instanceof",
-        "public class Test {\n\n    void test() {\n        if (obj instanceof String) {\n            return;\n        }\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        if (obj instanceof String) {\n            return;\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        if (obj instanceof String) {\n            return;\n        }\n    }\n}\n",
+        "public class Test {\n    void test() {\n        if (obj instanceof String) {\n            return;\n        }\n    }\n}\n",
     );
 }
 
@@ -321,8 +321,8 @@ fn spec_instanceof() {
 fn spec_array_access() {
     run_spec(
         "array_access",
-        "public class Test {\n\n    void test() {\n        int x = arr[0];\n        arr[i] = value;\n    }\n}\n",
-        "public class Test {\n\n    void test() {\n        int x = arr[0];\n        arr[i] = value;\n    }\n}\n",
+        "public class Test {\n    void test() {\n        int x = arr[0];\n        arr[i] = value;\n    }\n}\n",
+        "public class Test {\n    void test() {\n        int x = arr[0];\n        arr[i] = value;\n    }\n}\n",
     );
 }
 

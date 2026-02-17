@@ -9,7 +9,6 @@ public class Test {
 }
 == output ==
 public class Test {
-
     void test() {
         throw new IllegalStateException("Security configuration is present but no security options are configured. "
                 + "Please configure at least one security option in your application properties.");

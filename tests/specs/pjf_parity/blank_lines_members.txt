@@ -22,5 +22,6 @@ public class SDK {
     }
 
     public void method1() {}
+
     public void method2() {}
 }

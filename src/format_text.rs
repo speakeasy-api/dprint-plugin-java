@@ -185,7 +185,8 @@ mod tests {
 
     #[test]
     fn exact_output_class_with_method() {
-        let expected = "\
+        // Blank line after { is not preserved (PJF removes them in most cases)
+        let input = "\
 public class Hello {
 
     public static void main(String[] args) {
@@ -193,7 +194,14 @@ public class Hello {
     }
 }
 ";
-        format_and_check(expected, expected);
+        let expected = "\
+public class Hello {
+    public static void main(String[] args) {
+        System.out.println(\"Hello, world!\");
+    }
+}
+";
+        format_and_check(input, expected);
     }
 
     #[test]
