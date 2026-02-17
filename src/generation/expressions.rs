@@ -56,55 +56,6 @@ fn is_wrappable_op(op: Option<&str>, node: tree_sitter::Node, source: &str) -> b
     }
 }
 
-/// Find the start byte of the containing statement/expression for line width calculation.
-/// Walks up through parent nodes to find the outermost construct that starts the logical line.
-fn find_line_start_byte(node: tree_sitter::Node) -> usize {
-    let mut current = node;
-    loop {
-        if let Some(parent) = current.parent() {
-            match parent.kind() {
-                "variable_declarator" => {
-                    if let Some(grandparent) = parent.parent() {
-                        match grandparent.kind() {
-                            "local_variable_declaration" | "field_declaration" => {
-                                return grandparent.start_byte();
-                            }
-                            _ => return current.start_byte(),
-                        }
-                    }
-                    return current.start_byte();
-                }
-                "parenthesized_expression" => {
-                    current = parent;
-                    continue;
-                }
-                "if_statement" | "while_statement" | "do_statement" => {
-                    return parent.start_byte();
-                }
-                "return_statement" | "throw_statement" => {
-                    return parent.start_byte();
-                }
-                "argument_list" => {
-                    if let Some(grandparent) = parent.parent() {
-                        match grandparent.kind() {
-                            "method_invocation"
-                            | "object_creation_expression"
-                            | "explicit_constructor_invocation" => {
-                                return grandparent.start_byte();
-                            }
-                            _ => {}
-                        }
-                    }
-                    return current.start_byte();
-                }
-                _ => return current.start_byte(),
-            }
-        } else {
-            return current.start_byte();
-        }
-    }
-}
-
 /// Format a binary expression: `a + b`, `x && y`, etc.
 ///
 /// For long chains of `&&`, `||`, or string `+` operators, wraps before each

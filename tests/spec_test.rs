@@ -1393,6 +1393,14 @@ fn spec_file_argument_list_nested_builders() {
 }
 
 #[test]
+fn spec_file_constructor_param_wrap() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/constructor_param_wrap.txt"
+    ));
+}
+
+#[test]
 fn spec_file_chain_first_call_wrap() {
     run_spec_file(concat!(
         env!("CARGO_MANIFEST_DIR"),

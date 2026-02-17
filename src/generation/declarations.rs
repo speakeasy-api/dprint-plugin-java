@@ -1239,8 +1239,23 @@ pub fn gen_formal_parameters<'a>(
         .take_override_prefix_width()
         .unwrap_or_else(|| estimate_prefix_width(node, context.source));
 
+    // Suffix after closing paren: ") {" for methods/constructors with body (+4 for "(" + ") {"),
+    // ");" for abstract methods (+3 for "(" + ");"), default +4 for safety.
+    let suffix_width = match node.parent().map(|p| p.kind()) {
+        Some("method_declaration" | "constructor_declaration") => {
+            // Check if the method has a body (block) or throws clause following params.
+            // If it has a throws clause, that adds more but wraps separately.
+            // Just account for the `) {` or `);` suffix.
+            let parent = node.parent().unwrap();
+            let has_body = parent.child_by_field_name("body").is_some();
+            if has_body { 4 } else { 3 } // "() {" vs "();"
+        }
+        _ => 2, // Just "()" for other contexts
+    };
+
     let should_wrap =
-        indent_width + prefix_width + param_text_width + 2 >= context.config.line_width as usize;
+        indent_width + prefix_width + param_text_width + suffix_width
+            >= context.config.line_width as usize;
 
     items.push_string("(".to_string());
 
@@ -1593,24 +1608,6 @@ pub fn gen_variable_declarator<'a>(
 ///
 /// Wraps with 8-space continuation indent when the argument list would
 /// exceed `line_width`. Uses stable width estimation based on `context.indent_level()`
-/// Check if an expression node can break internally (wrap at its own operators,
-/// arguments, or body). Used to decide whether a single-arg call should keep
-/// the arg inline — if the arg can break internally, we don't need to wrap at
-/// the outer paren.
-fn arg_can_break_internally(node: &tree_sitter::Node) -> bool {
-    matches!(
-        node.kind(),
-        "binary_expression"
-            | "method_invocation"
-            | "object_creation_expression"
-            | "lambda_expression"
-            | "ternary_expression"
-            | "conditional_expression"
-            | "cast_expression"
-            | "array_creation_expression"
-            | "array_initializer"
-    )
-}
 
 /// to avoid instability between formatting passes.
 ///

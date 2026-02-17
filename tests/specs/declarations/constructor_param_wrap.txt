@@ -1,0 +1,13 @@
+== input ==
+class Test {
+    public GetUserResponse(@Nonnull String contentType, int statusCode, @Nonnull HttpResponse<InputStream> rawResponse) {
+        doStuff();
+    }
+}
+== output ==
+class Test {
+    public GetUserResponse(
+            @Nonnull String contentType, int statusCode, @Nonnull HttpResponse<InputStream> rawResponse) {
+        doStuff();
+    }
+}
