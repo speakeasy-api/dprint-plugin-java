@@ -426,39 +426,14 @@ pub fn gen_method_invocation<'a>(
     items.extend(gen_node(root, context));
 
     if should_wrap {
-        // PJF-style wrapping with column-position check:
-        // Compute the width of root + first segment to decide if the first segment
-        // stays inline or wraps too.
-        let first_seg_width =
-            if let Some((_, name_node, type_args, arg_list, trailing_comment)) = segments.first() {
-                let mut w = 1; // '.'
-                let name_text = &context.source[name_node.start_byte()..name_node.end_byte()];
-                w += name_text.len();
-                if let Some(ta) = type_args {
-                    let ta_text = &context.source[ta.start_byte()..ta.end_byte()];
-                    w += collapse_whitespace(ta_text).len();
-                }
-                if let Some(al) = arg_list {
-                    let al_text = &context.source[al.start_byte()..al.end_byte()];
-                    w += collapse_whitespace(al_text).len();
-                }
-                if let Some(tc) = trailing_comment {
-                    let tc_text = &context.source[tc.start_byte()..tc.end_byte()];
-                    w += 1 + tc_text.len();
-                }
-                w
-            } else {
-                0
-            };
-
         // PJF chain prefix detection:
         // Determine how many initial segments form the "prefix" (stay inline with root).
         //
         // Rules (derived from PJF source analysis):
         // 1. Class-ref roots (uppercase): root + first method always forms prefix
-        // 2. Non-class-ref roots: consecutive zero-arg methods from start form prefix,
-        //    but require ≥ 2 zero-arg methods (a single zero-arg method is not enough)
-        // 3. For 2-segment chains, the first segment stays inline (threshold-based)
+        // 2. Method-call roots: no prefix (wrap all segments)
+        // 3. Non-class-ref roots with 3+ segments: first zero-arg method is prefix
+        // 4. Non-class-ref roots with ≤2 segments: no prefix (wrap all)
         let root_is_class_ref = {
             let root_text = &context.source[root.start_byte()..root.end_byte()];
             let last_component = root_text.rsplit('.').next().unwrap_or(root_text);
@@ -485,20 +460,20 @@ pub fn gen_method_invocation<'a>(
         let prefix_count = if root_is_class_ref {
             // Class-ref: always at least 1 (root + first method), plus any additional zero-arg
             1.max(zero_arg_prefix_count)
-        } else if zero_arg_prefix_count >= 2 && zero_arg_prefix_count < segments.len() {
-            // 2+ consecutive zero-arg methods form a strong prefix for non-class-ref roots
-            // (e.g., headers.entrySet().stream() → prefix of 2)
-            zero_arg_prefix_count
-        } else if zero_arg_prefix_count == segments.len() {
-            // ALL segments are zero-arg (getter chain): use threshold for first segment
-            let chain_threshold = context.config.method_chain_threshold as usize;
-            if (indent_col + root_width + first_seg_width) > chain_threshold {
-                0
-            } else {
-                1
-            }
+        } else if root.kind() == "method_invocation" {
+            // Bare method call root (e.g., someMethod().chain()): no prefix extension.
+            // PJF doesn't extend prefix past a method call boundary.
+            0
+        } else if segments.len() <= 2 {
+            // 2-segment chains: PJF wraps all segments with no prefix for
+            // non-class-ref roots (e.g., sdkConfiguration.hooks().afterError(...))
+            0
+        } else if zero_arg_prefix_count >= 1 {
+            // 3+ segment chains with identifier/field root: first zero-arg method
+            // is prefix (PJF behavior). e.g., sdk.tag1() stays inline, .deprecated1() wraps
+            1
         } else {
-            // 0 or 1 zero-arg prefix methods: wrap all segments (PJF behavior)
+            // No zero-arg prefix methods: wrap all segments
             0
         };
 

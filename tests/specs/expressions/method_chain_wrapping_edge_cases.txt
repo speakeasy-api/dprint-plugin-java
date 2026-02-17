@@ -28,8 +28,7 @@ public class Test {
         // Short chain stays on one line
         obj.method1().method2();
         // Longer chain with extra call to push over threshold
-        list
-                .<String>stream()
+        list.<String>stream()
                 .<Integer>map(x -> x.length())
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());

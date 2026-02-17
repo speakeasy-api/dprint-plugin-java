@@ -388,17 +388,18 @@ fn gen_type_arguments<'a>(
 
     // Estimate prefix width: everything on the current line before the `<`.
     // Walk up the tree to find the full prefix including keywords like `implements`.
-    let prefix_width = {
+    // Also detect if we're in a class declaration context (followed by ` {`).
+    let (prefix_width, in_class_decl) = {
         let parent = node.parent();
         if let Some(p) = parent {
-            // Walk up to the nearest clause node (superclass, super_interfaces,
-            // extends_interfaces) to include keywords like "implements" in the prefix.
             let mut line_start = p;
             let mut n = p;
+            let mut found_clause = false;
             while let Some(par) = n.parent() {
                 match par.kind() {
                     "superclass" | "super_interfaces" | "extends_interfaces" => {
                         line_start = par;
+                        found_clause = true;
                         break;
                     }
                     "class_declaration"
@@ -413,9 +414,9 @@ fn gen_type_arguments<'a>(
             let prefix_text =
                 &context.source[line_start.start_byte()..node.start_byte()];
             let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
-            last_line.trim_start().len()
+            (last_line.trim_start().len(), found_clause)
         } else {
-            0
+            (0, false)
         }
     };
 
@@ -423,9 +424,11 @@ fn gen_type_arguments<'a>(
         context.effective_indent_level() * context.config.indent_width as usize;
     let line_width = context.config.line_width as usize;
 
-    // Check if type args fit inline: prefix + <args> must fit on line
-    let total_inline = indent_width + prefix_width + 1 + args_flat_width + 1; // <args>
-    let should_wrap = type_args.len() > 1 && total_inline > line_width;
+    // Check if type args fit inline: prefix + <args> must fit on line.
+    // Add 2 for trailing " {" when in extends/implements context.
+    let trailing = if in_class_decl { 2 } else { 0 };
+    let total_inline = indent_width + prefix_width + 1 + args_flat_width + 1 + trailing; // <args> [+ " {"]
+    let should_wrap = total_inline > line_width;
 
     if should_wrap {
         items.push_string("<".to_string());
