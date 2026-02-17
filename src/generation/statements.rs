@@ -91,17 +91,25 @@ pub fn gen_block<'a>(
     if !prev_was_line_comment {
         items.push_signal(Signal::NewLine);
     }
-    // Preserve source blank line before closing `}`
-    if let Some(prev_row) = prev_end_row {
-        let close_brace_row = children
-            .iter()
-            .rev()
-            .find(|c| c.kind() == "}")
-            .map(|c| c.start_position().row);
-        if let Some(close_row) = close_brace_row
-            && close_row > prev_row + 1
-        {
-            items.push_signal(Signal::NewLine);
+    // PJF strips blank lines before closing `}` in method/constructor bodies
+    // but preserves them in other blocks (try, if, for, etc.)
+    let parent_kind = node.parent().map(|p| p.kind()).unwrap_or("");
+    let strip_trailing_blank = matches!(
+        parent_kind,
+        "method_declaration" | "constructor_declaration" | "static_initializer"
+    );
+    if !strip_trailing_blank {
+        if let Some(prev_row) = prev_end_row {
+            let close_brace_row = children
+                .iter()
+                .rev()
+                .find(|c| c.kind() == "}")
+                .map(|c| c.start_position().row);
+            if let Some(close_row) = close_brace_row
+                && close_row > prev_row + 1
+            {
+                items.push_signal(Signal::NewLine);
+            }
         }
     }
     items.push_string("}".to_string());

@@ -1403,6 +1403,22 @@ fn spec_file_argument_list_nested_builders() {
 }
 
 #[test]
+fn spec_file_package_no_imports_blank_line() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/package_no_imports_blank_line.txt"
+    ));
+}
+
+#[test]
+fn spec_file_interface_method_blank_lines() {
+    run_spec_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/specs/declarations/interface_method_blank_lines.txt"
+    ));
+}
+
+#[test]
 fn spec_file_constructor_param_wrap() {
     run_spec_file(concat!(
         env!("CARGO_MANIFEST_DIR"),

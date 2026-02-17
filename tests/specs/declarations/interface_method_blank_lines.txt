@@ -1,0 +1,20 @@
+== input ==
+public interface HookContext {
+    SDKConfiguration sdkConfiguration();
+    String baseUrl();
+    String operationId();
+    Optional<List<String>> oauthScopes();
+    Optional<SecuritySource> securitySource();
+}
+== output ==
+public interface HookContext {
+    SDKConfiguration sdkConfiguration();
+
+    String baseUrl();
+
+    String operationId();
+
+    Optional<List<String>> oauthScopes();
+
+    Optional<SecuritySource> securitySource();
+}

@@ -1845,9 +1845,10 @@ fn is_block_member(node: &tree_sitter::Node) -> bool {
     ) {
         return true;
     }
-    // method_declaration with a body (not abstract/interface methods ending with ;)
+    // All method declarations get blank lines between them (PJF behavior).
+    // This includes abstract/interface methods without bodies.
     if kind == "method_declaration" {
-        return node.child_by_field_name("body").is_some();
+        return true;
     }
     false
 }

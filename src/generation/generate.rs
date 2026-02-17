@@ -251,7 +251,10 @@ fn gen_program<'a>(node: tree_sitter::Node<'a>, context: &mut FormattingContext<
                     if prev_is_different_section && !prev_was_comment {
                         // Add blank line before comment (previous statement's newline + this newline = blank line)
                         // Exception: after imports, we only add ONE blank line total (not two)
-                        if prev_kind == Some("import_declaration") && is_block_comment {
+                        if (prev_kind == Some("import_declaration")
+                        || prev_kind == Some("package_declaration"))
+                        && is_block_comment
+                    {
                             // Add one newline to create the blank line (import already has its newline)
                             items.push_signal(Signal::NewLine);
                         } else {
