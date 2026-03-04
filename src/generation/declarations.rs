@@ -736,8 +736,15 @@ pub(super) fn estimate_prefix_width(
                 prev = anc;
                 ancestor = anc.parent();
             }
-            // These are wrapping boundaries — stop walking
-            "method_declaration" | "constructor_declaration" => break,
+            // These are wrapping/formatting boundaries — stop walking.
+            // argument_list and formal_parameters are formatting boundaries because
+            // the caller (chain formatter or parent arg list) handles layout above
+            // this level. Walking past them causes source-position-dependent instability
+            // since the row check depends on pre-format layout, not post-format layout.
+            "method_declaration"
+            | "constructor_declaration"
+            | "argument_list"
+            | "formal_parameters" => break,
             _ => {
                 prev = anc;
                 ancestor = anc.parent();
