@@ -56,7 +56,10 @@ pub unsafe extern "C" fn free(ptr: *mut u8) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn calloc(nmemb: usize, size: usize) -> *mut u8 {
     unsafe {
-        let total_size = nmemb.wrapping_mul(size);
+        let total_size = match nmemb.checked_mul(size) {
+            Some(s) => s,
+            None => return core::ptr::null_mut(), // overflow
+        };
         let usable = if total_size == 0 { 1 } else { total_size };
         let total = HEADER + usable;
         let layout = match Layout::from_size_align(total, ALIGN) {

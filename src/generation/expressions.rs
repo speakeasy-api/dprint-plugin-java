@@ -894,8 +894,9 @@ fn flatten_chain<'a>(
     node: tree_sitter::Node<'a>,
     segments: &mut Vec<ChainSegment<'a>>,
 ) -> tree_sitter::Node<'a> {
-    // Collect the chain in reverse (innermost first), then reverse at the end.
-    let mut chain = Vec::new();
+    // Collect the chain in reverse (innermost first) directly into segments,
+    // then reverse the appended portion at the end.
+    let start_len = segments.len();
     let mut current = node;
 
     loop {
@@ -914,7 +915,7 @@ fn flatten_chain<'a>(
         let trailing_comment = extract_trailing_line_comment(current);
 
         if let Some(name_node) = name {
-            chain.push(ChainSegment {
+            segments.push(ChainSegment {
                 name: name_node,
                 type_args,
                 arg_list,
@@ -928,17 +929,16 @@ fn flatten_chain<'a>(
             }
             Some(obj) => {
                 // Root object (e.g., field_access, identifier, etc.)
-                chain.reverse();
-                segments.extend(chain);
+                segments[start_len..].reverse();
                 return obj;
             }
             None => {
                 // No object — bare method call at the root of the chain.
-                // Pop the root entry from chain; the caller's gen_node(root)
-                // will format the bare call via gen_method_invocation_simple.
-                chain.pop();
-                chain.reverse();
-                segments.extend(chain);
+                // Pop the root entry from the appended portion; the caller's
+                // gen_node(root) will format the bare call via
+                // gen_method_invocation_simple.
+                segments.pop();
+                segments[start_len..].reverse();
                 return current;
             }
         }

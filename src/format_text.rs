@@ -350,6 +350,40 @@ public class Foo {
     }
 
     #[test]
+    fn sorts_static_imports_alphabetically() {
+        let input = "\
+package org.openapis.review.openapi;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+
+public class Tag2Tests {
+    void test() {}
+}
+";
+        let config = default_config();
+        let result = format_text(Path::new("Test.java"), input, &config)
+            .unwrap()
+            .unwrap_or_else(|| input.to_string());
+        let lines: Vec<&str> = result.lines().collect();
+        let import_lines: Vec<&&str> = lines
+            .iter()
+            .filter(|l| l.starts_with("import static"))
+            .collect();
+        assert_eq!(import_lines.len(), 2);
+        assert!(
+            import_lines[0].contains("assertArrayEquals"),
+            "assertArrayEquals should come first, got: {:?}",
+            import_lines
+        );
+        assert!(
+            import_lines[1].contains("assertEquals"),
+            "assertEquals should come second, got: {:?}",
+            import_lines
+        );
+    }
+
+    #[test]
     fn corrects_missing_spaces() {
         // Missing space before brace
         let input = "\
@@ -1045,6 +1079,186 @@ public class Application {
         if (res.body().isPresent()) {
             // handle response
         }
+    }
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn idempotent_wasm_crash_example() {
+        // This exact file crashes the WASM build with OOB memory access in flatten_chain
+        assert_idempotent(
+            r#"package hello.world;
+
+import java.lang.Exception;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
+import org.openapis.review.openapi.SDK;
+import org.openapis.review.openapi.models.errors.*;
+import org.openapis.review.openapi.models.errors.Error;
+import org.openapis.review.openapi.models.operations.PostTest2Response;
+import org.openapis.review.openapi.models.shared.*;
+
+public class Application {
+
+    public static void main(String[] args) throws BadRequestResponseException, Error, Test2ResponseException, Exception {
+
+        SDK sdk = SDK.builder()
+                .deprecatedQueryParam1("some example query param")
+                .deprecatedQueryParam2("some example query param")
+            .build();
+
+        PostTest2Response res = sdk.testGroup().tag2().postTest()
+                .test2Request(Test2Request.builder()
+                    .obj(ExhaustiveObject.builder()
+                        .str("example")
+                        .bool(true)
+                        .integer(999999L)
+                        .int32(1)
+                        .num(1.1)
+                        .float32(8499.3f)
+                        .date(LocalDate.parse("2020-01-01"))
+                        .dateTime(OffsetDateTime.parse("2020-01-01T00:00:00Z"))
+                        .anything("<value>")
+                        .int32Enum(Int32Enum.SIXTY_NINE)
+                        .bigint(new BigInteger("702830"))
+                        .decimalStr(new BigDecimal("3858.6"))
+                        .obj(SimpleObject.builder()
+                            .str("example")
+                            .build())
+                        .map(Map.ofEntries(
+                            Map.entry("key", SimpleObject.builder()
+                                .str("example")
+                                .build())))
+                        .arr(List.of(
+                            SimpleObject.builder()
+                                .str("example")
+                                .build(),
+                            SimpleObject.builder()
+                                .str("example")
+                                .build()))
+                        .any(Any.of(SimpleObject.builder()
+                            .str("example")
+                            .build()))
+                        .nullableStringEnum(NullableStringEnum.SECOND)
+                        .icon(Icon.TICK)
+                        .boolOpt(true)
+                        .intOptNull(999999L)
+                        .numOptNull(1.1)
+                        .intEnum(IntEnum.Third)
+                        .nullableIntEnum(NullableIntEnum.Third)
+                        .color(Color.GREEN)
+                        .heroWidth(HeroWidth.FOUR_HUNDRED_AND_EIGHTY)
+                        .build())
+                    .type(Type.SuperType1)
+                    .build())
+                .call();
+
+        if (res.body().isPresent()) {
+            // handle response
+        }
+    }
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn idempotent_tag2tests_real_file() {
+        // Exact content from a generated Tag2Tests.java — must be a fixed point.
+        assert_idempotent(
+            r#"/*
+ * Code generated by Speakeasy (https://speakeasy.com). DO NOT EDIT.
+ */
+package org.openapis.review.openapi;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.lang.Exception;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import org.openapis.review.openapi.models.operations.PostTest2Response;
+import org.openapis.review.openapi.models.shared.Any;
+import org.openapis.review.openapi.models.shared.Color;
+import org.openapis.review.openapi.models.shared.ExhaustiveObject;
+import org.openapis.review.openapi.models.shared.HeroWidth;
+import org.openapis.review.openapi.models.shared.Icon;
+import org.openapis.review.openapi.models.shared.Int32Enum;
+import org.openapis.review.openapi.models.shared.IntEnum;
+import org.openapis.review.openapi.models.shared.NullableIntEnum;
+import org.openapis.review.openapi.models.shared.NullableStringEnum;
+import org.openapis.review.openapi.models.shared.SimpleObject;
+import org.openapis.review.openapi.models.shared.Test2Request;
+import org.openapis.review.openapi.models.shared.Type;
+import org.openapis.review.openapi.utils.Utils;
+
+public class Tag2Tests {
+
+    @Test
+    public void testTag2_PostTest2() throws Exception {
+
+        var testHttpClient = Utils.createTestHTTPClient("postTest2");
+        SDK sdk = SDK.builder().client(testHttpClient).build();
+
+        PostTest2Response res = sdk.testGroup()
+                .tag2()
+                .postTest()
+                .serverURL(Utils.environmentVariable("TEST_SERVER_URL", "http://localhost:18080"))
+                .deprecatedQueryParam1("some example query param")
+                .deprecatedQueryParam2("some example query param")
+                .test2Request(Test2Request.builder()
+                        .obj(ExhaustiveObject.builder()
+                                .str("example")
+                                .bool(true)
+                                .integer(999999L)
+                                .int32(1)
+                                .num(1.1)
+                                .float32(8499.3f)
+                                .date(LocalDate.parse("2020-01-01"))
+                                .dateTime(OffsetDateTime.parse("2020-01-01T00:00:00Z"))
+                                .anything("<value>")
+                                .int32Enum(Int32Enum.SIXTY_NINE)
+                                .bigint(new BigInteger("702830"))
+                                .decimalStr(new BigDecimal("3858.6"))
+                                .obj(SimpleObject.builder().str("example").build())
+                                .map(Map.ofEntries(
+                                        Map.entry(
+                                                "key",
+                                                SimpleObject.builder()
+                                                        .str("example")
+                                                        .build())))
+                                .arr(List.of(
+                                        SimpleObject.builder().str("example").build(),
+                                        SimpleObject.builder().str("example").build()))
+                                .any(Any.of(SimpleObject.builder().str("example").build()))
+                                .nullableStringEnum(NullableStringEnum.SECOND)
+                                .icon(Icon.TICK)
+                                .boolOpt(true)
+                                .intOptNull(999999L)
+                                .numOptNull(1.1)
+                                .intEnum(IntEnum.Third)
+                                .nullableIntEnum(NullableIntEnum.Third)
+                                .color(Color.GREEN)
+                                .heroWidth(HeroWidth.FOUR_HUNDRED_AND_EIGHTY)
+                                .build())
+                        .type(Type.SuperType1)
+                        .build())
+                .call();
+        assertEquals(200, res.statusCode());
+        assertArrayEquals(
+                "0x20D83Acf0f".getBytes(StandardCharsets.UTF_8), res.body().orElse(null));
     }
 }
 "#,
