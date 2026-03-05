@@ -699,16 +699,21 @@ pub(super) fn estimate_prefix_width(
     // pass 2+, `source` is the output from the previous pass, so byte positions
     // refer to already-formatted text which changes between passes, causing instability.
     //
+    // Exception: Fixed keyword prefixes (like "return " or "throw ") are STABLE
+    // because they don't change between formatting passes, so we handle those below.
+    //
     // Instead, rely on:
     // 1. The immediate parent's prefix (calculated above)
-    // 2. effective_indent_level() in the caller (includes continuation indent)
-    // 3. assignment_wrapped flag to handle wrapped assignments
-    //
-    // This is more conservative but stable across formatting passes.
+    // 2. Fixed keyword prefixes for return/throw statements (stable)
+    // 3. effective_indent_level() in the caller (includes continuation indent)
+    // 4. assignment_wrapped flag to handle wrapped assignments
 
-    // Special case: if parent is a specific statement type where assignment wrapping
-    // affects the prefix width calculation
+    // Special case handling for certain parent node types.
+    // Return/throw statement prefixes are STABLE (fixed keywords), so we can use
+    // them without causing instability.
     match parent.kind() {
+        "return_statement" => 7, // "return " is a fixed keyword prefix
+        "throw_statement" => 6,  // "throw " is a fixed keyword prefix
         "assignment_expression" if assignment_wrapped => 0, // RHS is on continuation line
         "variable_declarator" if assignment_wrapped => 0,   // RHS is on continuation line
         _ => width,
