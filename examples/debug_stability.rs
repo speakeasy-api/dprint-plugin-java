@@ -1,6 +1,6 @@
-use std::path::Path;
-use dprint_plugin_java::{configuration::Configuration, format_text};
 use dprint_core::configuration::NewLineKind;
+use dprint_plugin_java::{configuration::Configuration, format_text};
+use std::path::Path;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -72,7 +72,8 @@ fn print_diff(a: &str, b: &str) {
     for (i, (line_a, line_b)) in lines_a.iter().zip(lines_b.iter()).enumerate() {
         if line_a != line_b {
             diff_count += 1;
-            if diff_count <= 20 { // Only show first 20 diffs
+            if diff_count <= 20 {
+                // Only show first 20 diffs
                 println!("Line {}:", i + 1);
                 println!("  - {:?}", line_a);
                 println!("  + {:?}", line_b);

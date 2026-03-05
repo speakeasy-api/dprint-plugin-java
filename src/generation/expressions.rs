@@ -91,16 +91,19 @@ pub fn gen_binary_expression<'a>(
             // Force inline for stability - array element wrapping would cause oscillation
         } else {
             let is_nested_in_chain = if let Some(parent) = node.parent() {
-            if parent.kind() == "binary_expression" {
-                let parent_children: Vec<_> = parent.children(&mut parent.walk()).collect();
-                let right_child = parent_children.iter().rev().find(|c| c.is_named());
-                if let Some(right) = right_child {
-                    if right.id() == node.id() {
-                        let parent_op = parent_children
-                            .iter()
-                            .find(|c| !c.is_named())
-                            .map(|c| context.source[c.start_byte()..c.end_byte()].to_string());
-                        is_wrappable_op(parent_op.as_deref(), parent, context.source)
+                if parent.kind() == "binary_expression" {
+                    let parent_children: Vec<_> = parent.children(&mut parent.walk()).collect();
+                    let right_child = parent_children.iter().rev().find(|c| c.is_named());
+                    if let Some(right) = right_child {
+                        if right.id() == node.id() {
+                            let parent_op = parent_children
+                                .iter()
+                                .find(|c| !c.is_named())
+                                .map(|c| context.source[c.start_byte()..c.end_byte()].to_string());
+                            is_wrappable_op(parent_op.as_deref(), parent, context.source)
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
@@ -109,92 +112,92 @@ pub fn gen_binary_expression<'a>(
                 }
             } else {
                 false
-            }
-        } else {
-            false
-        };
+            };
 
-        if !is_nested_in_chain {
-            let (operands, operators) = flatten_wrappable_chain(node, context.source);
+            if !is_nested_in_chain {
+                let (operands, operators) = flatten_wrappable_chain(node, context.source);
 
-            let should_wrap = {
-                // Calculate the formatted column position, not the source column.
-                // Source column changes between passes as code is reformatted, causing
-                // instability. Instead, use context's effective indent level and check
-                // if a parent has set an override for more accurate position tracking.
-                let effective_indent = context.effective_indent_level() * context.config.indent_width as usize;
-                // If a parent (like argument_list) has set an override, use that instead of estimating.
-                let prefix_width = context.take_override_prefix_width().unwrap_or_else(|| {
-                    // For standalone expressions in statements, estimate the prefix.
-                    // This includes "return ", "throw ", "if (", etc.
-                    super::declarations::estimate_prefix_width(
-                        node,
-                        context.source,
-                        context.is_assignment_wrapped(),
-                    )
-                });
-
-                // IMPORTANT: Do NOT extract text from source to compute flat width, as source
-                // changes between formatting passes (formatted output becomes source for next pass).
-                // Instead, compute flat width by walking the operands and operators.
-                let expr_flat_width: usize = {
-                    let mut width = 0;
-                    for (i, operand) in operands.iter().enumerate() {
-                        // Use the original source text for leaf nodes (identifiers, literals).
-                        // For composite nodes, recursively sum up their leaf text.
-                        let operand_text = &context.source[operand.start_byte()..operand.end_byte()];
-                        width += collapse_whitespace_len(operand_text);
-
-                        if i < operators.len() {
-                            width += 3; // " op " (space + operator + space)
-                        }
-                    }
-                    width
-                };
-
-                // For conditions inside if/while/for, account for trailing `) {`
-                let is_condition = node
-                    .parent()
-                    .and_then(|p| {
-                        if p.kind() == "parenthesized_expression" {
-                            p.parent()
-                        } else {
-                            None
-                        }
-                    })
-                    .is_some_and(|gp| {
-                        matches!(
-                            gp.kind(),
-                            "if_statement" | "while_statement" | "for_statement"
+                let should_wrap = {
+                    // Calculate the formatted column position, not the source column.
+                    // Source column changes between passes as code is reformatted, causing
+                    // instability. Instead, use context's effective indent level and check
+                    // if a parent has set an override for more accurate position tracking.
+                    let effective_indent =
+                        context.effective_indent_level() * context.config.indent_width as usize;
+                    // If a parent (like argument_list) has set an override, use that instead of estimating.
+                    let prefix_width = context.take_override_prefix_width().unwrap_or_else(|| {
+                        // For standalone expressions in statements, estimate the prefix.
+                        // This includes "return ", "throw ", "if (", etc.
+                        super::declarations::estimate_prefix_width(
+                            node,
+                            context.source,
+                            context.is_assignment_wrapped(),
                         )
                     });
 
-                let suffix_width = if is_condition { 3 } else { 0 }; // `) {`
+                    // IMPORTANT: Do NOT extract text from source to compute flat width, as source
+                    // changes between formatting passes (formatted output becomes source for next pass).
+                    // Instead, compute flat width by walking the operands and operators.
+                    let expr_flat_width: usize = {
+                        let mut width = 0;
+                        for (i, operand) in operands.iter().enumerate() {
+                            // Use the original source text for leaf nodes (identifiers, literals).
+                            // For composite nodes, recursively sum up their leaf text.
+                            let operand_text =
+                                &context.source[operand.start_byte()..operand.end_byte()];
+                            width += collapse_whitespace_len(operand_text);
 
-                effective_indent + prefix_width + expr_flat_width + suffix_width > context.config.line_width as usize
-            };
+                            if i < operators.len() {
+                                width += 3; // " op " (space + operator + space)
+                            }
+                        }
+                        width
+                    };
 
-            if should_wrap {
-                let mut items = PrintItems::new();
+                    // For conditions inside if/while/for, account for trailing `) {`
+                    let is_condition = node
+                        .parent()
+                        .and_then(|p| {
+                            if p.kind() == "parenthesized_expression" {
+                                p.parent()
+                            } else {
+                                None
+                            }
+                        })
+                        .is_some_and(|gp| {
+                            matches!(
+                                gp.kind(),
+                                "if_statement" | "while_statement" | "for_statement"
+                            )
+                        });
 
-                items.extend(gen_node(operands[0], context));
-                items.start_indent();
-                items.start_indent();
+                    let suffix_width = if is_condition { 3 } else { 0 }; // `) {`
 
-                for (i, op) in operators.iter().enumerate() {
-                    items.newline();
-                    items.push_str(op);
-                    items.space();
-                    items.extend(gen_node(operands[i + 1], context));
+                    effective_indent + prefix_width + expr_flat_width + suffix_width
+                        > context.config.line_width as usize
+                };
+
+                if should_wrap {
+                    let mut items = PrintItems::new();
+
+                    items.extend(gen_node(operands[0], context));
+                    items.start_indent();
+                    items.start_indent();
+
+                    for (i, op) in operators.iter().enumerate() {
+                        items.newline();
+                        items.push_str(op);
+                        items.space();
+                        items.extend(gen_node(operands[i + 1], context));
+                    }
+
+                    items.finish_indent();
+                    items.finish_indent();
+
+                    return items;
                 }
-
-                items.finish_indent();
-                items.finish_indent();
-
-                return items;
             }
         }
-        } // closes the `else` block for `in_array_initializer`
     }
 
     // Default: inline formatting
@@ -752,7 +755,10 @@ pub fn chain_fits_inline_at(
 ///
 /// This version uses stable, context-based calculations instead of source positions
 /// to avoid formatting instability.
-fn compute_chain_prefix_width_stable(node: tree_sitter::Node, context: &FormattingContext) -> usize {
+fn compute_chain_prefix_width_stable(
+    node: tree_sitter::Node,
+    context: &FormattingContext,
+) -> usize {
     let parent = node.parent();
     match parent.map(|p| p.kind()) {
         Some("assignment_expression") => {
