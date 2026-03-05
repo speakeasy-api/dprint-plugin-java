@@ -97,7 +97,8 @@ class Test {
         if (true) {
             if (true) {
                 if (true) {
-                    return res.withObject(Utils.unmarshal(response, new TypeReference<GetEmptyObjectErrorResponseBody>() {}));
+                    return res.withObject(
+                            Utils.unmarshal(response, new TypeReference<GetEmptyObjectErrorResponseBody>() {}));
                 }
             }
         }
@@ -105,7 +106,8 @@ class Test {
 
     // Single-arg: binary expression with chain dot exceeding col 80 — wraps at "("
     void test8() {
-        throw new IllegalArgumentException("Unknown value type: " + value.getClass().getName());
+        throw new IllegalArgumentException(
+                "Unknown value type: " + value.getClass().getName());
     }
 
     // Single-arg: arg does NOT fit on continuation, uses inline-first-arg
