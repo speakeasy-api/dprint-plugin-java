@@ -692,75 +692,27 @@ pub(super) fn estimate_prefix_width(
 
     // Only consider the last line to handle multiline modifiers/annotations
     let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
-    let mut width = last_line.trim_start().len();
+    let width = last_line.trim_start().len();
 
-    // Walk up ancestors to accumulate prefix from keywords/LHS that share the line.
-    // Stop when we hit a node that may introduce a line break (e.g., variable_declarator
-    // wraps at `=`, method_declaration can wrap return type from name).
-    let mut prev = parent;
-    let mut ancestor = parent.parent();
-    let parent_start_row = parent.start_position().row;
-    while let Some(anc) = ancestor {
-        // Only add prefix from ancestors that start on the same source line
-        if anc.start_position().row != parent_start_row {
-            break;
-        }
-        match anc.kind() {
-            "return_statement" => {
-                width += 7; // "return "
-                break;
-            }
-            "throw_statement" => {
-                width += 6; // "throw "
-                break;
-            }
-            "assignment_expression" => {
-                // If the assignment is being wrapped at '=', the RHS starts on a new
-                // line at continuation indent — don't count LHS as prefix width.
-                if !assignment_wrapped {
-                    let lhs_text = &source[anc.start_byte()..prev.start_byte()];
-                    let lhs_last_line = lhs_text.lines().last().unwrap_or(lhs_text);
-                    width += lhs_last_line.trim_start().len();
-                }
-                break;
-            }
-            "variable_declarator" | "local_variable_declaration" | "field_declaration" => {
-                // If the assignment already wrapped at '=', the RHS starts on a new
-                // line at continuation indent — don't count LHS as prefix width.
-                if !assignment_wrapped {
-                    let lhs_text = &source[anc.start_byte()..prev.start_byte()];
-                    let lhs_last_line = lhs_text.lines().last().unwrap_or(lhs_text);
-                    width += lhs_last_line.trim_start().len();
-                }
-                // Continue walking up if there's a containing declaration
-                prev = anc;
-                ancestor = anc.parent();
-            }
-            // These are wrapping/formatting boundaries — stop walking.
-            // argument_list and formal_parameters are formatting boundaries because
-            // the caller (chain formatter or parent arg list) handles layout above
-            // this level. Walking past them causes source-position-dependent instability
-            // since the row check depends on pre-format layout, not post-format layout.
-            // Also stop at statement types which are formatting boundaries.
-            "method_declaration"
-            | "constructor_declaration"
-            | "argument_list"
-            | "formal_parameters"
-            | "if_statement"
-            | "while_statement"
-            | "for_statement"
-            | "enhanced_for_statement"
-            | "do_statement"
-            | "block"
-            | "expression_statement" => break,
-            _ => {
-                prev = anc;
-                ancestor = anc.parent();
-            }
-        }
+    // IMPORTANT: Do NOT walk up ancestors to accumulate more prefix width, as that
+    // requires extracting text from `source` using byte positions. On formatting
+    // pass 2+, `source` is the output from the previous pass, so byte positions
+    // refer to already-formatted text which changes between passes, causing instability.
+    //
+    // Instead, rely on:
+    // 1. The immediate parent's prefix (calculated above)
+    // 2. effective_indent_level() in the caller (includes continuation indent)
+    // 3. assignment_wrapped flag to handle wrapped assignments
+    //
+    // This is more conservative but stable across formatting passes.
+
+    // Special case: if parent is a specific statement type where assignment wrapping
+    // affects the prefix width calculation
+    match parent.kind() {
+        "assignment_expression" if assignment_wrapped => 0, // RHS is on continuation line
+        "variable_declarator" if assignment_wrapped => 0,   // RHS is on continuation line
+        _ => width,
     }
-
-    width
 }
 
 /// Estimate the width of a class/interface/enum/record declaration line
@@ -2045,6 +1997,9 @@ pub fn gen_argument_list<'a>(
     // Estimate the "flat" width of arguments (stripping embedded newlines).
     // For lambda expressions with block bodies, only count the header (params -> {)
     // since the block body will always be on separate lines.
+    // IMPORTANT: Use collapse_whitespace_len instead of extracting/splitting text,
+    // as source changes between formatting passes (formatted output becomes source
+    // for next pass), causing instability.
     let args_flat_width: usize = args
         .iter()
         .enumerate()
@@ -2066,17 +2021,17 @@ pub fn gen_argument_list<'a>(
                         if child.kind() == "->" {
                             header_width += 4; // " -> "
                         } else {
-                            header_width += text.len();
+                            header_width += collapse_whitespace_len(text);
                         }
                     }
                     header_width
                 } else {
                     let text = &context.source[a.start_byte()..a.end_byte()];
-                    text.lines().map(|l| l.trim().len()).sum()
+                    collapse_whitespace_len(text)
                 }
             } else {
                 let text = &context.source[a.start_byte()..a.end_byte()];
-                text.lines().map(|l| l.trim().len()).sum()
+                collapse_whitespace_len(text)
             };
             width + if i < args.len() - 1 { 2 } else { 0 }
         })

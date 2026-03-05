@@ -75,7 +75,22 @@ pub fn gen_binary_expression<'a>(
     let is_wrappable = is_wrappable_op(operator.as_deref(), node, context.source);
 
     if is_wrappable {
-        let is_nested_in_chain = if let Some(parent) = node.parent() {
+        // Check if this binary expression is inside an array_initializer
+        // If so, always use inline format to avoid instability from array wrapping
+        let in_array_initializer = node.parent().is_some_and(|p| {
+            if p.kind() == "array_initializer" {
+                true
+            } else {
+                // Check grandparent too (might be nested in parentheses, etc.)
+                p.parent()
+                    .is_some_and(|gp| gp.kind() == "array_initializer")
+            }
+        });
+
+        if in_array_initializer {
+            // Force inline for stability - array element wrapping would cause oscillation
+        } else {
+            let is_nested_in_chain = if let Some(parent) = node.parent() {
             if parent.kind() == "binary_expression" {
                 let parent_children: Vec<_> = parent.children(&mut parent.walk()).collect();
                 let right_child = parent_children.iter().rev().find(|c| c.is_named());
@@ -119,10 +134,23 @@ pub fn gen_binary_expression<'a>(
                     )
                 });
 
-                let expr_text = &context.source[node.start_byte()..node.end_byte()];
-                let expr_flat_width: usize =
-                    expr_text.lines().map(|l| l.trim().len()).sum::<usize>()
-                        + expr_text.lines().count().saturating_sub(1);
+                // IMPORTANT: Do NOT extract text from source to compute flat width, as source
+                // changes between formatting passes (formatted output becomes source for next pass).
+                // Instead, compute flat width by walking the operands and operators.
+                let expr_flat_width: usize = {
+                    let mut width = 0;
+                    for (i, operand) in operands.iter().enumerate() {
+                        // Use the original source text for leaf nodes (identifiers, literals).
+                        // For composite nodes, recursively sum up their leaf text.
+                        let operand_text = &context.source[operand.start_byte()..operand.end_byte()];
+                        width += collapse_whitespace_len(operand_text);
+
+                        if i < operators.len() {
+                            width += 3; // " op " (space + operator + space)
+                        }
+                    }
+                    width
+                };
 
                 // For conditions inside if/while/for, account for trailing `) {`
                 let is_condition = node
@@ -166,6 +194,7 @@ pub fn gen_binary_expression<'a>(
                 return items;
             }
         }
+        } // closes the `else` block for `in_array_initializer`
     }
 
     // Default: inline formatting
@@ -319,7 +348,7 @@ pub fn gen_method_invocation<'a>(
         // Use effective_indent_level to include continuation indent from
         // outer chain wrapping and argument list wrapping.
         let col = context.effective_indent_level() * indent_width;
-        let prefix = compute_chain_prefix_width(node, context);
+        let prefix = compute_chain_prefix_width_stable(node, context);
         (col, prefix)
     };
 
@@ -616,38 +645,60 @@ fn gen_method_invocation_simple<'a>(
 /// width up to the opening '{', since PJF measures chain prefix position, not
 /// total lambda body content.
 fn estimate_arg_list_width(arg_list: tree_sitter::Node, source: &str) -> usize {
-    // Check if arg list contains a lambda with a block body
+    // IMPORTANT: Do NOT extract the full argument list text from source, as it
+    // changes between formatting passes (formatted output becomes source for next
+    // pass). Instead, compute width by summing individual argument widths.
+
     let mut cursor = arg_list.walk();
-    let mut has_lambda_block = false;
-    for child in arg_list.children(&mut cursor) {
-        if child.kind() == "lambda_expression" {
-            let mut inner_cursor = child.walk();
-            for inner in child.children(&mut inner_cursor) {
-                if inner.kind() == "block" {
-                    has_lambda_block = true;
-                    break;
+    let args: Vec<_> = arg_list
+        .children(&mut cursor)
+        .filter(|c| c.is_named() && !c.is_extra())
+        .collect();
+
+    if args.is_empty() {
+        return 2; // "()"
+    }
+
+    let mut total_width = 1; // opening "("
+
+    for (i, arg) in args.iter().enumerate() {
+        if arg.kind() == "lambda_expression" {
+            // For lambda with block body, only count header (params -> {)
+            let mut inner_cursor = arg.walk();
+            let has_block = arg.children(&mut inner_cursor).any(|c| c.kind() == "block");
+            if has_block {
+                // Lambda header: params + " -> {"
+                let mut header_width = 0;
+                let mut inner_cursor2 = arg.walk();
+                for child in arg.children(&mut inner_cursor2) {
+                    if child.kind() == "block" {
+                        header_width += 1; // the "{"
+                        break;
+                    }
+                    let text = &source[child.start_byte()..child.end_byte()];
+                    if child.kind() == "->" {
+                        header_width += 4; // " -> "
+                    } else {
+                        header_width += collapse_whitespace_len(text);
+                    }
                 }
+                total_width += header_width;
+            } else {
+                let arg_text = &source[arg.start_byte()..arg.end_byte()];
+                total_width += collapse_whitespace_len(arg_text);
             }
+        } else {
+            let arg_text = &source[arg.start_byte()..arg.end_byte()];
+            total_width += collapse_whitespace_len(arg_text);
         }
-        if has_lambda_block {
-            break;
+
+        if i < args.len() - 1 {
+            total_width += 2; // ", "
         }
     }
 
-    if has_lambda_block {
-        // Find the opening '{' and count only up to it
-        let al_text = &source[arg_list.start_byte()..arg_list.end_byte()];
-        if let Some(brace_pos) = al_text.find('{') {
-            // Width is from '(' to '{' inclusive
-            let header = &al_text[..=brace_pos];
-            collapse_whitespace_len(header)
-        } else {
-            collapse_whitespace_len(al_text)
-        }
-    } else {
-        let al_text = &source[arg_list.start_byte()..arg_list.end_byte()];
-        collapse_whitespace_len(al_text)
-    }
+    total_width += 1; // closing ")"
+    total_width
 }
 
 /// Check if a method chain would fit inline (without wrapping) at a given column position.
@@ -698,11 +749,15 @@ pub fn chain_fits_inline_at(
 /// For `this.field = chain.method()`, returns width of "this.field = " (prefix before chain).
 /// For `return chain.method()`, returns 7 (for "return ").
 /// This lets the chain wrapping decision account for the full line width, not just indent + chain.
-fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingContext) -> usize {
+///
+/// This version uses stable, context-based calculations instead of source positions
+/// to avoid formatting instability.
+fn compute_chain_prefix_width_stable(node: tree_sitter::Node, context: &FormattingContext) -> usize {
     let parent = node.parent();
     match parent.map(|p| p.kind()) {
         Some("assignment_expression") => {
             // e.g., `this.field = chain...` — prefix is LHS + " = "
+            // Use collapse_whitespace_len to get stable width
             if let Some(p) = parent
                 && let Some(lhs) = p.child_by_field_name("left")
             {
@@ -712,30 +767,23 @@ fn compute_chain_prefix_width(node: tree_sitter::Node, context: &FormattingConte
             0
         }
         Some("variable_declarator") => {
-            // e.g., `Type var = chain...` — prefix includes type + name + " = "
-            // Look at grandparent (local_variable_declaration) for type info
+            // CRITICAL FOR STABILITY: Do NOT extract text from source to compute
+            // LHS width (type + modifiers + variable name), as that text changes
+            // between formatting passes. This causes oscillation where pass 1 wraps
+            // the chain, pass 2 sees different formatted text and unwraps it, pass 3
+            // wraps again, etc.
+            //
+            // Instead, use a FIXED prefix approach: chains in variable_declarators
+            // use only the variable name width as prefix, NOT the full type + modifiers.
+            // This matches PJF's behavior where chain wrapping is decided based on
+            // the chain's own content, not the declaration context.
+            //
+            // Return just the variable name width (stable across passes) + " = ".
             if let Some(p) = parent
-                && let Some(gp) = p.parent()
+                && let Some(name) = p.child_by_field_name("name")
             {
-                let mut type_width = 0;
-                let mut cursor = gp.walk();
-                for child in gp.children(&mut cursor) {
-                    if child.id() == p.id() {
-                        break;
-                    }
-                    if child.is_named() {
-                        let text = &context.source[child.start_byte()..child.end_byte()];
-                        if type_width > 0 {
-                            type_width += 1; // space between tokens
-                        }
-                        type_width += collapse_whitespace_len(text);
-                    }
-                }
-                // Add variable name width
-                if let Some(name) = p.child_by_field_name("name") {
-                    let name_text = &context.source[name.start_byte()..name.end_byte()];
-                    return type_width + 1 + name_text.len() + 3; // " name = "
-                }
+                let name_text = &context.source[name.start_byte()..name.end_byte()];
+                return name_text.len() + 3; // "name = "
             }
             0
         }
@@ -869,8 +917,8 @@ pub fn chain_root_first_seg_width(node: tree_sitter::Node, source: &str) -> (usi
             w += collapse_whitespace_len(ta_text);
         }
         if let Some(al) = seg.arg_list {
-            let al_text = &source[al.start_byte()..al.end_byte()];
-            w += collapse_whitespace_len(al_text);
+            // Use the structured estimator to avoid source-position dependence
+            w += estimate_arg_list_width(al, source);
         }
         w
     } else {

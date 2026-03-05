@@ -710,6 +710,41 @@ public class Test {
         );
     }
 
+    #[test]
+    fn idempotent_generic_type_in_for_loop() {
+        // Generic type with long type arguments in for loop - tests type_arguments wrapping stability
+        assert_idempotent(
+            "\
+public class Test {
+    void test() {
+        for (Map.Entry<String, List<DefaultEventListener>> entry : listeners.entrySet()) {
+            String key = entry.getKey();
+            List<DefaultEventListener> value = entry.getValue();
+        }
+    }
+}
+",
+        );
+    }
+
+    #[test]
+    fn idempotent_variable_declarator_with_method_chain() {
+        // Variable declarator with method invocation on RHS - tests chain prefix width stability
+        assert_idempotent(
+            "\
+public class Test {
+    void test() {
+        JCRNodeWrapper mountPointNode = jcrMountPointNode.getVirtualMountPointNode();
+        final JCRStoreProvider provider = externalProviderFactory.mountProvider(mountPointNode);
+        if (!provider.isAvailable(true)) {
+            logger.warn(\"Provider unavailable\");
+        }
+    }
+}
+",
+        );
+    }
+
     /// Check if the given input is already a fixed point (format(input) == input).
     /// If not, print the diff and panic.
     fn assert_already_formatted(input: &str) {
@@ -1296,7 +1331,7 @@ public class Tag2Tests {
                         .build())
                     .build())
                 .call();
-        
+
         if (res != null && res.body().isPresent() && res.statusCode() == 200) {
             handleSuccess(res);
         }
