@@ -1264,4 +1264,76 @@ public class Tag2Tests {
 "#,
         );
     }
+
+    #[test]
+    fn idempotent_binary_expr_in_return_with_long_chain() {
+        // Binary expressions in return statements should wrap stably.
+        // The issue was that wrapping decisions depended on source column positions,
+        // which change between passes, causing oscillation.
+        assert_idempotent(
+            r#"public class Test {
+    void test() {
+        return httpClientConfiguration.getRedactedHeaders() != null
+                && !httpClientConfiguration.getRedactedHeaders().isEmpty();
+    }
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn idempotent_nested_builder_with_binary_condition() {
+        // Complex nested builder pattern with binary expressions in conditions.
+        // This pattern was failing in the Jahia codebase.
+        assert_idempotent(
+            r#"public class Test {
+    void test() {
+        Result res = client
+                .request(Request.builder()
+                    .obj(Obj.builder()
+                        .field1("value1")
+                        .field2("value2")
+                        .build())
+                    .build())
+                .call();
+        
+        if (res != null && res.body().isPresent() && res.statusCode() == 200) {
+            handleSuccess(res);
+        }
+    }
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn idempotent_ternary_in_assignment_chain() {
+        // Ternary expressions can also cause instability if wrapping decisions
+        // depend on source positions rather than formatted positions.
+        assert_idempotent(
+            r#"public class Test {
+    void test() {
+        String msg = httpClient.getConfig() != null ? httpClient.getConfig().getStatusMessage() : "Unknown";
+    }
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn idempotent_long_binary_chain_in_condition() {
+        // Long chains of binary operators that need wrapping,
+        // especially in if/while/for conditions where the row-based
+        // estimate_prefix_width logic could oscillate.
+        assert_idempotent(
+            r#"public class Test {
+    void test() {
+        if (config != null && config.isValid() && config.getTimeout() > 0 && !isShutdown()) {
+            processRequest();
+        }
+    }
+}
+"#,
+        );
+    }
 }

@@ -103,7 +103,22 @@ pub fn gen_binary_expression<'a>(
             let (operands, operators) = flatten_wrappable_chain(node, context.source);
 
             let should_wrap = {
-                let start_col = node.start_position().column;
+                // Calculate the formatted column position, not the source column.
+                // Source column changes between passes as code is reformatted, causing
+                // instability. Instead, use context's effective indent level and check
+                // if a parent has set an override for more accurate position tracking.
+                let effective_indent = context.effective_indent_level() * context.config.indent_width as usize;
+                // If a parent (like argument_list) has set an override, use that instead of estimating.
+                let prefix_width = context.take_override_prefix_width().unwrap_or_else(|| {
+                    // For standalone expressions in statements, estimate the prefix.
+                    // This includes "return ", "throw ", "if (", etc.
+                    super::declarations::estimate_prefix_width(
+                        node,
+                        context.source,
+                        context.is_assignment_wrapped(),
+                    )
+                });
+
                 let expr_text = &context.source[node.start_byte()..node.end_byte()];
                 let expr_flat_width: usize =
                     expr_text.lines().map(|l| l.trim().len()).sum::<usize>()
@@ -128,7 +143,7 @@ pub fn gen_binary_expression<'a>(
 
                 let suffix_width = if is_condition { 3 } else { 0 }; // `) {`
 
-                start_col + expr_flat_width + suffix_width > context.config.line_width as usize
+                effective_indent + prefix_width + expr_flat_width + suffix_width > context.config.line_width as usize
             };
 
             if should_wrap {
@@ -1020,15 +1035,18 @@ pub fn gen_ternary_expression<'a>(
     let ternary_flat_width: usize = ternary_text.lines().map(|l| l.trim().len()).sum::<usize>()
         + ternary_text.lines().count().saturating_sub(1); // spaces between joined lines
 
-    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let effective_indent = context.effective_indent_level() * context.config.indent_width as usize;
     // Account for prefix on the same line (e.g., "return " or "variable = ")
-    let prefix_width = super::declarations::estimate_prefix_width(
-        node,
-        context.source,
-        context.is_assignment_wrapped(),
-    );
+    // If a parent (like argument_list) has set an override, use that instead of estimating.
+    let prefix_width = context.take_override_prefix_width().unwrap_or_else(|| {
+        super::declarations::estimate_prefix_width(
+            node,
+            context.source,
+            context.is_assignment_wrapped(),
+        )
+    });
     let should_wrap =
-        indent_width + prefix_width + ternary_flat_width > context.config.line_width as usize;
+        effective_indent + prefix_width + ternary_flat_width > context.config.line_width as usize;
 
     let mut items = PrintItems::new();
     let mut cursor = node.walk();

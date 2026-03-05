@@ -741,10 +741,18 @@ pub(super) fn estimate_prefix_width(
             // the caller (chain formatter or parent arg list) handles layout above
             // this level. Walking past them causes source-position-dependent instability
             // since the row check depends on pre-format layout, not post-format layout.
+            // Also stop at statement types which are formatting boundaries.
             "method_declaration"
             | "constructor_declaration"
             | "argument_list"
-            | "formal_parameters" => break,
+            | "formal_parameters"
+            | "if_statement"
+            | "while_statement"
+            | "for_statement"
+            | "enhanced_for_statement"
+            | "do_statement"
+            | "block"
+            | "expression_statement" => break,
             _ => {
                 prev = anc;
                 ancestor = anc.parent();
