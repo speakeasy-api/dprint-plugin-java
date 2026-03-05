@@ -692,7 +692,7 @@ pub(super) fn estimate_prefix_width(
 
     // Only consider the last line to handle multiline modifiers/annotations
     let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
-    let width = last_line.trim_start().len();
+    let mut width = last_line.trim_start().len();
 
     // IMPORTANT: Do NOT walk up ancestors to accumulate more prefix width, as that
     // requires extracting text from `source` using byte positions. On formatting
@@ -700,7 +700,8 @@ pub(super) fn estimate_prefix_width(
     // refer to already-formatted text which changes between passes, causing instability.
     //
     // Exception: Fixed keyword prefixes (like "return " or "throw ") are STABLE
-    // because they don't change between formatting passes, so we handle those below.
+    // because they don't change between formatting passes, so we can safely walk
+    // up to find those specific statement types.
     //
     // Instead, rely on:
     // 1. The immediate parent's prefix (calculated above)
@@ -708,12 +709,35 @@ pub(super) fn estimate_prefix_width(
     // 3. effective_indent_level() in the caller (includes continuation indent)
     // 4. assignment_wrapped flag to handle wrapped assignments
 
+    // Walk up to find return_statement or throw_statement ancestors.
+    // These have STABLE fixed-width prefixes that don't change between passes.
+    // IMPORTANT: Only walk up from the TOP-LEVEL argument_list (immediate child
+    // of the return/throw expression). Stop at nested argument_lists to avoid
+    // incorrectly adding return/throw prefix to nested calls.
+    let mut current = parent;
+    while let Some(ancestor) = current.parent() {
+        match ancestor.kind() {
+            "return_statement" => {
+                width += 7; // "return " is a stable keyword
+                break;
+            }
+            "throw_statement" => {
+                width += 6; // "throw " is a stable keyword
+                break;
+            }
+            // Stop at statement boundaries, declaration boundaries, or nested argument lists
+            "expression_statement"
+            | "local_variable_declaration"
+            | "field_declaration"
+            | "assignment_expression"
+            | "argument_list" => break, // Stop at nested argument_list boundaries
+            _ => {}
+        }
+        current = ancestor;
+    }
+
     // Special case handling for certain parent node types.
-    // Return/throw statement prefixes are STABLE (fixed keywords), so we can use
-    // them without causing instability.
     match parent.kind() {
-        "return_statement" => 7, // "return " is a fixed keyword prefix
-        "throw_statement" => 6,  // "throw " is a fixed keyword prefix
         "assignment_expression" if assignment_wrapped => 0, // RHS is on continuation line
         "variable_declarator" if assignment_wrapped => 0,   // RHS is on continuation line
         _ => width,
