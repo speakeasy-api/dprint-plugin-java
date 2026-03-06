@@ -80,7 +80,8 @@ pub fn gen_binary_expression<'a>(
         // If so, always use inline format to avoid instability from array wrapping.
         let in_array_initializer = node.parent().is_some_and(|p| {
             p.kind() == "array_initializer"
-                || p.parent().is_some_and(|gp| gp.kind() == "array_initializer")
+                || p.parent()
+                    .is_some_and(|gp| gp.kind() == "array_initializer")
         });
 
         if !in_array_initializer {
@@ -693,7 +694,6 @@ pub(super) fn estimate_expr_flat_width(node: tree_sitter::Node, source: &str) ->
 /// If the arg list contains a lambda with a block body, only count the header
 /// width up to the opening `{` (PJF measures chain prefix position, not body content).
 fn estimate_arg_list_width(arg_list: tree_sitter::Node, source: &str) -> usize {
-
     let mut cursor = arg_list.walk();
     let args: Vec<_> = arg_list
         .children(&mut cursor)

@@ -1472,7 +1472,34 @@ public class Tag2Tests {
         // gen_variable_declarator must use effective_indent_level; otherwise the
         // wrap-at-= decision oscillates between pass 1 (no wrap) and pass 2 (wrap).
         assert_idempotent(
-            "public class Test {\n    static void createContent() {\n        JahiaContentManagementService.App.getInstance().getContentTypesAsTree(\n                nodeTypes,\n                excluded,\n                new BaseAsyncCallback<List<GWTJahiaNodeType>>() {\n                    private Object[] getTargetNodeType(\n                            String nodeTypeName,\n                            GWTJahiaNodeType startNode,\n                            Set<String> displayedNodeTypes) {\n                        GWTJahiaNodeType targetNodeType = null;\n                        if (startNode.getChildren().size() > 0) {\n                            for (ModelData child : startNode.getChildren()) {\n                                Object[] result = getTargetNodeType(\n                                        nodeTypeName,\n                                        (GWTJahiaNodeType) child,\n                                        displayedNodeTypes);\n                                if (!((Boolean) result[0])) {\n                                    return result;\n                                }\n                            }\n                        }\n                        return new Object[] {true, targetNodeType};\n                    }\n                });\n    }\n}\n",
+            "public class Test {
+    static void createContent() {
+        JahiaContentManagementService.App.getInstance().getContentTypesAsTree(
+                nodeTypes,
+                excluded,
+                new BaseAsyncCallback<List<GWTJahiaNodeType>>() {
+                    private Object[] getTargetNodeType(
+                            String nodeTypeName,
+                            GWTJahiaNodeType startNode,
+                            Set<String> displayedNodeTypes) {
+                        GWTJahiaNodeType targetNodeType = null;
+                        if (startNode.getChildren().size() > 0) {
+                            for (ModelData child : startNode.getChildren()) {
+                                Object[] result = getTargetNodeType(
+                                        nodeTypeName,
+                                        (GWTJahiaNodeType) child,
+                                        displayedNodeTypes);
+                                if (!((Boolean) result[0])) {
+                                    return result;
+                                }
+                            }
+                        }
+                        return new Object[] {true, targetNodeType};
+                    }
+                });
+    }
+}
+",
         );
     }
 }
