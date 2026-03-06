@@ -382,9 +382,6 @@ fn gen_generic_type<'a>(
     items
 }
 
-/// Estimate the prefix width before a type arguments node, including
-/// declaration modifiers or `new` where applicable. Uses collapsed
-/// whitespace on the source's last line to keep estimates stable.
 /// Format type arguments: `<String, Integer>`
 ///
 /// When type arguments are too long, wraps each on its own line at double
@@ -417,9 +414,7 @@ fn gen_type_arguments<'a>(
         })
         .sum();
 
-    // Calculate the formatted column position, not the source column.
-    // Source column changes between passes as code is reformatted, causing instability.
-    // Use context's effective indent level instead of source position.
+    // Use effective indent level rather than source column for stability across passes.
     let effective_indent = context.effective_indent_level() * context.config.indent_width as usize;
 
     // Detect if we're in a class declaration context (extends/implements clause).
@@ -447,7 +442,6 @@ fn gen_type_arguments<'a>(
     };
 
     // Use declarations::estimate_prefix_width for consistency with binary/ternary expressions.
-    // This provides stable, context-based width calculation instead of source position extraction.
     let prefix_width = super::declarations::estimate_prefix_width(
         node,
         context.source,

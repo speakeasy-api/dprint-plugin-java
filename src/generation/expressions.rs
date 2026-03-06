@@ -62,6 +62,7 @@ fn is_wrappable_op(op: Option<&str>, node: tree_sitter::Node, source: &str) -> b
 /// throw new IllegalStateException("First part of message. "
 ///         + "Second part of message.");
 /// ```
+#[allow(clippy::too_many_lines)]
 pub fn gen_binary_expression<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -75,21 +76,14 @@ pub fn gen_binary_expression<'a>(
     let is_wrappable = is_wrappable_op(operator.as_deref(), node, context.source);
 
     if is_wrappable {
-        // Check if this binary expression is inside an array_initializer
-        // If so, always use inline format to avoid instability from array wrapping
+        // Check if this binary expression is inside an array_initializer.
+        // If so, always use inline format to avoid instability from array wrapping.
         let in_array_initializer = node.parent().is_some_and(|p| {
-            if p.kind() == "array_initializer" {
-                true
-            } else {
-                // Check grandparent too (might be nested in parentheses, etc.)
-                p.parent()
-                    .is_some_and(|gp| gp.kind() == "array_initializer")
-            }
+            p.kind() == "array_initializer"
+                || p.parent().is_some_and(|gp| gp.kind() == "array_initializer")
         });
 
-        if in_array_initializer {
-            // Force inline for stability - array element wrapping would cause oscillation
-        } else {
+        if !in_array_initializer {
             let is_nested_in_chain = if let Some(parent) = node.parent() {
                 if parent.kind() == "binary_expression" {
                     let parent_children: Vec<_> = parent.children(&mut parent.walk()).collect();
@@ -118,16 +112,9 @@ pub fn gen_binary_expression<'a>(
                 let (operands, operators) = flatten_wrappable_chain(node, context.source);
 
                 let should_wrap = {
-                    // Calculate the formatted column position, not the source column.
-                    // Source column changes between passes as code is reformatted, causing
-                    // instability. Instead, use context's effective indent level and check
-                    // if a parent has set an override for more accurate position tracking.
                     let effective_indent =
                         context.effective_indent_level() * context.config.indent_width as usize;
-                    // If a parent (like argument_list) has set an override, use that instead of estimating.
                     let prefix_width = context.take_override_prefix_width().unwrap_or_else(|| {
-                        // For standalone expressions in statements, estimate the prefix.
-                        // This includes "return ", "throw ", "if (", etc.
                         super::declarations::estimate_prefix_width(
                             node,
                             context.source,
@@ -135,20 +122,16 @@ pub fn gen_binary_expression<'a>(
                         )
                     });
 
-                    // IMPORTANT: Do NOT extract text from source to compute flat width, as source
-                    // changes between formatting passes (formatted output becomes source for next pass).
-                    // Instead, compute flat width by walking the operands and operators.
+                    // Compute flat width structurally to avoid source-position instability.
                     let expr_flat_width: usize = {
                         let mut width = 0;
                         for (i, operand) in operands.iter().enumerate() {
-                            // Use the original source text for leaf nodes (identifiers, literals).
-                            // For composite nodes, recursively sum up their leaf text.
                             let operand_text =
                                 &context.source[operand.start_byte()..operand.end_byte()];
                             width += collapse_whitespace_len(operand_text);
 
                             if i < operators.len() {
-                                width += 3; // " op " (space + operator + space)
+                                width += operators[i].len() + 2; // " " + operator + " "
                             }
                         }
                         width
@@ -382,7 +365,6 @@ pub fn gen_method_invocation<'a>(
 
     let chain_flat_width = root_width + segments_width;
 
-    // PJF's METHOD_CHAIN_COLUMN_LIMIT: check if ANY dot's column position exceeds 80.
     // Walk through segments accumulating position. If any dot exceeds the threshold, wrap.
     // Exception: single-invocation chains (root + 1 method) use line_width as threshold
     // per PJF's LastLevelBreakability.ACCEPT_INLINE_CHAIN_IF_SIMPLE optimization.
@@ -640,17 +622,77 @@ fn gen_method_invocation_simple<'a>(
     items
 }
 
-/// Check if any argument list in a chain segment contains a lambda with a block body.
-/// This is used to force chain wrapping when lambdas with block bodies are present,
-/// since the multi-line block content would produce incorrect indentation on a single line.
+/// Compute a stable flat-width estimate for an expression node.
+///
+/// Unlike calling `collapse_whitespace_len` on the raw source span (which gives
+/// inflated results when the code has already been formatted with newlines),
+/// this function navigates the AST structure and sums individual stable token
+/// widths. `method_invocation` and `object_creation_expression` nodes are handled
+/// recursively; everything else falls back to `collapse_whitespace_len`.
+pub(super) fn estimate_expr_flat_width(node: tree_sitter::Node, source: &str) -> usize {
+    match node.kind() {
+        "method_invocation" => {
+            let mut segs = Vec::new();
+            let root = flatten_chain(node, &mut segs);
+            // For bare method calls (no chain object), compute name+args separately
+            // to avoid instability from newlines in source arg list text.
+            if segs.is_empty() {
+                let name_width = node
+                    .child_by_field_name("name")
+                    .map_or(0, |n| source[n.start_byte()..n.end_byte()].len());
+                let args_width = node
+                    .child_by_field_name("arguments")
+                    .map_or(2, |al| estimate_arg_list_width(al, source));
+                return name_width + args_width;
+            }
+            let root_text = &source[root.start_byte()..root.end_byte()];
+            let mut w = collapse_whitespace_len(root_text);
+            for seg in &segs {
+                w += 1; // '.'
+                let name_text = &source[seg.name.start_byte()..seg.name.end_byte()];
+                w += name_text.len();
+                if let Some(ta) = seg.type_args {
+                    let ta_text = &source[ta.start_byte()..ta.end_byte()];
+                    w += collapse_whitespace_len(ta_text);
+                }
+                if let Some(al) = seg.arg_list {
+                    w += estimate_arg_list_width(al, source);
+                }
+            }
+            w
+        }
+        "object_creation_expression" => {
+            let mut w = 4; // "new " (3 + 1 space)
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                match child.kind() {
+                    "new" => {} // already in the 4-char prefix
+                    "argument_list" => {
+                        w += estimate_arg_list_width(child, source);
+                    }
+                    "class_body" => {
+                        w += 3; // " {}" placeholder for anonymous classes
+                    }
+                    _ if child.is_named() => {
+                        let text = &source[child.start_byte()..child.end_byte()];
+                        w += collapse_whitespace_len(text);
+                    }
+                    _ => {}
+                }
+            }
+            w
+        }
+        _ => {
+            let text = &source[node.start_byte()..node.end_byte()];
+            collapse_whitespace_len(text)
+        }
+    }
+}
+
 /// Estimate argument list width for chain wrapping decisions.
-/// If the arg list contains a lambda with a block body, only count the "header"
-/// width up to the opening '{', since PJF measures chain prefix position, not
-/// total lambda body content.
+/// If the arg list contains a lambda with a block body, only count the header
+/// width up to the opening `{` (PJF measures chain prefix position, not body content).
 fn estimate_arg_list_width(arg_list: tree_sitter::Node, source: &str) -> usize {
-    // IMPORTANT: Do NOT extract the full argument list text from source, as it
-    // changes between formatting passes (formatted output becomes source for next
-    // pass). Instead, compute width by summing individual argument widths.
 
     let mut cursor = arg_list.walk();
     let args: Vec<_> = arg_list
@@ -691,8 +733,7 @@ fn estimate_arg_list_width(arg_list: tree_sitter::Node, source: &str) -> usize {
                 total_width += collapse_whitespace_len(arg_text);
             }
         } else {
-            let arg_text = &source[arg.start_byte()..arg.end_byte()];
-            total_width += collapse_whitespace_len(arg_text);
+            total_width += estimate_expr_flat_width(*arg, source);
         }
 
         if i < args.len() - 1 {
@@ -763,7 +804,6 @@ fn compute_chain_prefix_width_stable(
     match parent.map(|p| p.kind()) {
         Some("assignment_expression") => {
             // e.g., `this.field = chain...` — prefix is LHS + " = "
-            // Use collapse_whitespace_len to get stable width
             if let Some(p) = parent
                 && let Some(lhs) = p.child_by_field_name("left")
             {
@@ -773,23 +813,30 @@ fn compute_chain_prefix_width_stable(
             0
         }
         Some("variable_declarator") => {
-            // CRITICAL FOR STABILITY: Do NOT extract text from source to compute
-            // LHS width (type + modifiers + variable name), as that text changes
-            // between formatting passes. This causes oscillation where pass 1 wraps
-            // the chain, pass 2 sees different formatted text and unwraps it, pass 3
-            // wraps again, etc.
-            //
-            // Instead, use a FIXED prefix approach: chains in variable_declarators
-            // use only the variable name width as prefix, NOT the full type + modifiers.
-            // This matches PJF's behavior where chain wrapping is decided based on
-            // the chain's own content, not the declaration context.
-            //
-            // Return just the variable name width (stable across passes) + " = ".
+            // e.g., `Type var = chain...` — prefix includes type + name + " = "
+            // Walk grandparent children up to the declarator with collapse_whitespace_len()
+            // (avoids row-based position checks that caused oscillation).
             if let Some(p) = parent
-                && let Some(name) = p.child_by_field_name("name")
+                && let Some(gp) = p.parent()
             {
-                let name_text = &context.source[name.start_byte()..name.end_byte()];
-                return name_text.len() + 3; // "name = "
+                let mut type_width = 0;
+                let mut cursor = gp.walk();
+                for child in gp.children(&mut cursor) {
+                    if child.id() == p.id() {
+                        break;
+                    }
+                    if child.is_named() {
+                        let text = &context.source[child.start_byte()..child.end_byte()];
+                        if type_width > 0 {
+                            type_width += 1; // space between tokens
+                        }
+                        type_width += collapse_whitespace_len(text);
+                    }
+                }
+                if let Some(name) = p.child_by_field_name("name") {
+                    let name_text = &context.source[name.start_byte()..name.end_byte()];
+                    return type_width + 1 + name_text.len() + 3; // " name = "
+                }
             }
             0
         }
@@ -1086,8 +1133,7 @@ pub fn gen_ternary_expression<'a>(
 ) -> PrintItems {
     // Estimate the "flat" width of the entire ternary expression (as if on one line).
     let ternary_text = &context.source[node.start_byte()..node.end_byte()];
-    let ternary_flat_width: usize = ternary_text.lines().map(|l| l.trim().len()).sum::<usize>()
-        + ternary_text.lines().count().saturating_sub(1); // spaces between joined lines
+    let ternary_flat_width = collapse_whitespace_len(ternary_text);
 
     let effective_indent = context.effective_indent_level() * context.config.indent_width as usize;
     // Account for prefix on the same line (e.g., "return " or "variable = ")

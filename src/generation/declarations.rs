@@ -694,52 +694,74 @@ pub(super) fn estimate_prefix_width(
     let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
     let mut width = last_line.trim_start().len();
 
-    // IMPORTANT: Do NOT walk up ancestors to accumulate more prefix width, as that
-    // requires extracting text from `source` using byte positions. On formatting
-    // pass 2+, `source` is the output from the previous pass, so byte positions
-    // refer to already-formatted text which changes between passes, causing instability.
-    //
-    // Exception: Fixed keyword prefixes (like "return " or "throw ") are STABLE
-    // because they don't change between formatting passes, so we can safely walk
-    // up to find those specific statement types.
-    //
-    // Instead, rely on:
-    // 1. The immediate parent's prefix (calculated above)
-    // 2. Fixed keyword prefixes for return/throw statements (stable)
-    // 3. effective_indent_level() in the caller (includes continuation indent)
-    // 4. assignment_wrapped flag to handle wrapped assignments
-
-    // Walk up to find return_statement or throw_statement ancestors.
-    // These have STABLE fixed-width prefixes that don't change between passes.
-    // IMPORTANT: Only walk up from the TOP-LEVEL argument_list (immediate child
-    // of the return/throw expression). Stop at nested argument_lists to avoid
-    // incorrectly adding return/throw prefix to nested calls.
-    let mut current = parent;
-    while let Some(ancestor) = current.parent() {
-        match ancestor.kind() {
+    // Walk up ancestors to accumulate prefix from keywords/LHS that share the line.
+    // Stop at declaration/statement boundaries. Use collapse_whitespace_len() on child
+    // text rather than row-based position checks for stability across passes.
+    let mut prev = parent;
+    let mut ancestor = parent.parent();
+    while let Some(anc) = ancestor {
+        match anc.kind() {
             "return_statement" => {
-                width += 7; // "return " is a stable keyword
+                width += 7; // "return "
                 break;
             }
             "throw_statement" => {
-                width += 6; // "throw " is a stable keyword
+                width += 6; // "throw "
                 break;
             }
-            // Stop at statement boundaries, declaration boundaries, or nested argument lists
-            "expression_statement"
-            | "local_variable_declaration"
-            | "field_declaration"
-            | "assignment_expression"
-            | "argument_list" => break, // Stop at nested argument_list boundaries
-            _ => {}
+            "assignment_expression" => {
+                if !assignment_wrapped {
+                    // Walk children of the assignment up to prev (the RHS node)
+                    let mut cursor = anc.walk();
+                    for child in anc.children(&mut cursor) {
+                        if child.id() == prev.id() {
+                            break;
+                        }
+                        if child.is_named() {
+                            let text = &source[child.start_byte()..child.end_byte()];
+                            width += collapse_whitespace_len(text);
+                        } else {
+                            // unnamed node = operator token (e.g., "="); count it with spaces
+                            width += 3; // " = "
+                        }
+                    }
+                }
+                break;
+            }
+            "variable_declarator" | "local_variable_declaration" | "field_declaration" => {
+                if !assignment_wrapped {
+                    let mut cursor = anc.walk();
+                    for child in anc.children(&mut cursor) {
+                        if child.id() == prev.id() {
+                            break;
+                        }
+                        if child.is_named() {
+                            let text = &source[child.start_byte()..child.end_byte()];
+                            if width > 0 {
+                                width += 1; // space between tokens
+                            }
+                            width += collapse_whitespace_len(text);
+                        }
+                    }
+                }
+                prev = anc;
+                ancestor = anc.parent();
+            }
+            // These are formatting boundaries — stop walking.
+            "method_declaration"
+            | "constructor_declaration"
+            | "argument_list"
+            | "formal_parameters" => break,
+            _ => {
+                prev = anc;
+                ancestor = anc.parent();
+            }
         }
-        current = ancestor;
     }
 
     // Special case handling for certain parent node types.
     match parent.kind() {
-        "assignment_expression" if assignment_wrapped => 0, // RHS is on continuation line
-        "variable_declarator" if assignment_wrapped => 0,   // RHS is on continuation line
+        "assignment_expression" | "variable_declarator" if assignment_wrapped => 0, // RHS is on continuation line
         _ => width,
     }
 }
@@ -785,6 +807,7 @@ fn estimate_class_decl_width(node: tree_sitter::Node, source: &str) -> usize {
 ///
 /// Handles wrapping of the throws clause onto a continuation line when the
 /// constructor signature would exceed `line_width`.
+#[allow(clippy::too_many_lines)]
 pub fn gen_constructor_declaration<'a>(
     node: tree_sitter::Node<'a>,
     context: &mut FormattingContext<'a>,
@@ -1771,13 +1794,11 @@ pub fn gen_variable_declarator<'a>(
         });
 
         if let Some(val) = value_node {
-            // Compute the flat width of just the RHS expression (collapse whitespace
-            // to get the "on one line" width)
-            let val_text = &context.source[val.start_byte()..val.end_byte()];
-            let rhs_flat_width = collapse_whitespace_len(val_text);
-
             let indent_unit = context.config.indent_width as usize;
-            let indent_col = context.indent_level() * indent_unit;
+            // Use effective_indent_level (includes continuation indent from outer wrapped
+            // argument lists and chains) so that wrapping decisions are accurate when
+            // the variable declaration is inside a deeply nested anonymous class.
+            let indent_col = context.effective_indent_level() * indent_unit;
             // Continuation indent: current indent + 2 indent units (double indent for wrapping)
             let continuation_indent = indent_col + indent_unit * 2;
             let line_width = context.config.line_width as usize;
@@ -1891,12 +1912,21 @@ pub fn gen_variable_declarator<'a>(
                     val.children(&mut vc).any(|c| c.kind() == "class_body")
                 };
                 if is_anonymous_class {
+                    // Use the raw source width for anonymous classes: the class body text
+                    // length determines whether it fits inline (large body → always wraps).
+                    // This restores the original stable behavior for anonymous classes since
+                    // both the flat and formatted forms still produce a large collapsed width.
+                    let val_text = &context.source[val.start_byte()..val.end_byte()];
+                    let rhs_flat_width = collapse_whitespace_len(val_text);
                     let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
                     total_line_width > line_width
                 } else {
-                    // Ternary and binary expressions usually wrap at their own operators
-                    // (`?`/`:` or `&&`/`||`). But for ternaries that fit on a continuation
-                    // line, prefer wrapping at `=` (PJF style).
+                    // For non-anonymous-class expressions, use the stable token-based estimator.
+                    // Unlike collapse_whitespace_len on the raw source text, this gives consistent
+                    // results regardless of whether the source has already been formatted with
+                    // newlines inside argument lists or constructor calls.
+                    let rhs_flat_width =
+                        expressions::estimate_expr_flat_width(*val, context.source);
                     let is_ternary =
                         matches!(val.kind(), "ternary_expression" | "conditional_expression");
                     let is_binary = val.kind() == "binary_expression";
@@ -2026,9 +2056,7 @@ pub fn gen_argument_list<'a>(
     // Estimate the "flat" width of arguments (stripping embedded newlines).
     // For lambda expressions with block bodies, only count the header (params -> {)
     // since the block body will always be on separate lines.
-    // IMPORTANT: Use collapse_whitespace_len instead of extracting/splitting text,
-    // as source changes between formatting passes (formatted output becomes source
-    // for next pass), causing instability.
+    // Uses collapse_whitespace_len for stability across formatting passes.
     let args_flat_width: usize = args
         .iter()
         .enumerate()
@@ -2356,7 +2384,7 @@ fn gen_body_with_members<'a>(
         .map(|c| c.end_position().row);
     let mut prev_end_row: Option<usize> = open_brace_row;
 
-    for member in members.iter() {
+    for member in &members {
         if member.is_extra() {
             let is_trailing = comments::is_trailing_comment(**member);
             if is_trailing {

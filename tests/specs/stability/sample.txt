@@ -1,0 +1,178 @@
+== JCRStoreService: variable_declarator with method call at deep indent ==
+-- input --
+public class Test {
+    void method() throws Exception {
+        JCRTemplate.getInstance().doExecuteWithSystemSession(new JCRCallback<Object>() {
+            @Override
+            public Object doInJCR(JCRSessionWrapper session) throws RepositoryException {
+                while (nodes.hasNext()) {
+                    Node node = (Node) nodes.next();
+                    JCRNodeWrapper jcrNodeWrapper = session.getNodeByIdentifier(node.getIdentifier());
+                    if (jcrNodeWrapper instanceof JCRMountPointNode) {
+                        final JCRMountPointNode jcrMountPointNode = (JCRMountPointNode) jcrNodeWrapper;
+                        if (jcrMountPointNode.getMountStatus() == JCRMountPointNode.MountStatus.mounted) {
+                            JCRNodeWrapper mountPointNode = jcrMountPointNode.getVirtualMountPointNode();
+                            final JCRStoreProvider provider = externalProviderFactory.mountProvider(mountPointNode);
+                            if (!provider.isAvailable(true)) {
+                                logger.warn("msg");
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+        });
+    }
+}
+-- output --
+public class Test {
+    void method() throws Exception {
+        JCRTemplate.getInstance()
+                .doExecuteWithSystemSession(
+                        new JCRCallback<Object>() {
+                            @Override
+                            public Object doInJCR(JCRSessionWrapper session) throws RepositoryException {
+                                while (nodes.hasNext()) {
+                                    Node node = (Node) nodes.next();
+                                    JCRNodeWrapper jcrNodeWrapper =
+                                            session.getNodeByIdentifier(node.getIdentifier());
+                                    if (jcrNodeWrapper instanceof JCRMountPointNode) {
+                                        final JCRMountPointNode jcrMountPointNode =
+                                                (JCRMountPointNode) jcrNodeWrapper;
+                                        if (jcrMountPointNode.getMountStatus()
+                                                == JCRMountPointNode.MountStatus.mounted) {
+                                            JCRNodeWrapper mountPointNode =
+                                                    jcrMountPointNode.getVirtualMountPointNode();
+                                            final JCRStoreProvider provider =
+                                                    externalProviderFactory.mountProvider(mountPointNode);
+                                            if (!provider.isAvailable(true)) {
+                                                logger.warn("msg");
+                                            }
+                                        }
+                                    }
+                                }
+                                return null;
+                            }
+                        });
+    }
+}
+
+== JahiaLoginModule: object_creation_expression in variable_declarator ==
+-- input --
+public class Test {
+    void method() {
+        SimpleCredentials credentials = new SimpleCredentials(userID, getSystemPass(userID, deniedPaths).toCharArray());
+    }
+}
+-- output --
+public class Test {
+    void method() {
+        SimpleCredentials credentials =
+                new SimpleCredentials(userID, getSystemPass(userID, deniedPaths).toCharArray());
+    }
+}
+
+== ContentTypeWindow: method call result in variable at deep indent ==
+-- input --
+public class Test {
+    void method() {
+        if (cond1) {
+            for (GWTJahiaNodeType child : nodeType.getSubtypes()) {
+                if (child != null) {
+                    if (child.getName() != null) {
+                        if (config != null) {
+                            Object[] result = getTargetNodeType(nodeTypeName, (GWTJahiaNodeType) child, displayedNodeTypes);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+-- output --
+public class Test {
+    void method() {
+        if (cond1) {
+            for (GWTJahiaNodeType child : nodeType.getSubtypes()) {
+                if (child != null) {
+                    if (child.getName() != null) {
+                        if (config != null) {
+                            Object[] result =
+                                    getTargetNodeType(
+                                            nodeTypeName,
+                                            (GWTJahiaNodeType) child,
+                                            displayedNodeTypes);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+== PagesTabItem: method chain in variable_declarator ==
+-- input --
+public class Test {
+    void method() {
+        contextMenu.addListener(Events.Show, new Listener<BaseEvent>() {
+            @Override
+            public void handleEvent(BaseEvent be) {
+                Element row = pageTree.getView().getRow(selectionModel.getRightClickSelectionModel().getSelectedItem());
+                if (row != null) {
+                    row.addClassName("context-menu-open");
+                }
+            }
+        });
+    }
+}
+-- output --
+public class Test {
+    void method() {
+        contextMenu.addListener(
+                Events.Show,
+                new Listener<BaseEvent>() {
+                    @Override
+                    public void handleEvent(BaseEvent be) {
+                        Element row =
+                                pageTree.getView()
+                                        .getRow(
+                                                selectionModel
+                                                        .getRightClickSelectionModel()
+                                                        .getSelectedItem());
+                        if (row != null) {
+                            row.addClassName("context-menu-open");
+                        }
+                    }
+                });
+    }
+}
+
+== NodeHelper: method decl with throws at deep indent ==
+-- input --
+public class Test {
+    static String getNodeURL(String servlet, JCRNodeWrapper node, Date versionDate,
+                             String versionLabel, final String workspace, final Locale locale, boolean findDisplayable)
+            throws RepositoryException {
+        if (servlet == null) {
+            servlet = "render";
+        }
+        String url = Jahia.getContextPath() + "/cms/" + servlet + "/" + workspace + "/" + locale;
+    }
+}
+-- output --
+public class Test {
+    static String getNodeURL(
+            String servlet,
+            JCRNodeWrapper node,
+            Date versionDate,
+            String versionLabel,
+            final String workspace,
+            final Locale locale,
+            boolean findDisplayable)
+            throws RepositoryException {
+        if (servlet == null) {
+            servlet = "render";
+        }
+        String url = Jahia.getContextPath() + "/cms/" + servlet + "/" + workspace + "/" + locale;
+    }
+}

@@ -745,6 +745,98 @@ public class Test {
         );
     }
 
+    #[test]
+    fn idempotent_jahia_jcrstoreservice_deep_indent() {
+        // JCRStoreService: variable_declarator with simple method call at deep (10-level) indent.
+        assert_idempotent(
+            r#"public class Test {
+    void method() throws Exception {
+        JCRTemplate.getInstance().doExecuteWithSystemSession(new JCRCallback<Object>() {
+            @Override
+            public Object doInJCR(JCRSessionWrapper session) throws RepositoryException {
+                while (nodes.hasNext()) {
+                    Node node = (Node) nodes.next();
+                    JCRNodeWrapper jcrNodeWrapper = session.getNodeByIdentifier(node.getIdentifier());
+                    if (jcrNodeWrapper instanceof JCRMountPointNode) {
+                        final JCRMountPointNode jcrMountPointNode = (JCRMountPointNode) jcrNodeWrapper;
+                        if (jcrMountPointNode.getMountStatus() == JCRMountPointNode.MountStatus.mounted) {
+                            JCRNodeWrapper mountPointNode = jcrMountPointNode.getVirtualMountPointNode();
+                            final JCRStoreProvider provider = externalProviderFactory.mountProvider(mountPointNode);
+                            if (!provider.isAvailable(true)) {
+                                logger.warn("msg");
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+        });
+    }
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn idempotent_jahia_login_module_new_with_chain_arg() {
+        // JahiaLoginModule: new SimpleCredentials(..., chain.toCharArray())
+        assert_idempotent(
+            r#"public class Test {
+    static Credentials getCredentials(String username, String realm, List<String> deniedPaths) {
+        String userID = JahiaUserManagerService.GUEST_USERNAME.equals(username) ? GUEST : username;
+        SimpleCredentials credentials = new SimpleCredentials(userID, getSystemPass(userID, deniedPaths).toCharArray());
+        credentials.setAttribute(REALM_ATTRIBUTE, realm);
+        return credentials;
+    }
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn idempotent_jahia_pages_tab_method_chain_in_anon_class() {
+        // PagesTabItem: method chain in variable_declarator inside anonymous class body.
+        assert_idempotent(
+            r#"public class Test {
+    void method() {
+        contextMenu.addListener(Events.Show, new Listener<BaseEvent>() {
+            @Override
+            public void handleEvent(BaseEvent be) {
+                Element row = pageTree.getView().getRow(selectionModel.getRightClickSelectionModel().getSelectedItem());
+                if (row != null) {
+                    row.addClassName("context-menu-open");
+                }
+            }
+        });
+    }
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn idempotent_jahia_content_type_window_deep_nested_call() {
+        // ContentTypeWindow: method call result assigned at 6-level deep indent.
+        assert_idempotent(
+            r#"public class Test {
+    void method() {
+        if (cond1) {
+            for (GWTJahiaNodeType child : nodeType.getSubtypes()) {
+                if (child != null) {
+                    if (child.getName() != null) {
+                        if (config != null) {
+                            Object[] result = getTargetNodeType(nodeTypeName, (GWTJahiaNodeType) child, displayedNodeTypes);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+"#,
+        );
+    }
+
     /// Check if the given input is already a fixed point (format(input) == input).
     /// If not, print the diff and panic.
     fn assert_already_formatted(input: &str) {
@@ -1369,6 +1461,18 @@ public class Tag2Tests {
     }
 }
 "#,
+        );
+    }
+
+    #[test]
+    fn idempotent_bare_call_in_deep_anon_class() {
+        // Bare method call (no chain) inside a variable declarator at deep indent
+        // (inside anonymous class in an outer argument list). The outer arg list adds
+        // continuation indent tracked in effective_indent_level but not indent_level.
+        // gen_variable_declarator must use effective_indent_level; otherwise the
+        // wrap-at-= decision oscillates between pass 1 (no wrap) and pass 2 (wrap).
+        assert_idempotent(
+            "public class Test {\n    static void createContent() {\n        JahiaContentManagementService.App.getInstance().getContentTypesAsTree(\n                nodeTypes,\n                excluded,\n                new BaseAsyncCallback<List<GWTJahiaNodeType>>() {\n                    private Object[] getTargetNodeType(\n                            String nodeTypeName,\n                            GWTJahiaNodeType startNode,\n                            Set<String> displayedNodeTypes) {\n                        GWTJahiaNodeType targetNodeType = null;\n                        if (startNode.getChildren().size() > 0) {\n                            for (ModelData child : startNode.getChildren()) {\n                                Object[] result = getTargetNodeType(\n                                        nodeTypeName,\n                                        (GWTJahiaNodeType) child,\n                                        displayedNodeTypes);\n                                if (!((Boolean) result[0])) {\n                                    return result;\n                                }\n                            }\n                        }\n                        return new Object[] {true, targetNodeType};\n                    }\n                });\n    }\n}\n",
         );
     }
 }
