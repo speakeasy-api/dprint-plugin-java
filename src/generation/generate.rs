@@ -382,66 +382,6 @@ fn gen_generic_type<'a>(
     items
 }
 
-/// Estimate the prefix width before a type arguments node, including
-/// declaration modifiers or `new` where applicable. Uses collapsed
-/// whitespace on the source's last line to keep estimates stable.
-fn estimate_type_args_prefix_width(node: tree_sitter::Node, source: &str) -> usize {
-    let Some(parent) = node.parent() else {
-        return 0;
-    };
-
-    let prefix_text = &source[parent.start_byte()..node.start_byte()];
-    let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
-    let mut width = collapse_prefix_len(last_line);
-
-    let mut prev = parent;
-    let mut ancestor = parent.parent();
-    while let Some(anc) = ancestor {
-        match anc.kind() {
-            "method_declaration"
-            | "field_declaration"
-            | "local_variable_declaration"
-            | "formal_parameter"
-            | "object_creation_expression"
-            | "method_invocation"
-            | "constructor_declaration" => {
-                let text = &source[anc.start_byte()..prev.start_byte()];
-                let last = text.lines().last().unwrap_or(text);
-                width += collapse_prefix_len(last);
-                break;
-            }
-            "return_statement" => {
-                width += 7; // "return "
-                break;
-            }
-            "throw_statement" => {
-                width += 6; // "throw "
-                break;
-            }
-            _ => {
-                prev = anc;
-                ancestor = anc.parent();
-            }
-        }
-    }
-
-    width
-}
-
-/// Collapse whitespace for a prefix segment, preserving a trailing space
-/// when the segment ends with whitespace (to account for token separators).
-fn collapse_prefix_len(s: &str) -> usize {
-    let trimmed_start = s.trim_start();
-    if trimmed_start.is_empty() {
-        return 0;
-    }
-    let mut len = collapse_whitespace_len(trimmed_start);
-    if trimmed_start.ends_with(char::is_whitespace) {
-        len += 1;
-    }
-    len
-}
-
 /// Format type arguments: `<String, Integer>`
 ///
 /// When type arguments are too long, wraps each on its own line at double
@@ -474,47 +414,41 @@ fn gen_type_arguments<'a>(
         })
         .sum();
 
-    // Estimate prefix width: everything on the current line before the `<`.
-    // Walk up the tree to find the full prefix including keywords like `implements`.
-    // Also detect if we're in a class declaration context (followed by ` {`).
-    let (base_prefix_width, in_class_decl) = {
-        let parent = node.parent();
-        if let Some(p) = parent {
-            let mut line_start = p;
-            let mut n = p;
-            let mut found_clause = false;
-            while let Some(par) = n.parent() {
-                match par.kind() {
-                    "superclass" | "super_interfaces" | "extends_interfaces" => {
-                        line_start = par;
-                        found_clause = true;
-                        break;
-                    }
-                    "class_declaration"
-                    | "interface_declaration"
-                    | "enum_declaration"
-                    | "record_declaration" => break,
-                    _ => {
-                        n = par;
-                    }
+    // Use effective indent level for stability across formatting passes.
+    let effective_indent = context.effective_indent_level() * context.config.indent_width as usize;
+
+    // Detect if we're in a class declaration context (extends/implements clause).
+    let in_class_decl = if let Some(parent) = node.parent() {
+        let mut n = parent;
+        let mut found = false;
+        while let Some(par) = n.parent() {
+            match par.kind() {
+                "superclass" | "super_interfaces" | "extends_interfaces" => {
+                    found = true;
+                    break;
+                }
+                "class_declaration"
+                | "interface_declaration"
+                | "enum_declaration"
+                | "record_declaration" => break,
+                _ => {
+                    n = par;
                 }
             }
-            let prefix_text = &context.source[line_start.start_byte()..node.start_byte()];
-            let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
-            (last_line.trim_start().len(), found_clause)
-        } else {
-            (0, false)
         }
-    };
-
-    let prefix_width = if in_class_decl {
-        base_prefix_width
+        found
     } else {
-        let expanded = estimate_type_args_prefix_width(node, context.source);
-        base_prefix_width.max(expanded)
+        false
     };
 
-    let indent_width = context.effective_indent_level() * context.config.indent_width as usize;
+    // Use structural prefix width estimation for stability.
+    let prefix_width = super::declarations::estimate_prefix_width(
+        node,
+        context.source,
+        context.is_assignment_wrapped(),
+    );
+
+    let indent_width = effective_indent;
     let line_width = context.config.line_width as usize;
 
     // Check if type args fit inline: prefix + <args> must fit on line.
