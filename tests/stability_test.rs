@@ -811,3 +811,108 @@ fn stability_narrow_width_ternary() {
         &config,
     );
 }
+
+// =============================================================================
+// Category K: Binary expressions inside array initializers
+// =============================================================================
+
+#[test]
+fn stability_array_init_string_concat() {
+    assert_idempotent(
+        "array_init_string_concat",
+        r#"class Test {
+    void test() {
+        String[] messages = {"prefix" + "middle" + "suffix" + "extra", "another" + "long" + "message" + "here"};
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn stability_array_init_string_concat_near_boundary() {
+    assert_idempotent(
+        "array_init_string_concat_near_boundary",
+        r#"class Test {
+    void test() {
+        String[] messages = {"first_value" + separator + "second_value", "third_value" + separator + "fourth_value"};
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn stability_array_init_boolean_expressions() {
+    assert_idempotent(
+        "array_init_boolean_expressions",
+        r#"class Test {
+    void test() {
+        boolean[] conditions = {x > 10 && y > 20 && z > 30, a == b || c == d || e == f};
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn stability_array_init_long_concat_wrapping() {
+    assert_idempotent(
+        "array_init_long_concat_wrapping",
+        r#"class Test {
+    void test() {
+        String[] values = {
+            computeFirstValue() + " suffix one" + " more text here",
+            computeSecondValue() + " suffix two" + " additional padding"
+        };
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn stability_array_init_nested() {
+    assert_idempotent(
+        "array_init_nested",
+        r#"class Test {
+    void test() {
+        String[][] matrix = {
+            {"element" + "one", "element" + "two", "element" + "three"},
+            {"data" + "alpha", "data" + "beta", "data" + "gamma"}
+        };
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn stability_array_init_as_method_arg() {
+    assert_idempotent(
+        "array_init_as_method_arg",
+        r#"class Test {
+    void test() {
+        processArray(new String[]{"first" + "concat" + "value", "second" + "concat" + "value", "third" + "concat"});
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn stability_array_init_deep_indent_concat() {
+    assert_idempotent(
+        "array_init_deep_indent_concat",
+        r#"class Test {
+    void test() {
+        if (condition) {
+            for (int i = 0; i < items.size(); i++) {
+                String[] parts = {"prefix" + items.get(i) + "suffix", "other" + items.get(i) + "end"};
+            }
+        }
+    }
+}
+"#,
+    );
+}
