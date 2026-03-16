@@ -53,6 +53,24 @@ src/
 - **`is_type_node()`** (helpers.rs): deduplicates Java type-kind matching. Note: `generic_type` and `array_type` are included in `is_type_node()` but have dedicated handler arms that must appear **before** the `is_type_node` guard in the dispatcher.
 - **`ChainSegment`** struct (expressions.rs): named struct for method chain segments (replaces a 5-tuple).
 
+### Formatting Stability Rule
+
+Formatting decisions (wrap/inline, break/join, indent level) must NEVER depend on:
+- `node.start_position().row` / `.column` — source row/column positions
+- `node.start_byte()` / `node.end_byte()` for width calculations via `source[start..end]`
+- `.lines().map(|l| l.trim().len()).sum()` on source text spans (layout-dependent)
+- `collapse_whitespace_len()` on multi-node source spans (content changes between passes)
+
+Safe alternatives:
+- `context.effective_indent_level() * config.indent_width` for column position
+- Fixed keyword widths ("return " = 7, "throw " = 6, "new " = 4)
+- Token-level extraction (single identifiers, operators — these don't change)
+- `collapse_whitespace_len()` on individual leaf/token nodes (stable)
+- `context.take_override_prefix_width()` for parent-to-child width passing
+
+The test for whether a source-based calculation is safe: "If the formatter wraps/unwraps
+a line in the vicinity, does this calculation produce the same result?" If no → unstable.
+
 ### Formatting Pipeline
 
 1. `format_text(source, config)` parses Java via tree-sitter

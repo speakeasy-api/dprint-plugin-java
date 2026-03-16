@@ -482,7 +482,8 @@ pub fn gen_method_declaration<'a>(
             let mut return_type_width = 0;
             for c in &children_pre[..idx] {
                 if c.kind() == "modifiers" {
-                    return_type_width += modifiers_keyword_width(*c, context.source, return_type_width);
+                    return_type_width +=
+                        modifiers_keyword_width(*c, context.source, return_type_width);
                 } else {
                     let text = &context.source[c.start_byte()..c.end_byte()];
                     if return_type_width > 0 {
@@ -685,7 +686,11 @@ fn estimate_method_sig_width_no_throws(node: tree_sitter::Node, source: &str) ->
 /// Compute the width contribution of a `modifiers` node, skipping annotations
 /// (which get their own lines) and only counting keyword modifiers like
 /// `public`, `static`, `final`, `abstract`, etc.
-fn modifiers_keyword_width(modifiers: tree_sitter::Node, source: &str, existing_width: usize) -> usize {
+fn modifiers_keyword_width(
+    modifiers: tree_sitter::Node,
+    source: &str,
+    existing_width: usize,
+) -> usize {
     let mut w = 0;
     let mut cursor = modifiers.walk();
     for modifier in modifiers.children(&mut cursor) {
