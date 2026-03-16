@@ -765,11 +765,33 @@ pub(super) fn estimate_prefix_width(
                 continue;
             }
             if child.is_named() {
-                let text = &source[child.start_byte()..child.end_byte()];
-                if w > 0 {
-                    w += 1; // space between tokens
+                if child.kind() == "modifiers" {
+                    // Only count keyword modifiers (public, static, final, etc.),
+                    // not annotations — annotations get their own lines and don't
+                    // contribute to the prefix width on the declaration line.
+                    let mut mc = child.walk();
+                    for modifier in child.children(&mut mc) {
+                        match modifier.kind() {
+                            "marker_annotation" | "annotation" => {}
+                            _ => {
+                                let text = &source[modifier.start_byte()..modifier.end_byte()];
+                                let trimmed = text.trim();
+                                if !trimmed.is_empty() {
+                                    if w > 0 {
+                                        w += 1;
+                                    }
+                                    w += trimmed.len();
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let text = &source[child.start_byte()..child.end_byte()];
+                    if w > 0 {
+                        w += 1; // space between tokens
+                    }
+                    w += collapse_whitespace_len(text);
                 }
-                w += collapse_whitespace_len(text);
             } else {
                 let text = &source[child.start_byte()..child.end_byte()];
                 let trimmed = text.trim();

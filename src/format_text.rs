@@ -1264,4 +1264,50 @@ public class Tag2Tests {
 "#,
         );
     }
+
+    #[test]
+    fn annotated_method_should_not_wrap_short_params() {
+        // Annotations on a method should NOT inflate the prefix width for formal_parameters.
+        // `public SecuritySource securitySource(OpenapiAutoConfigProperties properties) {`
+        // is 78 chars (with 4-space indent) — well under 120.
+        assert_already_formatted(
+            "\
+public class Test {
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnPropertyPrefix(prefix = \"openapi.security\")
+    public SecuritySource securitySource(OpenapiAutoConfigProperties properties) {
+        return null;
+    }
+}
+",
+        );
+    }
+
+    #[test]
+    fn annotated_constructor_should_not_wrap_short_params() {
+        assert_already_formatted(
+            "\
+public class Department {
+    @JsonCreator
+    public Department(@JsonProperty(\"deptName\") @Nonnull String deptName, @JsonProperty(\"headCount\") long headCount) {}
+}
+",
+        );
+    }
+
+    #[test]
+    fn annotated_method_multiple_annotations_short_params() {
+        assert_already_formatted(
+            "\
+public class Test {
+    @Bean
+    @ConditionalOnMissingBean
+    public org.openapis.openapi.utils.Globals globals(OpenapiAutoConfigProperties properties) {
+        return null;
+    }
+}
+",
+        );
+    }
 }
