@@ -482,23 +482,7 @@ pub fn gen_method_declaration<'a>(
             let mut return_type_width = 0;
             for c in &children_pre[..idx] {
                 if c.kind() == "modifiers" {
-                    let mut mc = c.walk();
-                    for modifier in c.children(&mut mc) {
-                        match modifier.kind() {
-                            "marker_annotation" | "annotation" => {}
-                            _ => {
-                                let text =
-                                    &context.source[modifier.start_byte()..modifier.end_byte()];
-                                let trimmed = text.trim();
-                                if !trimmed.is_empty() {
-                                    if return_type_width > 0 {
-                                        return_type_width += 1;
-                                    }
-                                    return_type_width += trimmed.len();
-                                }
-                            }
-                        }
-                    }
+                    return_type_width += modifiers_keyword_width(*c, context.source, return_type_width);
                 } else {
                     let text = &context.source[c.start_byte()..c.end_byte()];
                     if return_type_width > 0 {
@@ -651,28 +635,7 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
                 break;
             }
             "modifiers" => {
-                // Walk modifier children individually. Annotations with arguments
-                // get their own line(s) and don't contribute to method sig width.
-                // Only count simple keyword modifiers (public, static, final, etc.).
-                let mut mc = child.walk();
-                for modifier in child.children(&mut mc) {
-                    match modifier.kind() {
-                        // Skip annotations entirely — they get their own line(s)
-                        "marker_annotation" | "annotation" => {}
-                        // Keyword modifiers (public, static, final, etc.) are unnamed nodes
-                        _ => {
-                            let text = &source[modifier.start_byte()..modifier.end_byte()];
-                            // Only include actual keyword tokens, not whitespace
-                            let trimmed = text.trim();
-                            if !trimmed.is_empty() {
-                                if width > 0 {
-                                    width += 1;
-                                }
-                                width += trimmed.len();
-                            }
-                        }
-                    }
-                }
+                width += modifiers_keyword_width(child, source, width);
             }
             _ => {
                 let text = &source[child.start_byte()..child.end_byte()];
@@ -700,22 +663,7 @@ fn estimate_method_sig_width_no_throws(node: tree_sitter::Node, source: &str) ->
         match child.kind() {
             "block" | "constructor_body" | ";" | "throws" => break,
             "modifiers" => {
-                let mut mc = child.walk();
-                for modifier in child.children(&mut mc) {
-                    match modifier.kind() {
-                        "marker_annotation" | "annotation" => {}
-                        _ => {
-                            let text = &source[modifier.start_byte()..modifier.end_byte()];
-                            let trimmed = text.trim();
-                            if !trimmed.is_empty() {
-                                if width > 0 {
-                                    width += 1;
-                                }
-                                width += trimmed.len();
-                            }
-                        }
-                    }
-                }
+                width += modifiers_keyword_width(child, source, width);
             }
             _ => {
                 let text = &source[child.start_byte()..child.end_byte()];
@@ -732,6 +680,30 @@ fn estimate_method_sig_width_no_throws(node: tree_sitter::Node, source: &str) ->
     }
 
     width
+}
+
+/// Compute the width contribution of a `modifiers` node, skipping annotations
+/// (which get their own lines) and only counting keyword modifiers like
+/// `public`, `static`, `final`, `abstract`, etc.
+fn modifiers_keyword_width(modifiers: tree_sitter::Node, source: &str, existing_width: usize) -> usize {
+    let mut w = 0;
+    let mut cursor = modifiers.walk();
+    for modifier in modifiers.children(&mut cursor) {
+        match modifier.kind() {
+            "marker_annotation" | "annotation" => {}
+            _ => {
+                let text = &source[modifier.start_byte()..modifier.end_byte()];
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    if w > 0 || existing_width > 0 {
+                        w += 1;
+                    }
+                    w += trimmed.len();
+                }
+            }
+        }
+    }
+    w
 }
 
 /// Estimate the prefix width before a `formal_parameters` or `argument_list` node.
@@ -766,25 +738,7 @@ pub(super) fn estimate_prefix_width(
             }
             if child.is_named() {
                 if child.kind() == "modifiers" {
-                    // Only count keyword modifiers (public, static, final, etc.),
-                    // not annotations — annotations get their own lines and don't
-                    // contribute to the prefix width on the declaration line.
-                    let mut mc = child.walk();
-                    for modifier in child.children(&mut mc) {
-                        match modifier.kind() {
-                            "marker_annotation" | "annotation" => {}
-                            _ => {
-                                let text = &source[modifier.start_byte()..modifier.end_byte()];
-                                let trimmed = text.trim();
-                                if !trimmed.is_empty() {
-                                    if w > 0 {
-                                        w += 1;
-                                    }
-                                    w += trimmed.len();
-                                }
-                            }
-                        }
-                    }
+                    w += modifiers_keyword_width(child, source, w);
                 } else {
                     let text = &source[child.start_byte()..child.end_byte()];
                     if w > 0 {
@@ -855,11 +809,15 @@ pub(super) fn estimate_prefix_width(
                             break;
                         }
                         if child.is_named() {
-                            let text = &source[child.start_byte()..child.end_byte()];
-                            if width > 0 {
-                                width += 1; // space between tokens
+                            if child.kind() == "modifiers" {
+                                width += modifiers_keyword_width(child, source, width);
+                            } else {
+                                let text = &source[child.start_byte()..child.end_byte()];
+                                if width > 0 {
+                                    width += 1; // space between tokens
+                                }
+                                width += collapse_whitespace_len(text);
                             }
-                            width += collapse_whitespace_len(text);
                         }
                     }
                 }
@@ -892,10 +850,7 @@ fn estimate_class_decl_width(node: tree_sitter::Node, source: &str) -> usize {
         match child.kind() {
             "class_body" | "interface_body" | "enum_body" => break, // Stop at body
             "modifiers" => {
-                let text = &source[child.start_byte()..child.end_byte()];
-                // Use last line only (for multiline modifiers like annotations)
-                let last_line = text.lines().last().unwrap_or(text);
-                width += last_line.trim().len();
+                width += modifiers_keyword_width(child, source, width);
             }
             _ => {
                 let text = &source[child.start_byte()..child.end_byte()];
@@ -1939,11 +1894,15 @@ pub fn gen_variable_declarator<'a>(
 
                     // Accumulate width from type, modifiers, etc. before variable_declarator
                     if c.is_named() {
-                        let text = &context.source[c.start_byte()..c.end_byte()];
-                        if w > 0 {
-                            w += 1;
-                        } // space between tokens
-                        w += collapse_whitespace_len(text);
+                        if c.kind() == "modifiers" {
+                            w += modifiers_keyword_width(c, context.source, w);
+                        } else {
+                            let text = &context.source[c.start_byte()..c.end_byte()];
+                            if w > 0 {
+                                w += 1;
+                            } // space between tokens
+                            w += collapse_whitespace_len(text);
+                        }
                     }
                 }
                 w
