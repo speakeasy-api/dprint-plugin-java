@@ -423,28 +423,7 @@ pub fn gen_method_declaration<'a>(
         let mut c = node.walk();
         let children_vec: Vec<_> = node.children(&mut c).collect();
         // Compute width of signature WITHOUT the throws clause
-        let sig_no_throws: usize = {
-            let mut w = 0;
-            let mut c2 = node.walk();
-            for ch in node.children(&mut c2) {
-                match ch.kind() {
-                    "block" | "constructor_body" | ";" | "throws" => break,
-                    _ => {
-                        let text = &context.source[ch.start_byte()..ch.end_byte()];
-                        let last_line = text.lines().last().unwrap_or(text);
-                        if w > 0
-                            && ch.kind() != "formal_parameters"
-                            && ch.kind() != "("
-                            && ch.kind() != ")"
-                        {
-                            w += 1; // space
-                        }
-                        w += last_line.trim().len();
-                    }
-                }
-            }
-            w
-        };
+        let sig_no_throws = estimate_method_sig_width_no_throws(node, context.source);
         let params_fit_inline = indent_width + sig_no_throws <= line_width;
         if params_fit_inline {
             // Params on one line: throws wraps based on full sig width
@@ -497,15 +476,36 @@ pub fn gen_method_declaration<'a>(
         // Find the method name (identifier) position
         let name_idx = children_pre.iter().position(|c| c.kind() == "identifier");
         if let Some(idx) = name_idx {
-            // Width of everything up to and including the return type
+            // Width of everything up to and including the return type.
+            // For modifiers, only count keyword modifiers (not annotations which
+            // get their own line and don't share the return-type line).
             let mut return_type_width = 0;
             for c in &children_pre[..idx] {
-                let text = &context.source[c.start_byte()..c.end_byte()];
-                let last_line = text.lines().last().unwrap_or(text);
-                if return_type_width > 0 {
-                    return_type_width += 1; // space
+                if c.kind() == "modifiers" {
+                    let mut mc = c.walk();
+                    for modifier in c.children(&mut mc) {
+                        match modifier.kind() {
+                            "marker_annotation" | "annotation" => {}
+                            _ => {
+                                let text =
+                                    &context.source[modifier.start_byte()..modifier.end_byte()];
+                                let trimmed = text.trim();
+                                if !trimmed.is_empty() {
+                                    if return_type_width > 0 {
+                                        return_type_width += 1;
+                                    }
+                                    return_type_width += trimmed.len();
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let text = &context.source[c.start_byte()..c.end_byte()];
+                    if return_type_width > 0 {
+                        return_type_width += 1; // space
+                    }
+                    return_type_width += collapse_whitespace_len(text);
                 }
-                return_type_width += last_line.trim().len();
             }
             // Width of identifier + remaining sig (params, throws)
             let name_text =
@@ -650,10 +650,32 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
                 width += 1;
                 break;
             }
+            "modifiers" => {
+                // Walk modifier children individually. Annotations with arguments
+                // get their own line(s) and don't contribute to method sig width.
+                // Only count simple keyword modifiers (public, static, final, etc.).
+                let mut mc = child.walk();
+                for modifier in child.children(&mut mc) {
+                    match modifier.kind() {
+                        // Skip annotations entirely — they get their own line(s)
+                        "marker_annotation" | "annotation" => {}
+                        // Keyword modifiers (public, static, final, etc.) are unnamed nodes
+                        _ => {
+                            let text = &source[modifier.start_byte()..modifier.end_byte()];
+                            // Only include actual keyword tokens, not whitespace
+                            let trimmed = text.trim();
+                            if !trimmed.is_empty() {
+                                if width > 0 {
+                                    width += 1;
+                                }
+                                width += trimmed.len();
+                            }
+                        }
+                    }
+                }
+            }
             _ => {
                 let text = &source[child.start_byte()..child.end_byte()];
-                // Use first line only (for multiline modifiers like annotations)
-                let first_line = text.lines().last().unwrap_or(text);
                 if width > 0
                     && child.kind() != "formal_parameters"
                     && child.kind() != "("
@@ -661,7 +683,50 @@ fn estimate_method_sig_width(node: tree_sitter::Node, source: &str) -> usize {
                 {
                     width += 1; // space separator
                 }
-                width += first_line.trim().len();
+                width += collapse_whitespace_len(text);
+            }
+        }
+    }
+
+    width
+}
+
+/// Like `estimate_method_sig_width` but stops before the throws clause.
+fn estimate_method_sig_width_no_throws(node: tree_sitter::Node, source: &str) -> usize {
+    let mut cursor = node.walk();
+    let mut width = 0;
+
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "block" | "constructor_body" | ";" | "throws" => break,
+            "modifiers" => {
+                let mut mc = child.walk();
+                for modifier in child.children(&mut mc) {
+                    match modifier.kind() {
+                        "marker_annotation" | "annotation" => {}
+                        _ => {
+                            let text = &source[modifier.start_byte()..modifier.end_byte()];
+                            let trimmed = text.trim();
+                            if !trimmed.is_empty() {
+                                if width > 0 {
+                                    width += 1;
+                                }
+                                width += trimmed.len();
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+                let text = &source[child.start_byte()..child.end_byte()];
+                if width > 0
+                    && child.kind() != "formal_parameters"
+                    && child.kind() != "("
+                    && child.kind() != ")"
+                {
+                    width += 1;
+                }
+                width += collapse_whitespace_len(text);
             }
         }
     }
@@ -687,24 +752,51 @@ pub(super) fn estimate_prefix_width(
         return 0;
     };
 
-    // Extract the text from the start of the parent to the start of this node
-    let prefix_text = &source[parent.start_byte()..node.start_byte()];
-
-    // Only consider the last line to handle multiline modifiers/annotations
-    let last_line = prefix_text.lines().last().unwrap_or(prefix_text);
-    let mut width = last_line.trim_start().len();
+    // Compute initial prefix width by walking parent's children up to `node`.
+    // This is stable across formatting passes (no source-position dependence).
+    let mut width = {
+        let mut w = 0;
+        let mut cursor = parent.walk();
+        for child in parent.children(&mut cursor) {
+            if child.id() == node.id() {
+                break;
+            }
+            if child.is_extra() {
+                continue;
+            }
+            if child.is_named() {
+                let text = &source[child.start_byte()..child.end_byte()];
+                if w > 0 {
+                    w += 1; // space between tokens
+                }
+                w += collapse_whitespace_len(text);
+            } else {
+                let text = &source[child.start_byte()..child.end_byte()];
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    if trimmed == "," {
+                        w += 2; // ", "
+                    } else if trimmed == "." {
+                        w += 1; // "." (no space around dots)
+                    } else {
+                        // Operators, punctuation, etc.
+                        if w > 0 && trimmed != "(" && trimmed != ")" {
+                            w += 1; // space before
+                        }
+                        w += trimmed.len();
+                    }
+                }
+            }
+        }
+        w
+    };
 
     // Walk up ancestors to accumulate prefix from keywords/LHS that share the line.
-    // Stop when we hit a node that may introduce a line break (e.g., variable_declarator
-    // wraps at `=`, method_declaration can wrap return type from name).
+    // Use structural child walking with collapse_whitespace_len() instead of
+    // source row positions for stability across formatting passes.
     let mut prev = parent;
     let mut ancestor = parent.parent();
-    let parent_start_row = parent.start_position().row;
     while let Some(anc) = ancestor {
-        // Only add prefix from ancestors that start on the same source line
-        if anc.start_position().row != parent_start_row {
-            break;
-        }
         match anc.kind() {
             "return_statement" => {
                 width += 7; // "return "
@@ -715,35 +807,47 @@ pub(super) fn estimate_prefix_width(
                 break;
             }
             "assignment_expression" => {
-                // If the assignment is being wrapped at '=', the RHS starts on a new
-                // line at continuation indent — don't count LHS as prefix width.
                 if !assignment_wrapped {
-                    let lhs_text = &source[anc.start_byte()..prev.start_byte()];
-                    let lhs_last_line = lhs_text.lines().last().unwrap_or(lhs_text);
-                    width += lhs_last_line.trim_start().len();
+                    // Walk children of the assignment up to prev (the RHS node)
+                    let mut cursor = anc.walk();
+                    for child in anc.children(&mut cursor) {
+                        if child.id() == prev.id() {
+                            break;
+                        }
+                        if child.is_named() {
+                            let text = &source[child.start_byte()..child.end_byte()];
+                            width += collapse_whitespace_len(text);
+                        } else {
+                            // unnamed node = operator token (e.g., "="); count with spaces
+                            width += 3; // " = "
+                        }
+                    }
                 }
                 break;
             }
             "variable_declarator" | "local_variable_declaration" | "field_declaration" => {
-                // If the assignment already wrapped at '=', the RHS starts on a new
-                // line at continuation indent — don't count LHS as prefix width.
                 if !assignment_wrapped {
-                    let lhs_text = &source[anc.start_byte()..prev.start_byte()];
-                    let lhs_last_line = lhs_text.lines().last().unwrap_or(lhs_text);
-                    width += lhs_last_line.trim_start().len();
+                    let mut cursor = anc.walk();
+                    for child in anc.children(&mut cursor) {
+                        if child.id() == prev.id() {
+                            break;
+                        }
+                        if child.is_named() {
+                            let text = &source[child.start_byte()..child.end_byte()];
+                            if width > 0 {
+                                width += 1; // space between tokens
+                            }
+                            width += collapse_whitespace_len(text);
+                        }
+                    }
                 }
-                // Continue walking up if there's a containing declaration
                 prev = anc;
                 ancestor = anc.parent();
             }
-            // These are wrapping/formatting boundaries — stop walking.
-            // argument_list and formal_parameters are formatting boundaries because
-            // the caller (chain formatter or parent arg list) handles layout above
-            // this level. Walking past them causes source-position-dependent instability
-            // since the row check depends on pre-format layout, not post-format layout.
-            "method_declaration"
+            // These are formatting boundaries — stop walking.
+            "argument_list"
+            | "method_declaration"
             | "constructor_declaration"
-            | "argument_list"
             | "formal_parameters" => break,
             _ => {
                 prev = anc;
@@ -812,28 +916,7 @@ pub fn gen_constructor_declaration<'a>(
     let full_too_wide = indent_width + sig_width + 2 > line_width;
     let wrap_throws = if full_too_wide {
         // Check if params fit inline (without wrapping)
-        let sig_no_throws: usize = {
-            let mut w = 0;
-            let mut c2 = node.walk();
-            for ch in node.children(&mut c2) {
-                match ch.kind() {
-                    "block" | "constructor_body" | ";" | "throws" => break,
-                    _ => {
-                        let text = &context.source[ch.start_byte()..ch.end_byte()];
-                        let last_line = text.lines().last().unwrap_or(text);
-                        if w > 0
-                            && ch.kind() != "formal_parameters"
-                            && ch.kind() != "("
-                            && ch.kind() != ")"
-                        {
-                            w += 1;
-                        }
-                        w += last_line.trim().len();
-                    }
-                }
-            }
-            w
-        };
+        let sig_no_throws = estimate_method_sig_width_no_throws(node, context.source);
         if indent_width + sig_no_throws <= line_width {
             // Params fit inline: wrap throws based on full sig width
             true
@@ -1492,13 +1575,13 @@ pub fn gen_formal_parameters<'a>(
     }
     let has_interleaved_comments = !comments_before_param.is_empty();
 
-    // Calculate total inline width of params (stable: uses indent_level, not source column)
+    // Calculate total inline width of params (stable: uses collapse_whitespace_len, not lines)
     let param_text_width: usize = params
         .iter()
         .enumerate()
         .map(|(i, p)| {
             let text = &context.source[p.start_byte()..p.end_byte()];
-            let flat: usize = text.lines().map(|l| l.trim().len()).sum();
+            let flat = collapse_whitespace_len(text);
             flat + if i < params.len() - 1 { 2 } else { 0 }
         })
         .sum();
@@ -1573,7 +1656,7 @@ pub fn gen_formal_parameters<'a>(
                 // Check if this param exceeds line_width at continuation indent.
                 // If so, split after annotations: put type+name on next line at +8.
                 let param_text = &context.source[param.start_byte()..param.end_byte()];
-                let param_flat_width: usize = param_text.lines().map(|l| l.trim().len()).sum();
+                let param_flat_width = collapse_whitespace_len(param_text);
                 let suffix = usize::from(i < params.len() - 1); // comma
                 if continuation_col + param_flat_width + suffix > context.config.line_width as usize
                 {
@@ -1782,13 +1865,15 @@ pub fn gen_variable_declarator<'a>(
         });
 
         if let Some(val) = value_node {
-            // Compute the flat width of just the RHS expression (collapse whitespace
-            // to get the "on one line" width)
-            let val_text = &context.source[val.start_byte()..val.end_byte()];
-            let rhs_flat_width = collapse_whitespace_len(val_text);
+            // Compute the flat width of just the RHS expression using structural
+            // estimation to avoid instability from whitespace around delimiters.
+            let rhs_flat_width = expressions::estimate_expr_flat_width(*val, context.source);
 
             let indent_unit = context.config.indent_width as usize;
-            let indent_col = context.indent_level() * indent_unit;
+            // Use effective_indent_level (includes continuation indent from outer wrapped
+            // argument lists and chains) so wrapping decisions are accurate when
+            // the variable declaration is inside a deeply nested anonymous class.
+            let indent_col = context.effective_indent_level() * indent_unit;
             // Continuation indent: current indent + 2 indent units (double indent for wrapping)
             let continuation_indent = indent_col + indent_unit * 2;
             let line_width = context.config.line_width as usize;
@@ -1902,7 +1987,11 @@ pub fn gen_variable_declarator<'a>(
                     val.children(&mut vc).any(|c| c.kind() == "class_body")
                 };
                 if is_anonymous_class {
-                    let total_line_width = indent_col + lhs_width + 3 + rhs_flat_width + 1;
+                    // For anonymous classes, use raw source width (body is inherently
+                    // multi-line and always produces a large collapsed width).
+                    let val_text = &context.source[val.start_byte()..val.end_byte()];
+                    let anon_width = collapse_whitespace_len(val_text);
+                    let total_line_width = indent_col + lhs_width + 3 + anon_width + 1;
                     total_line_width > line_width
                 } else {
                     // Ternary and binary expressions usually wrap at their own operators
@@ -2064,11 +2153,11 @@ pub fn gen_argument_list<'a>(
                     header_width
                 } else {
                     let text = &context.source[a.start_byte()..a.end_byte()];
-                    text.lines().map(|l| l.trim().len()).sum()
+                    collapse_whitespace_len(text)
                 }
             } else {
                 let text = &context.source[a.start_byte()..a.end_byte()];
-                text.lines().map(|l| l.trim().len()).sum()
+                collapse_whitespace_len(text)
             };
             width + if i < args.len() - 1 { 2 } else { 0 }
         })

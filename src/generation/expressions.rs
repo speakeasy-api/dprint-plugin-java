@@ -103,11 +103,29 @@ pub fn gen_binary_expression<'a>(
             let (operands, operators) = flatten_wrappable_chain(node, context.source);
 
             let should_wrap = {
-                let start_col = node.start_position().column;
-                let expr_text = &context.source[node.start_byte()..node.end_byte()];
-                let expr_flat_width: usize =
-                    expr_text.lines().map(|l| l.trim().len()).sum::<usize>()
-                        + expr_text.lines().count().saturating_sub(1);
+                let effective_indent =
+                    context.effective_indent_level() * context.config.indent_width as usize;
+                let prefix_width = context.take_override_prefix_width().unwrap_or_else(|| {
+                    super::declarations::estimate_prefix_width(
+                        node,
+                        context.source,
+                        context.is_assignment_wrapped(),
+                    )
+                });
+
+                // Compute flat width structurally: sum individual operand widths
+                let expr_flat_width: usize = {
+                    let mut width = 0;
+                    for (i, operand) in operands.iter().enumerate() {
+                        let operand_text =
+                            &context.source[operand.start_byte()..operand.end_byte()];
+                        width += collapse_whitespace_len(operand_text);
+                        if i < operators.len() {
+                            width += operators[i].len() + 2; // " op "
+                        }
+                    }
+                    width
+                };
 
                 // For conditions inside if/while/for, account for trailing `) {`
                 let is_condition = node
@@ -128,7 +146,8 @@ pub fn gen_binary_expression<'a>(
 
                 let suffix_width = if is_condition { 3 } else { 0 }; // `) {`
 
-                start_col + expr_flat_width + suffix_width > context.config.line_width as usize
+                effective_indent + prefix_width + expr_flat_width + suffix_width
+                    > context.config.line_width as usize
             };
 
             if should_wrap {
@@ -593,9 +612,121 @@ fn gen_method_invocation_simple<'a>(
     items
 }
 
-/// Check if any argument list in a chain segment contains a lambda with a block body.
-/// This is used to force chain wrapping when lambdas with block bodies are present,
-/// since the multi-line block content would produce incorrect indentation on a single line.
+/// Compute a stable flat-width estimate for an expression node.
+///
+/// Unlike `collapse_whitespace_len` on the raw source span (which gives
+/// different results when formatting inserts/removes whitespace around
+/// delimiters like `(`), this function walks the AST for container nodes
+/// (`method_invocation`, `object_creation_expression`) and sums individual
+/// stable token widths. Everything else falls back to `collapse_whitespace_len`.
+pub(super) fn estimate_expr_flat_width(node: tree_sitter::Node, source: &str) -> usize {
+    match node.kind() {
+        "method_invocation" => {
+            let mut segs = Vec::new();
+            let root = flatten_chain(node, &mut segs);
+            if segs.is_empty() {
+                // Bare method call (no chain)
+                let name_width = node
+                    .child_by_field_name("name")
+                    .map_or(0, |n| source[n.start_byte()..n.end_byte()].len());
+                let args_width = node
+                    .child_by_field_name("arguments")
+                    .map_or(2, |al| estimate_arg_list_width_structural(al, source));
+                return name_width + args_width;
+            }
+            let root_text = &source[root.start_byte()..root.end_byte()];
+            let mut w = collapse_whitespace_len(root_text);
+            for seg in &segs {
+                w += 1; // '.'
+                let name_text = &source[seg.name.start_byte()..seg.name.end_byte()];
+                w += name_text.len();
+                if let Some(ta) = seg.type_args {
+                    let ta_text = &source[ta.start_byte()..ta.end_byte()];
+                    w += collapse_whitespace_len(ta_text);
+                }
+                if let Some(al) = seg.arg_list {
+                    w += estimate_arg_list_width_structural(al, source);
+                }
+            }
+            w
+        }
+        "object_creation_expression" => {
+            let mut w = 4; // "new "
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                match child.kind() {
+                    "new" => {} // already in the 4-char prefix
+                    "argument_list" => {
+                        w += estimate_arg_list_width_structural(child, source);
+                    }
+                    "class_body" => {
+                        w += 3; // " {}" placeholder for anonymous classes
+                    }
+                    _ if child.is_named() => {
+                        let text = &source[child.start_byte()..child.end_byte()];
+                        w += collapse_whitespace_len(text);
+                    }
+                    _ => {}
+                }
+            }
+            w
+        }
+        _ => {
+            let text = &source[node.start_byte()..node.end_byte()];
+            collapse_whitespace_len(text)
+        }
+    }
+}
+
+/// Estimate argument list width structurally by summing individual argument widths.
+/// This avoids instability from whitespace changes around delimiters like `(`.
+fn estimate_arg_list_width_structural(arg_list: tree_sitter::Node, source: &str) -> usize {
+    let mut cursor = arg_list.walk();
+    let args: Vec<_> = arg_list
+        .children(&mut cursor)
+        .filter(|c| c.is_named() && !c.is_extra())
+        .collect();
+
+    if args.is_empty() {
+        return 2; // "()"
+    }
+
+    let mut total = 1; // "("
+    for (i, arg) in args.iter().enumerate() {
+        if arg.kind() == "lambda_expression" {
+            let mut inner_cursor = arg.walk();
+            let has_block = arg.children(&mut inner_cursor).any(|c| c.kind() == "block");
+            if has_block {
+                // Lambda header: params + " -> {"
+                let mut header_width = 0;
+                let mut inner_cursor2 = arg.walk();
+                for child in arg.children(&mut inner_cursor2) {
+                    if child.kind() == "block" {
+                        header_width += 1; // "{"
+                        break;
+                    }
+                    let text = &source[child.start_byte()..child.end_byte()];
+                    if child.kind() == "->" {
+                        header_width += 4; // " -> "
+                    } else {
+                        header_width += collapse_whitespace_len(text);
+                    }
+                }
+                total += header_width;
+            } else {
+                total += estimate_expr_flat_width(*arg, source);
+            }
+        } else {
+            total += estimate_expr_flat_width(*arg, source);
+        }
+        if i < args.len() - 1 {
+            total += 2; // ", "
+        }
+    }
+    total += 1; // ")"
+    total
+}
+
 /// Estimate argument list width for chain wrapping decisions.
 /// If the arg list contains a lambda with a block body, only count the "header"
 /// width up to the opening '{', since PJF measures chain prefix position, not
@@ -778,7 +909,7 @@ pub(super) fn chain_depth(node: tree_sitter::Node) -> usize {
 /// Returns 0 if no chain dots are found.
 pub(super) fn rightmost_chain_dot(node: tree_sitter::Node, source: &str, base_col: usize) -> usize {
     let text = &source[node.start_byte()..node.end_byte()];
-    let flat_width: usize = text.lines().map(|l| l.trim().len()).sum();
+    let flat_width = collapse_whitespace_len(text);
 
     if node.kind() == "method_invocation" && chain_depth(node) >= 1 {
         // This is a chain. Find the last dot position.
@@ -787,7 +918,7 @@ pub(super) fn rightmost_chain_dot(node: tree_sitter::Node, source: &str, base_co
             .map_or(0, |n| n.end_byte() - n.start_byte());
         let args_w = node.child_by_field_name("arguments").map_or(0, |a| {
             let t = &source[a.start_byte()..a.end_byte()];
-            t.lines().map(|l| l.trim().len()).sum::<usize>()
+            collapse_whitespace_len(t)
         });
         let last_seg_width = 1 + name_w + args_w; // ".name(args)"
         base_col + flat_width.saturating_sub(last_seg_width)
@@ -801,7 +932,7 @@ pub(super) fn rightmost_chain_dot(node: tree_sitter::Node, source: &str, base_co
                 if child.is_named() {
                     let child_offset: usize = {
                         let before = &source[node.start_byte()..child.start_byte()];
-                        before.lines().map(|l| l.trim().len()).sum()
+                        collapse_whitespace_len(before)
                     };
                     let dot_pos = rightmost_chain_dot(child, source, base_col + child_offset);
                     max_dot = max_dot.max(dot_pos);
@@ -821,7 +952,7 @@ pub(super) fn rightmost_chain_dot(node: tree_sitter::Node, source: &str, base_co
                 let dot_pos = rightmost_chain_dot(child, source, col);
                 max_dot = max_dot.max(dot_pos);
                 let child_text = &source[child.start_byte()..child.end_byte()];
-                col += child_text.lines().map(|l| l.trim().len()).sum::<usize>();
+                col += collapse_whitespace_len(child_text);
             } else {
                 // Operator like "+", "&&", etc.
                 let op_text = &source[child.start_byte()..child.end_byte()];
@@ -1017,18 +1148,19 @@ pub fn gen_ternary_expression<'a>(
 ) -> PrintItems {
     // Estimate the "flat" width of the entire ternary expression (as if on one line).
     let ternary_text = &context.source[node.start_byte()..node.end_byte()];
-    let ternary_flat_width: usize = ternary_text.lines().map(|l| l.trim().len()).sum::<usize>()
-        + ternary_text.lines().count().saturating_sub(1); // spaces between joined lines
+    let ternary_flat_width = collapse_whitespace_len(ternary_text);
 
-    let indent_width = context.indent_level() * context.config.indent_width as usize;
+    let effective_indent = context.effective_indent_level() * context.config.indent_width as usize;
     // Account for prefix on the same line (e.g., "return " or "variable = ")
-    let prefix_width = super::declarations::estimate_prefix_width(
-        node,
-        context.source,
-        context.is_assignment_wrapped(),
-    );
+    let prefix_width = context.take_override_prefix_width().unwrap_or_else(|| {
+        super::declarations::estimate_prefix_width(
+            node,
+            context.source,
+            context.is_assignment_wrapped(),
+        )
+    });
     let should_wrap =
-        indent_width + prefix_width + ternary_flat_width > context.config.line_width as usize;
+        effective_indent + prefix_width + ternary_flat_width > context.config.line_width as usize;
 
     let mut items = PrintItems::new();
     let mut cursor = node.walk();
